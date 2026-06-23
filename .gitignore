@@ -1,3 +1,5 @@
 .gradle/
 build/
+# Ignore stray jars but keep the Gradle wrapper jar
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
