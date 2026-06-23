@@ -433,15 +433,16 @@ class CollocationCore(
                 }
             }
         }
-        val b = LinearAlgebra.zeros(n + 2, n + 2)
-        for (k in 0 until n + 2) {
+        // Строки B независимы: строка k читает только g (read-only).
+        val b = ParallelAssembly.assembleRows(n + 2, n + 2) { k ->
             val th = funcs.theta(k - 2)
-            val brow = b[k]
+            val brow = DoubleArray(n + 2)
             for (q in th.nodes.indices) {
                 val gp = g[ptIdx[th.nodes[q]]!!]
                 val coef = th.coeffs[q]
                 for (i in 0 until n + 2) brow[i] += coef * gp[i]
             }
+            brow
         }
         return b
     }
@@ -491,11 +492,11 @@ class SecondKindSolver(
             iter++
             if (fNorm < newtonTol) break
             val b = collocation.bMatrix(c)
-            // J = I - lambda B
-            val j = LinearAlgebra.zeros(n + 2, n + 2)
-            for (r in 0 until n + 2) {
-                for (col in 0 until n + 2) j[r][col] = -lambda * b[r][col]
-                j[r][r] += 1.0
+            // J = I - lambda B (строки независимы, b только читается)
+            val j = ParallelAssembly.assembleRows(n + 2, n + 2) { r ->
+                val jr = DoubleArray(n + 2) { col -> -lambda * b[r][col] }
+                jr[r] += 1.0
+                jr
             }
             val rhs = DoubleArray(n + 2) { -f[it] }
             val delta = LinearAlgebra.solve(j, rhs)
@@ -558,10 +559,11 @@ class SecondKindSolver(
             iter++
             if (LinearAlgebra.normInf(resF) < newtonTol) break
             val b = collocation.bMatrix(c)
-            val j = LinearAlgebra.zeros(n + 2, n + 2)
-            for (r in 0 until n + 2) {
-                for (col in 0 until n + 2) j[r][col] = -lambda * b[r][col]
-                j[r][r] += 1.0
+            // J = I - lambda B (строки независимы, b только читается)
+            val j = ParallelAssembly.assembleRows(n + 2, n + 2) { r ->
+                val jr = DoubleArray(n + 2) { col -> -lambda * b[r][col] }
+                jr[r] += 1.0
+                jr
             }
             val delta = LinearAlgebra.solve(j, DoubleArray(n + 2) { -resF[it] })
             for (i in c.indices) c[i] += delta[i]
