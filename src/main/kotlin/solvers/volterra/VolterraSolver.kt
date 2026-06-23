@@ -182,27 +182,30 @@ class SecondKindSolver(
 
     /** Матрица M_{j,i} = chi_j(L omega_i). Для xi учитывается производная (L omega_i)'. */
     fun matrixM(): Array<DoubleArray> {
-        val m = LinearAlgebra.zeros(dim, dim)
-        for (i in 0 until dim) {
+        // Столбцы M независимы по i; cols[i] = столбец i.
+        val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
             val idx = i - 2
             val omega = { s: Double -> basis.omega(idx, s) }
             val Lom = applyL(omega)
             val LomD = applyLDeriv(omega)
-            for (j in 0 until dim) m[j][i] = funcs.chi(j - 2).apply(Lom, LomD)
+            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(Lom, LomD) }
         }
+        val m = LinearAlgebra.zeros(dim, dim)
+        for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
         return m
     }
 
     /** Матрица M2_{j,i} = chi_j(L(L omega_i)) (двойное применение L). */
     fun matrixM2(): Array<DoubleArray> {
-        val m = LinearAlgebra.zeros(dim, dim)
-        for (i in 0 until dim) {
+        val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
             val idx = i - 2
             val Lom = applyL { s -> basis.omega(idx, s) }
             val LLom = applyL(Lom)
             val LLomD = applyLDeriv(Lom)
-            for (j in 0 until dim) m[j][i] = funcs.chi(j - 2).apply(LLom, LLomD)
+            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(LLom, LLomD) }
         }
+        val m = LinearAlgebra.zeros(dim, dim)
+        for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
         return m
     }
 

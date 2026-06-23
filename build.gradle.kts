@@ -10,6 +10,10 @@ repositories {
 }
 
 dependencies {
+    // Linear-algebra backend: multik with native OpenBLAS (multik-default).
+    implementation("org.jetbrains.kotlinx:multik-core:0.2.3")
+    implementation("org.jetbrains.kotlinx:multik-default:0.2.3")
+
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -71,5 +75,12 @@ tasks.register<JavaExec>("runUryson") {
     group = "application"
     description = "Run the Uryson solver"
     mainClass.set("solvers.uryson.UrysonSolverKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+tasks.register<JavaExec>("runBenchmark") {
+    group = "application"
+    description = "Run the HPC benchmark harness (time vs N; sequential vs parallel assembly speedup)"
+    mainClass.set("bench.BenchmarkKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
