@@ -10,6 +10,10 @@ repositories {
 }
 
 dependencies {
+    // Linear-algebra backend: multik with native OpenBLAS (multik-default).
+    implementation("org.jetbrains.kotlinx:multik-core:0.2.3")
+    implementation("org.jetbrains.kotlinx:multik-default:0.2.3")
+
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
