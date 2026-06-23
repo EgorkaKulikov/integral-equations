@@ -77,3 +77,10 @@ tasks.register<JavaExec>("runUryson") {
     mainClass.set("solvers.uryson.UrysonSolverKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
+
+tasks.register<JavaExec>("runBenchmark") {
+    group = "application"
+    description = "Run the HPC benchmark harness (time vs N; sequential vs parallel assembly speedup)"
+    mainClass.set("bench.BenchmarkKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
