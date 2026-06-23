@@ -9,6 +9,7 @@
   <img alt="BLAS" src="https://img.shields.io/badge/backend-multik%20%2F%20OpenBLAS-success">
   <img alt="Tests" src="https://img.shields.io/badge/tests-124%20passing-brightgreen">
   <img alt="Coverage" src="https://img.shields.io/badge/core%20coverage-~100%25%20lines-brightgreen">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg">
 </p>
 
 ---
@@ -227,5 +228,15 @@ Pull request'ы приветствуются. Перед отправкой:
 
 ## 📄 Лицензия
 
-Лицензия пока не указана. Если планируется открытое распространение,
-добавьте файл `LICENSE` (например, MIT или Apache-2.0).
+Проект распространяется на условиях лицензии **Apache License 2.0** —
+см. файл [`LICENSE`](LICENSE).
+
+```
+Copyright 2026 Egor Kulikov
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+```
