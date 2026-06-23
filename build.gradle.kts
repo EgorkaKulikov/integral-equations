@@ -1,6 +1,8 @@
 plugins {
     kotlin("jvm") version "2.0.0"
     application
+    // Coverage measurement (JetBrains Kover, Kotlin-native).
+    id("org.jetbrains.kotlinx.kover") version "0.8.3"
 }
 
 repositories {
@@ -24,6 +26,30 @@ application {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+// --- Coverage configuration -------------------------------------------------
+// Pragmatic target: ~100% on the computational core and solver logic.
+// main() entry points, console/table printing and number formatting are
+// reporting concerns, not algorithmic logic, so they are excluded from the
+// coverage goal (covered indirectly by a single smoke run, if any).
+kover {
+    reports {
+        filters {
+            excludes {
+                // main() entry points generated as <File>Kt classes.
+                classes("solvers.fredholm.FredholmSolverKt")
+                classes("solvers.volterra.VolterraSolverKt")
+                classes("solvers.uryson.UrysonSolverKt")
+                // Pure formatting helpers.
+                classes("numerics.Fmt", "numerics.FmtKt")
+                classes("solvers.uryson.Fmt", "solvers.uryson.FmtKt")
+                // Console table builders (reporting only).
+                classes("*.Tables", "*.TablesKt")
+                classes("*.HealthChecks", "*.HealthChecksKt")
+            }
+        }
+    }
 }
 
 // Per-solver run tasks. Each solver keeps its own fun main().
