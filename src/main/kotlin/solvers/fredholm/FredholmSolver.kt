@@ -1,7 +1,6 @@
 package solvers.fredholm
 
 import kotlin.math.abs
-import kotlin.math.sqrt
 import kotlin.system.exitProcess
 import numerics.*
 import numerics.functionals.*
@@ -264,42 +263,35 @@ class SecondKindSolver(
      * [численное наблюдение]: разрешимость/сходимость не гарантированы (нет P^2=P).
      */
     private fun kulkarniQuasi(): SolutionFunc {
+        // Итерант хранится как НЕПРЕРЫВНАЯ функция u^{(m)}(t): реконструкция того же
+        // порядка, что и базис (через basis.evalSpline и точную квадратуру op.applyNodes),
+        // без понижающей кусочно-линейной интерполяции узловых значений.
+        var uFun: (Double) -> Double = { t -> fEff(t) }
         var uNodes = DoubleArray(ng) { fEff(op.gNode[it]) }
         for (iter in 0 until 200) {
-            val nodesCur = uNodes
-            // P_chi u: коэффициенты chi_j(u). u известна лишь в узлах -> интерполяция
-            // через функцию-вычислитель uEvalNodes(t) (кусочно через ближайшие узлы не требуется:
-            // chi берёт значения в опорных точках; их считаем интегралом L при надобности).
-            val uFun = { t: Double -> evalNodalLinear(t, nodesCur) }
-            val pc = funcs.projectorCoeffs(uFun)
+            val curFun = uFun
+            val curNodes = uNodes
+            // P_chi u: коэффициенты chi_j(u) по непрерывной u^{(m)} (сохраняет порядок).
+            val pc = funcs.projectorCoeffs(curFun)
             val pcNodes = DoubleArray(ng) { basis.evalSpline(pc, op.gNode[it]) }
-            // L u в узлах и в опорных точках.
-            val LuFun = { t: Double -> cL * op.applyNodes(t, nodesCur) }
-            val pLu = funcs.projectorCoeffs(LuFun) // P_chi(L u) коэффициенты
-            val LPu = { t: Double -> cL * op.applyNodes(t, pcNodes) } // L(P_chi u)
-            val pLPu = funcs.projectorCoeffs(LPu) // P_chi(L(P_chi u))
-            val next = DoubleArray(ng) { k ->
-                val t = op.gNode[k]
-                fEff(t) + basis.evalSpline(pLu, t) + LPu(t) - basis.evalSpline(pLPu, t)
+            // L u в узлах (точная квадратура по узловым значениям текущего итеранта).
+            val luFun = { t: Double -> cL * op.applyNodes(t, curNodes) }
+            val pLu = funcs.projectorCoeffs(luFun) // P_chi(L u) коэффициенты
+            val lpu = { t: Double -> cL * op.applyNodes(t, pcNodes) } // L(P_chi u)
+            val pLPu = funcs.projectorCoeffs(lpu) // P_chi(L(P_chi u))
+            // Непрерывная реконструкция следующего итеранта u^{(m+1)}(t).
+            val nextFun = { t: Double ->
+                fEff(t) + basis.evalSpline(pLu, t) + lpu(t) - basis.evalSpline(pLPu, t)
             }
+            val nextNodes = DoubleArray(ng) { nextFun(op.gNode[it]) }
             var diff = 0.0
-            for (k in 0 until ng) diff = maxOf(diff, abs(next[k] - uNodes[k]))
-            uNodes = next
+            for (k in 0 until ng) diff = maxOf(diff, abs(nextNodes[k] - curNodes[k]))
+            uFun = nextFun
+            uNodes = nextNodes
             if (diff < 1e-13) break
         }
-        val finalNodes = uNodes
-        return SolutionFunc { t -> evalNodalLinear(t, finalNodes) }
-    }
-
-    /** Кусочно-линейное восстановление по значениям в глобальных узлах (для mu/lambda). */
-    private fun evalNodalLinear(t: Double, nodes: DoubleArray): Double {
-        val xs = op.gNode
-        if (t <= xs[0]) return nodes[0]
-        if (t >= xs[xs.size - 1]) return nodes[xs.size - 1]
-        var lo = 0; var hi = xs.size - 1
-        while (hi - lo > 1) { val mid = (lo + hi) / 2; if (xs[mid] <= t) lo = mid else hi = mid }
-        val w = (t - xs[lo]) / (xs[hi] - xs[lo])
-        return nodes[lo] * (1 - w) + nodes[hi] * w
+        val finalFun = uFun
+        return SolutionFunc { t -> finalFun(t) }
     }
 
     /** Итерированный Кулкарни: ^u_h^K = f + L u_h^K. */
@@ -542,8 +534,11 @@ object HealthChecks {
             return errorEh({ t -> ModelProblem.F2.exact(t) }, solver.base().eval, grid)
         }
         val e8 = ehAt(8); val e16 = ehAt(16)
-        val measured = if (e16 <= e8 && e8 < 1e-1) e16 else 1.0
-        return CheckResult("11. Sanity базовой схемы (сходимость)", measured, 1e-1, true)
+        val ratio = if (e16 > 0) e8 / e16 else Double.POSITIVE_INFINITY
+        val ratioMin = 4.0   // фактор >= 2^2 => наблюдаемый порядок >= 2
+        val sane = e8 < 1e-1 && e16 <= e8 && ratio >= ratioMin
+        val measured = if (sane) ratioMin / ratio else 1e9
+        return CheckResult("11. Sanity базовой схемы (порядок>=2)", measured, 1.0, true)
     }
 }
 // ============================================================================

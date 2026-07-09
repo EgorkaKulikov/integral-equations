@@ -1,7 +1,6 @@
 package solvers.volterra
 
 import kotlin.math.abs
-import kotlin.math.sqrt
 import kotlin.system.exitProcess
 import numerics.*
 import numerics.functionals.*
@@ -29,11 +28,16 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
     val a = grid.a
     val b = grid.b
 
+    companion object {
+        /** Абсолютный допуск: узел сетки считается строго внутри (a, t), если x < t - EPS. */
+        const val BREAKPOINT_INCLUSION_EPS = 1e-15
+    }
+
     /** Составное разбиение [a, t]: внутренние узлы сетки < t, затем сам t. */
     private fun subBreakpoints(t: Double): DoubleArray {
         val bp = grid.breakpoints
         val list = ArrayList<Double>()
-        for (x in bp) { if (x < t - 1e-15) list.add(x) else break }
+        for (x in bp) { if (x < t - BREAKPOINT_INCLUSION_EPS) list.add(x) else break }
         if (list.isEmpty()) list.add(a)
         list.add(t)
         return list.toDoubleArray()
@@ -404,7 +408,24 @@ class FirstKindSolver(
     private val opW = VolterraOperator(kernelW, grid, quad)
     // g(t) = f'(t)/K(t,t), f — правая часть I рода; f'(t) = d/dt \mathcal V u* (Лейбниц).
     private val gEff = { t: Double -> problem.rhsExactDeriv(t, op) / Ktt(t) }
-    private val gEffDeriv = { t: Double -> deriv4(t, gEff) }
+
+    /**
+     * g'(t) для xi-функционалов. Раньше numerically differentiate применялось к ВСЕЙ g,
+     * т.е. второе (численное) дифференцирование накладывалось на f'(t) (уже полученную
+     * аналитически по Лейбницу и содержащую квадратуру) -> двойное дифференцирование,
+     * усиливавшее шум квадратуры и ошибку округления deriv4 (~eps*|g|/h на всей g).
+     *
+     * Переформулировка: после редукции I->II рода g(t) = u*(t) + r(t), где
+     *   r(t) = g(t) - u*(t) = (1/K(t,t)) \int_a^t K_t(t,s) u*(s) ds
+     * — остаток, несущий вклад квадратуры. Поэтому
+     *   g'(t) = u*'(t) + r'(t):
+     * гладкую известную часть u*(t) дифференцируем АНАЛИТИЧЕСКИ (exactDeriv), а численно
+     * (deriv4) дифференцируем лишь остаток r(t) один раз. Так из-под конечной разности
+     * убран крупный гладкий член u*, и роль катастрофического вычитания играет только
+     * малый |r| -> меньше шума, выше точность при том же шаблоне 4-го порядка.
+     */
+    private val gEffResidual = { t: Double -> gEff(t) - problem.exact(t) }
+    private val gEffDeriv = { t: Double -> problem.exactDeriv(t) + deriv4(t, gEffResidual) }
     private val inner = SecondKindSolver(basis, funcs, opW, cL = 1.0, fEff = gEff, fEffDeriv = gEffDeriv)
 
     fun base(): SolutionFunc = inner.base()

@@ -1,9 +1,12 @@
 package solvers.uryson
 
 import kotlin.math.abs
-import kotlin.math.sqrt
 import kotlin.system.exitProcess
+import java.util.logging.Logger
 import numerics.*
+
+/** Логгер решателей Урысона: предупреждения о недостижении сходимости и т.п. */
+private val urysonLogger: Logger = Logger.getLogger("solvers.uryson.UrysonSolver")
 
 // ============================================================================
 // 6. ПРОЕКЦИОННЫЕ ФУНКЦИОНАЛЫ theta_j (pr_func) И ПРОЕКТОР P_theta
@@ -199,7 +202,7 @@ class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
         pts.add(lo)
         for (k in 0..n) {
             val xk = grid.x(k)
-            if (xk > lo + 1e-15 && xk < hi - 1e-15) pts.add(xk)
+            if (xk > lo + BREAKPOINT_ABS_EPS && xk < hi - BREAKPOINT_ABS_EPS) pts.add(xk)
         }
         pts.add(hi)
         return pts.toDoubleArray()
@@ -214,6 +217,14 @@ class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
         var s = 0.0
         for (i in c.indices) s += c[i] * rc[i]
         return s
+    }
+
+    companion object {
+        /**
+         * Абсолютный допуск для отбрасывания внутренних узлов сетки, совпадающих
+         * (с точностью до машинного эпсилона) с концами подынтервала [lo, hi].
+         */
+        private const val BREAKPOINT_ABS_EPS = 1e-15
     }
 }
 
@@ -482,15 +493,19 @@ class SecondKindSolver(
      * при q_h близком к 1 и при отсутствии сжатия (например, lambda=1, кубичное ядро).
      */
     fun solveBase(): Pair<DoubleArray, Int> {
-        var c = thetaF.copyOf()
+        val c = thetaF.copyOf()
         var iter = 0
         val newtonTol = maxOf(tol, 1e-13)
-        while (iter < 100) {
+        var converged = false
+        var lastResidual = Double.NaN
+        var lastStep = Double.NaN
+        while (iter < maxIter) {
             val xi = collocation.xiVector(c)
             val f = DoubleArray(n + 2) { c[it] - thetaF[it] - lambda * xi[it] }
             val fNorm = LinearAlgebra.normInf(f)
+            lastResidual = fNorm
             iter++
-            if (fNorm < newtonTol) break
+            if (fNorm < newtonTol) { converged = true; break }
             val b = collocation.bMatrix(c)
             // J = I - lambda B (строки независимы, b только читается)
             val j = ParallelAssembly.assembleRows(n + 2, n + 2) { r ->
@@ -501,7 +516,14 @@ class SecondKindSolver(
             val rhs = DoubleArray(n + 2) { -f[it] }
             val delta = LinearAlgebra.solve(j, rhs)
             for (i in c.indices) c[i] += delta[i]
-            if (LinearAlgebra.normInf(delta) < newtonTol) break
+            lastStep = LinearAlgebra.normInf(delta)
+            if (lastStep < newtonTol) { converged = true; break }
+        }
+        if (!converged) {
+            urysonLogger.warning(
+                "Ньютон (solveBase) не сошёлся за $iter итераций (лимит maxIter=$maxIter): " +
+                    "последняя невязка ||F||=$lastResidual, норма шага ||delta||=$lastStep"
+            )
         }
         return c to iter
     }
@@ -550,14 +572,18 @@ class SecondKindSolver(
                 thetaF[k] + lambda * acc
             }
         }
-        var c = thetaF.copyOf()
+        val c = thetaF.copyOf()
         var iter = 0
         val newtonTol = maxOf(tol, 1e-13)
+        var converged = false
+        var lastResidual = Double.NaN
+        var lastStep = Double.NaN
         while (iter < 60) {
             val g = gK(c)
             val resF = DoubleArray(n + 2) { c[it] - g[it] }
+            lastResidual = LinearAlgebra.normInf(resF)
             iter++
-            if (LinearAlgebra.normInf(resF) < newtonTol) break
+            if (lastResidual < newtonTol) { converged = true; break }
             val b = collocation.bMatrix(c)
             // J = I - lambda B (строки независимы, b только читается)
             val j = ParallelAssembly.assembleRows(n + 2, n + 2) { r ->
@@ -567,7 +593,14 @@ class SecondKindSolver(
             }
             val delta = LinearAlgebra.solve(j, DoubleArray(n + 2) { -resF[it] })
             for (i in c.indices) c[i] += delta[i]
-            if (LinearAlgebra.normInf(delta) < newtonTol) break
+            lastStep = LinearAlgebra.normInf(delta)
+            if (lastStep < newtonTol) { converged = true; break }
+        }
+        if (!converged) {
+            urysonLogger.warning(
+                "Квази-Ньютон (kulkarni) не сошёлся за $iter итераций (лимит 60): " +
+                    "последняя невязка ||F||=$lastResidual, норма шага ||delta||=$lastStep"
+            )
         }
         // Восстановление x_h^K = y_h + (I - P_theta)[f + lambda U(y_h)] (xh-final).
         val cy = c
@@ -607,14 +640,18 @@ class SecondKindSolver(
             return problem.rhsExact(t, op) + lambda * acc
         }
         val p = pts.size
-        var x = DoubleArray(p) { problem.exact(pts[it]) }
+        val x = DoubleArray(p) { problem.exact(pts[it]) }
         var iter = 0
         val newtonTol = maxOf(tol, 1e-12)
+        var converged = false
+        var lastResidual = Double.NaN
+        var lastStep = Double.NaN
         while (iter < 60) {
             val gx = DoubleArray(p) { evalAtVals(pts[it], x) }
             val resF = DoubleArray(p) { x[it] - gx[it] }
+            lastResidual = LinearAlgebra.normInf(resF)
             iter++
-            if (LinearAlgebra.normInf(resF) < newtonTol) break
+            if (lastResidual < newtonTol) { converged = true; break }
             // Конечно-разностный якобиан J = d resF / dx.
             val jac = LinearAlgebra.zeros(p, p)
             val eps = 1e-7
@@ -632,7 +669,14 @@ class SecondKindSolver(
             }
             val delta = LinearAlgebra.solve(jac, DoubleArray(p) { -resF[it] })
             for (i in x.indices) x[i] += delta[i]
-            if (LinearAlgebra.normInf(delta) < newtonTol) break
+            lastStep = LinearAlgebra.normInf(delta)
+            if (lastStep < newtonTol) { converged = true; break }
+        }
+        if (!converged) {
+            urysonLogger.warning(
+                "Ньютон (nystrom) не сошёлся за $iter итераций (лимит 60): " +
+                    "последняя невязка ||F||=$lastResidual, норма шага ||delta||=$lastStep"
+            )
         }
         val xFinal = x
         return SolutionFunc({ t -> evalAtVals(t, xFinal) }, iter)
@@ -709,7 +753,8 @@ class FirstKindSolver(
      * стартуя с c0. Возвращает коэффициенты.
      */
     fun solveFixedAlpha(thetaFDelta: DoubleArray, alpha: Double, c0: DoubleArray): DoubleArray {
-        var c = c0.copyOf()
+        val c = c0.copyOf()
+        var lastStep = Double.NaN
         repeat(gnMaxIter) {
             val xi = core.xiVector(c)
             val b = core.bMatrix(c)
@@ -723,8 +768,13 @@ class FirstKindSolver(
             val rhs = DoubleArray(n + 2) { -btr[it] - alpha * rc[it] }
             val delta = LinearAlgebra.solve(lhs, rhs)
             for (i in c.indices) c[i] += delta[i]
-            if (LinearAlgebra.normInf(delta) < gnTol) return c
+            lastStep = LinearAlgebra.normInf(delta)
+            if (lastStep < gnTol) return c
         }
+        urysonLogger.warning(
+            "Гаусс–Ньютон (solveFixedAlpha, alpha=$alpha) не сошёлся за $gnMaxIter итераций: " +
+                "норма шага ||delta||=$lastStep"
+        )
         return c
     }
 
@@ -819,12 +869,6 @@ fun errorEhEval(exact: (Double) -> Double, eval: (Double) -> Double, grid: Grid)
 // ============================================================================
 // 12. HEALTH-CHECKS (раздел 9)
 // ============================================================================
-
-/** Результат одной самопроверки. */
-class CheckResult(val name: String, val measured: Double, val threshold: Double, val critical: Boolean) {
-    val passed: Boolean get() = measured <= threshold || measured.isNaN().not() && measured <= threshold
-    val ok: Boolean get() = measured <= threshold
-}
 
 /**
  * Набор health-checks из раздела 9 задания. Каждая проверка печатает имя, измеренную
@@ -1098,22 +1142,6 @@ object HealthChecks {
 // ============================================================================
 // 13. ГЕНЕРАЦИЯ ТАБЛИЦ (раздел 8)
 // ============================================================================
-
-/** Форматирование чисел для таблиц и LaTeX (единообразно — нотация 1.234e-05). */
-object Fmt {
-    fun e(x: Double): String = if (x.isNaN()) "---" else "%.3e".format(x)
-    fun p(x: Double): String = if (x.isNaN()) "---" else "%.2f".format(x)
-    fun h(x: Double): String = "%.4f".format(x)
-    /** LaTeX-нотация m{,}mmm\!\cdot\!10^{p} (одиночные бэкслеши). */
-    fun tex(x: Double): String {
-        if (x.isNaN()) return "---"
-        if (x == 0.0) return "0"
-        val exp = Math.floor(Math.log10(abs(x))).toInt()
-        val mant = x / Math.pow(10.0, exp.toDouble())
-        val mantStr = "%.3f".format(mant).replace(".", "{,}")
-        return mantStr + "\\!\\cdot\\!10^{" + exp + "}"
-    }
-}
 
 /**
  * Построение всех пяти таблиц статьи. Каждый метод считает и печатает

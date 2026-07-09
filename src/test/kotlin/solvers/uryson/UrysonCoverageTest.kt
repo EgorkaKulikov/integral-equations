@@ -1,5 +1,6 @@
 package solvers.uryson
 
+import numerics.CheckResult
 import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
@@ -42,13 +43,13 @@ class UrysonCoverageTest {
     }
 
     /**
-     * Direct unit test of CheckResult: ok/passed flags. measured<=threshold -> ok=true;
-     * measured>threshold -> ok=false. Covers both getters and the boolean expression.
+     * Direct unit test of CheckResult: ok flag. measured<=threshold -> ok=true;
+     * measured>threshold -> ok=false. Covers the getter.
      */
     @Test fun checkResult_flags() {
         val pass = CheckResult("x", 1e-12, 1e-10, true)
         val fail = CheckResult("y", 1.0, 1e-10, false)
-        assertTrue(pass.ok && pass.passed)
+        assertTrue(pass.ok)
         assertFalse(fail.ok)
     }
 
