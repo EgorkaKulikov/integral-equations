@@ -265,7 +265,7 @@ class SecondKindSolver(
      */
     private fun kulkarniQuasi(): SolutionFunc {
         var uNodes = DoubleArray(ng) { fEff(op.gNode[it]) }
-        repeat(200) {
+        for (iter in 0 until 200) {
             val nodesCur = uNodes
             // P_chi u: коэффициенты chi_j(u). u известна лишь в узлах -> интерполяция
             // через функцию-вычислитель uEvalNodes(t) (кусочно через ближайшие узлы не требуется:
@@ -285,7 +285,7 @@ class SecondKindSolver(
             var diff = 0.0
             for (k in 0 until ng) diff = maxOf(diff, abs(next[k] - uNodes[k]))
             uNodes = next
-            if (diff < 1e-13) return@repeat
+            if (diff < 1e-13) break
         }
         val finalNodes = uNodes
         return SolutionFunc { t -> evalNodalLinear(t, finalNodes) }

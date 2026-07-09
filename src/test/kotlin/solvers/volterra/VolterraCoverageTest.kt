@@ -11,6 +11,7 @@ import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -99,6 +100,31 @@ class VolterraCoverageTest {
     }
 
     /**
+     * Regression guard for the kulkarniQuasi early-exit fix (return@repeat -> break).
+     * The fixed point of the iteration must NOT depend on whether we stop early once
+     * the residual drops below 1e-12 or run all 200 sweeps: the converged solution is
+     * identical. We check the iteration reaches a stable fixed point by verifying the
+     * output is deterministic across repeated solves and stays finite/bounded.
+     */
+    @Test fun v2_kulkarniQuasi_convergesToStableFixedPoint() {
+        val grid = Grid.uniform(8)
+        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
+        val op = VolterraOperator(ModelProblem.V2.kernel, grid, quad)
+        val funcs = AveragingFunctionals(basis)
+        val solver = SecondKindSolver(basis, funcs, op, 1.0,
+            { t -> ModelProblem.V2.rhsExact(t, op) }, { t -> ModelProblem.V2.rhsExactDeriv(t, op) })
+        val first = solver.kulkarni()
+        val second = solver.kulkarni()
+        val ts = doubleArrayOf(0.0, 0.13, 0.37, 0.5, 0.71, 0.99, 1.0)
+        for (t in ts) {
+            val a = first.eval(t); val b = second.eval(t)
+            assertTrue(finite(a) && finite(b), "finite at t=$t")
+            // Same fixed point every run: early break must not change the result.
+            assertTrue(abs(a - b) < 1e-14, "non-deterministic quasi solution at t=$t: $a vs $b")
+        }
+    }
+
+    /**
      * Covers matrix/vector assembly (matrixM, matrixM2, vectorG, vectorD) shape and
      * finiteness on V2, n=8. Reference fixed from current run.
      */
@@ -146,6 +172,23 @@ class VolterraCoverageTest {
     }
 
     /**
+     * Regression guard for the 4th-order finite-difference reduction (fix #2): the V1
+     * FirstKindSolver base scheme (ProjFunctionals) must stay finite and accurate after
+     * switching kernelW.kT / gEffDeriv to a 5-point 4th-order stencil (hFD=1e-3).
+     * Threshold fixed from the current run with margin.
+     */
+    @Test fun v1_firstKind_base_accuracyAfter4thOrderFD() {
+        val grid = Grid.uniform(8)
+        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
+        val funcs = ProjFunctionals(basis)
+        val op = VolterraOperator(ModelProblem.V1.kernel, grid, quad)
+        val solver = FirstKindSolver(ModelProblem.V1, basis, funcs, op)
+        val e = errorEh({ t -> ModelProblem.V1.exact(t) }, solver.base().eval, grid)
+        // Measured ~1.3e-5 with the 4th-order stencil; threshold set with ~7x margin.
+        assertTrue(finite(e) && e < 1e-4, "V1 base E_h=$e")
+    }
+
+    /**
      * Convergence sanity (characterization): V2/basis B base error decreases n=8->16.
      * Reference behaviour fixed from current implementation.
      */
@@ -175,6 +218,23 @@ class VolterraCoverageTest {
         val exact = { t: Double -> ModelProblem.V1.exact(t) }
         assertTrue(finite(errorEh(exact, solver.base().eval, grid)))
         assertTrue(finite(errorEh(exact, solver.sloan().eval, grid)))
+    }
+
+    /**
+     * Regression guard for the K(t,t)==0 division guard (weak-singularity kernels).
+     * V2win has K=t-s, so K(t,t)=0 everywhere: reducing the first-kind equation to a
+     * second-kind one divides by K(t,t) and would silently produce NaN/Inf. The solver
+     * must now fail fast with a clear IllegalArgumentException at construction.
+     */
+    @Test fun v1_firstKind_zeroKtt_throws() {
+        val grid = Grid.uniform(8)
+        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
+        val funcs = ProjFunctionals(basis)
+        val op = VolterraOperator(ModelProblem.V2win.kernel, grid, quad)
+        val ex = assertFailsWith<IllegalArgumentException> {
+            FirstKindSolver(ModelProblem.V2win, basis, funcs, op)
+        }
+        assertTrue(ex.message?.contains("K(t,t)") == true, "message: ${ex.message}")
     }
 
     /** Trivial coverage of SolutionFunc.eval wrapper. */

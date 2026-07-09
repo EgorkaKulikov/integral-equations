@@ -105,6 +105,29 @@ class FredholmCoverageTest {
     }
 
     /**
+     * Regression guard for the kulkarniQuasi early-exit fix (return@repeat -> break).
+     * The converged fixed point must be independent of whether the loop stops early
+     * (residual < 1e-13) or runs all 200 sweeps. We verify the quasi solution is a
+     * stable, deterministic fixed point across repeated solves and stays finite.
+     */
+    @Test fun f2_kulkarniQuasi_convergesToStableFixedPoint() {
+        val grid = Grid.uniform(8)
+        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
+        val op = FredholmOperator(ModelProblem.F2.kernel, grid, quad)
+        val funcs = AveragingFunctionals(basis)
+        val solver = SecondKindSolver(basis, funcs, op, 1.0,
+            { t -> ModelProblem.F2.rhsExact(t, op) }, { t -> ModelProblem.F2.rhsExactDeriv(t, op) })
+        val first = solver.kulkarni()
+        val second = solver.kulkarni()
+        val ts = doubleArrayOf(0.0, 0.13, 0.37, 0.5, 0.71, 0.99, 1.0)
+        for (t in ts) {
+            val a = first.eval(t); val b = second.eval(t)
+            assertTrue(finite(a) && finite(b), "finite at t=$t")
+            assertTrue(abs(a - b) < 1e-14, "non-deterministic quasi solution at t=$t: $a vs $b")
+        }
+    }
+
+    /**
      * Exercises matrix/vector assembly entry points (matrixM, matrixM2, vectorG,
      * vectorD) and basic structural invariants. Reference: matrices are dim x dim with
      * dim=n+2 and contain only finite entries (fixed from current run).

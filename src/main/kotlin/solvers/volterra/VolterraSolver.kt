@@ -280,7 +280,7 @@ class SecondKindSolver(
 
     private fun kulkarniQuasi(): SolutionFunc {
         var uVals = DoubleArray(sampleXs.size) { fEff(sampleXs[it]) }
-        repeat(200) {
+        for (iter in 0 until 200) {
             val cur = uVals
             val uFun = { t: Double -> evalNodalLinear(t, cur) }
             val pc = funcs.projectorCoeffs(uFun)
@@ -296,7 +296,7 @@ class SecondKindSolver(
             var diff = 0.0
             for (k in next.indices) diff = maxOf(diff, abs(next[k] - cur[k]))
             uVals = next
-            if (diff < 1e-12) return@repeat
+            if (diff < 1e-12) break
         }
         val finalVals = uVals
         return SolutionFunc { t -> evalNodalLinear(t, finalVals) }
@@ -346,20 +346,42 @@ class FirstKindSolver(
     private val grid = basis.grid
     private val quad = GaussLegendre(8)
     private val Ktt = { t: Double -> problem.kernel.k(t, t) }
-    // Редуцированное ядро W: K_W(t,s) = -K_t(t,s)/K(t,t); K_W_t — центральной разностью.
-    private val hFD = 1e-6
+
+    init {
+        // Редукция уравнения I рода к II роду делит на K(t,t) (корректно лишь при m=1,
+        // т.е. K(t,t)!=0). Для ядер со слабой особенностью (например V2win, K(t,t)=0)
+        // это дало бы NaN/Inf без диагностики -> явно проверяем один раз при инициализации
+        // по узлам сетки и серединам интервалов (точки, где реально используется деление).
+        val eps = 1e-12
+        val bp = grid.breakpoints
+        for (i in bp.indices) {
+            val ts = if (i < bp.size - 1) doubleArrayOf(bp[i], 0.5 * (bp[i] + bp[i + 1])) else doubleArrayOf(bp[i])
+            for (t in ts) {
+                val ktt = Ktt(t)
+                require(abs(ktt) >= eps) {
+                    "Volterra first-kind solver requires K(t,t) != 0 (m=1); " +
+                        "|K(t,t)|=${abs(ktt)} at t=$t is too small"
+                }
+            }
+        }
+    }
+    // Редуцированное ядро W: K_W(t,s) = -K_t(t,s)/K(t,t); K_W_t — 5-точечной центральной
+    // разностью 4-го порядка. Для 4-го порядка оптимум шага ~ eps^{1/5} ~ 1e-3
+    // (при 2-м порядке h=1e-6 доминировала ошибка округления eps/h и шум квадратуры в gEff).
+    private val hFD = 1e-3
+
+    /** 5-точечная центральная разность 4-го порядка: (-f(t+2h)+8f(t+h)-8f(t-h)+f(t-2h))/(12h). */
+    private fun deriv4(t: Double, f: (Double) -> Double): Double =
+        (-f(t + 2 * hFD) + 8 * f(t + hFD) - 8 * f(t - hFD) + f(t - 2 * hFD)) / (12 * hFD)
+
     private val kernelW = KernelV(
         k = { t, s -> -problem.kernel.kT(t, s) / Ktt(t) },
-        kT = { t, s ->
-            val kp = -problem.kernel.kT(t + hFD, s) / Ktt(t + hFD)
-            val km = -problem.kernel.kT(t - hFD, s) / Ktt(t - hFD)
-            (kp - km) / (2 * hFD)
-        },
+        kT = { t, s -> deriv4(t) { tt -> -problem.kernel.kT(tt, s) / Ktt(tt) } },
     )
     private val opW = VolterraOperator(kernelW, grid, quad)
     // g(t) = f'(t)/K(t,t), f — правая часть I рода; f'(t) = d/dt \mathcal V u* (Лейбниц).
     private val gEff = { t: Double -> problem.rhsExactDeriv(t, op) / Ktt(t) }
-    private val gEffDeriv = { t: Double -> (gEff(t + hFD) - gEff(t - hFD)) / (2 * hFD) }
+    private val gEffDeriv = { t: Double -> deriv4(t, gEff) }
     private val inner = SecondKindSolver(basis, funcs, opW, cL = 1.0, fEff = gEff, fEffDeriv = gEffDeriv)
 
     fun base(): SolutionFunc = inner.base()
@@ -572,8 +594,11 @@ object HealthChecks {
             return errorEh({ t -> ModelProblem.V2.exact(t) }, solver.base().eval, grid)
         }
         val e8 = ehAt(8); val e16 = ehAt(16)
-        val measured = if (e16 <= e8 && e8 < 1e-1) e16 else 1.0
-        return CheckResult("11. Sanity базовой схемы (сходимость)", measured, 1e-1, true)
+        val ratio = if (e16 > 0) e8 / e16 else Double.POSITIVE_INFINITY
+        val ratioMin = 4.0   // фактор >= 2^2 => наблюдаемый порядок >= 2
+        val sane = e8 < 1e-1 && e16 <= e8 && ratio >= ratioMin
+        val measured = if (sane) ratioMin / ratio else 1e9
+        return CheckResult("11. Sanity базовой схемы (порядок>=2)", measured, 1.0, true)
     }
 }
 // ============================================================================
