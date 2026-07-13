@@ -49,6 +49,26 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
         return quad.integrate(subBreakpoints(t)) { s -> kernel.k(t, s) * u(s) }
     }
 
+    /** Интеграл int_a^t g(s) ds по составному разбиению [a,t] (веса Nyström W_j(t)=int_a^t omega_j). */
+    fun integrateTo(t: Double, g: (Double) -> Double): Double {
+        if (t <= a) return 0.0
+        return quad.integrate(subBreakpoints(t), g)
+    }
+
+    /**
+     * Интеграл int_lo^hi g(s) ds по составному разбиению [lo,hi], делённому узлами сетки.
+     * Используется для весов Nyström с ограничением на компактный носитель omega_j
+     * ([x_j,x_{j+3}]) -> не более трёх подынтервалов, что снимает O(n)-стоимость на точку.
+     */
+    fun integrateRange(lo: Double, hi: Double, g: (Double) -> Double): Double {
+        if (hi <= lo) return 0.0
+        val list = ArrayList<Double>()
+        list.add(lo)
+        for (x in grid.breakpoints) if (x > lo + BREAKPOINT_INCLUSION_EPS && x < hi - BREAKPOINT_INCLUSION_EPS) list.add(x)
+        list.add(hi)
+        return quad.integrate(list.toDoubleArray(), g)
+    }
+
     /**
      * d/dt (\mathcal V u)(t) = K(t,t) u(t) + \int_a^t dK/dt(t,s) u(s) ds (Лейбниц).
      * ВАЖНО: граничный член K(t,t)u(t) остаётся и при t=a (интеграл по [a,a] нулевой).
@@ -323,6 +343,101 @@ class SecondKindSolver(
         val Luk = applyL { s -> uK.eval(s) }
         return SolutionFunc { t -> fEff(t) + Luk(t) }
     }
+
+    // --- Nyström (сплайн-квадратура с t-зависимыми весами; nystrom-scheme.md, §2, §3) ---
+
+    /**
+     * Опорные данные Nyström для Вольтерра: точки {eta_r} (по возрастанию t),
+     * ValueFunctional-ы семейства и карта точка->индекс. В отличие от Фредгольма
+     * веса W_j(t)=int_a^t omega_j зависят от t, поэтому агрегированные веса b_r(t)
+     * вычисляются на лету (nystromB). Семейство xi (де Бура--Фикса) НЕ поддерживается:
+     * его функционалы используют производную (nystrom-scheme.md §1.4 [адаптация]).
+     */
+    private class NystromSupport(
+        val pts: DoubleArray,
+        val vfs: Array<ValueFunctional>,
+        val idx: HashMap<Double, Int>,
+    )
+
+    private fun nystromSupport(): NystromSupport {
+        require(!funcs.usesDerivative) {
+            "Nyström для семейства '${funcs.name}' не реализован: функционалы " +
+                "де Бура--Фикса (xi) используют производную и не сводятся к значениям."
+        }
+        val vfs = Array(dim) { k ->
+            funcs.chi(k - 2) as? ValueFunctional
+                ?: error("Nyström: функционал '${funcs.name}' (j=${k - 2}) не является ValueFunctional.")
+        }
+        val ptSet = sortedSetOf<Double>()
+        for (vf in vfs) for (s in vf.nodes) ptSet.add(s)
+        val pts = ptSet.toDoubleArray()
+        val idx = HashMap<Double, Int>(pts.size * 2)
+        for (i in pts.indices) idx[pts[i]] = i
+        return NystromSupport(pts, vfs, idx)
+    }
+
+    /**
+     * Агрегированные веса b_r(t) (nystrom-scheme.md, (2.2)/(2.4)):
+     * b_r(t) = sum_j sum_{q: s_{j,q}=eta_r} c_{j,q} W_j(t), W_j(t)=int_a^t omega_j.
+     */
+    private fun nystromB(sup: NystromSupport, t: Double): DoubleArray {
+        val b = DoubleArray(sup.pts.size)
+        for (k in 0 until dim) {
+            val j = k - 2
+            val lo = grid.x(j)                 // левый конец носителя omega_j (>= a)
+            val hi = minOf(grid.x(j + 3), t)   // правый конец, усечённый верхним пределом t
+            if (hi <= lo) continue             // носитель правее t -> W_j(t)=0 (причинность)
+            val w = op.integrateRange(lo, hi) { s -> basis.omega(j, s) }
+            val vf = sup.vfs[k]
+            for (q in vf.nodes.indices) b[sup.idx.getValue(vf.nodes[q])] += vf.coeffs[q] * w
+        }
+        return b
+    }
+
+    /** u^N_h(t)=f(t)+cL sum_r b_r(t) K(t,eta_r) u_hat_r (nystrom-scheme.md, (2.4)). */
+    private fun nystromEval(sup: NystromSupport, uHat: DoubleArray, t: Double): Double {
+        val b = nystromB(sup, t)
+        var acc = 0.0
+        for (r in sup.pts.indices) acc += b[r] * op.kernel.k(t, sup.pts[r]) * uHat[r]
+        return fEff(t) + cL * acc
+    }
+
+    /** Решает (I - A^{N,V}) u_hat = f_hat: A^{N,V}_{rho,r}=cL b_r(eta_rho) K(eta_rho,eta_r) (2.3). */
+    private fun nystromSolve(sup: NystromSupport): DoubleArray {
+        val p = sup.pts.size
+        val a = LinearAlgebra.zeros(p, p)
+        for (rho in 0 until p) {
+            val b = nystromB(sup, sup.pts[rho]) // t-зависимые веса при t=eta_rho
+            for (r in 0 until p) a[rho][r] = -cL * b[r] * op.kernel.k(sup.pts[rho], sup.pts[r])
+            a[rho][rho] += 1.0
+        }
+        return LinearAlgebra.solve(a, DoubleArray(p) { fEff(sup.pts[it]) })
+    }
+
+    /**
+     * Базовый сплайн-Nyström для Вольтерра (nystrom-scheme.md, §2): квадратура с
+     * t-зависимыми весами W_j(t)=int_a^t omega_j. Приводит к линейной системе
+     * (I - A^{N,V}) u_hat = f_hat по значениям решения в опорных точках {eta_r};
+     * при упорядочении точек по возрастанию t матрица (блочно-)нижнетреугольна
+     * (причинность). Приближение вне сплайнового пространства. Не поддерживает xi.
+     */
+    fun nystrom(): SolutionFunc {
+        val sup = nystromSupport()
+        val uHat = nystromSolve(sup)
+        return SolutionFunc { t -> nystromEval(sup, uHat, t) }
+    }
+
+    /**
+     * Итерированный Nyström (nystrom-scheme.md, §3): u_hat^N_h(t)=f(t)+(L u^N_h)(t) с
+     * ТОЧНЫМ оператором Вольтерра L (замыкание applyL, как в sloan()). Одно интегрирование
+     * найденного u^N_h, новой системы не требуется (аналог итерации Слоана).
+     */
+    fun iteratedNystrom(): SolutionFunc {
+        val sup = nystromSupport()
+        val uHat = nystromSolve(sup)
+        val uN = applyL { s -> nystromEval(sup, uHat, s) }
+        return SolutionFunc { t -> fEff(t) + uN(t) }
+    }
 }
 // ============================================================================
 // 10. РЕШАТЕЛЬ УРАВНЕНИЯ I РОДА — СВЕДЕНИЕ ДИФФЕРЕНЦИРОВАНИЕМ (r3)
@@ -460,7 +575,7 @@ object HealthChecks {
         checkSplineVsB(), checkSplineVsH(), checkPartitionOfUnity(),
         checkBiorthTheta(), checkBiorthXi(), checkProjectorIdempotent(),
         checkExactOnSpan(), checkThetaReduction(), checkQuadrature(),
-        checkRhsConsistency(), checkBaseSanity(),
+        checkRhsConsistency(), checkBaseSanity(), checkNystromExactOnSpan(),
     )
 
     private fun forEachGrid(action: (Grid) -> Double): Double = maxOf(action(gridsU), action(gridsQ))
@@ -627,6 +742,23 @@ object HealthChecks {
         return CheckResult("10. Точность на span-задаче (база B)", eh, 1e-8, true)
     }
 
+    /**
+     * 12. Nyström точен на span-задаче: ядро зависит лишь от t (K=1+t), u*=s^2 ->
+     * g_t(s)=K(t)u*(s) в span{1,s,s^2}=phi^B; веса W_j(t)=int_a^t omega_j дают точный
+     * интеграл по [a,t], приближение воспроизводит u* до машинной точности (§2, п.7).
+     */
+    private fun checkNystromExactOnSpan(): CheckResult {
+        val grid = Grid.uniform(8)
+        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
+        val funcs = ProjFunctionals(basis)
+        val kernel = KernelV({ t, _ -> 1.0 + t })
+        val prob = ModelProblem("V2nyst", kernel, { s -> s * s }, { s -> 2.0 * s }, secondKind = true)
+        val op = VolterraOperator(kernel, grid, quad)
+        val solver = secondKindSolver(prob, basis, funcs, op)
+        val eh = errorEh({ t -> prob.exact(t) }, solver.nystrom().eval, grid)
+        return CheckResult("12. Nyström точен на span (база B)", eh, 1e-8, true)
+    }
+
     /** 11. Sanity: базовая схема II рода сходится (E_8 > E_16 для F2/H). */
     private fun checkBaseSanity(): CheckResult {
         fun ehAt(nn: Int): Double {
@@ -714,6 +846,30 @@ object Tables {
         }
     }
 
+    /**
+     * T3[p]: база/Слоан/Nyström/итер.Nyström (theta), базис sys. Сетка ограничена n<=32:
+     * итерированный Nyström применяет ТОЧНЫЙ оператор Вольтерра к u^N_h, вычисление
+     * которого само O(n) на точку (t-зависимые веса) -> двойная стоимость на больших n.
+     */
+    private val NS_NYST = listOf(8, 16, 32)
+
+    fun tableNystrom(p: ModelProblem, sys: GeneratingSystem) {
+        println("\n--- T3[${p.name}]: базис ${sys.name}, theta: база/Слоан/Nyström/итер.Nyström (E_h,p_h) ---")
+        val names = listOf("база", "Слоан", "Nyst", "ит.Nyst")
+        val errs = names.map { ArrayList<Double>() }
+        for (nn in NS_NYST) {
+            val (s, grid) = makeSolver(p, sys, "theta", nn)
+            val ex = { t: Double -> p.exact(t) }
+            errs[0].add(errorEh(ex, s.base().eval, grid))
+            errs[1].add(errorEh(ex, s.sloan().eval, grid))
+            errs[2].add(errorEh(ex, s.nystrom().eval, grid))
+            errs[3].add(errorEh(ex, s.iteratedNystrom().eval, grid))
+        }
+        val ps = names.indices.map { orders(errs[it]) }
+        for (i in NS_NYST.indices) println("   n=%4d | ".format(NS_NYST[i]) +
+            names.indices.joinToString(" | ") { mi -> "%s:%s(%s)".format(names[mi], Fmt.e(errs[mi][i]), Fmt.p(ps[mi][i])) })
+    }
+
     /** V1 (сведение дифференцированием, m=1): база/Слоан/Кулкарни, базис B. */
     fun tableF1() {
         println("\n--- V1 (I рода, сведение дифференцированием m=1), базис B, theta: база/Слоан/Кулк ---")
@@ -759,6 +915,7 @@ fun main() {
     for ((p, sys) in secondKindExamples) {
         Tables.tablePhi(p)
         Tables.tableMethods(p, sys)
+        Tables.tableNystrom(p, sys)
         Tables.tableFamilies(p, sys)
     }
     // Один пример I рода (сведение дифференцированием).
