@@ -9,8 +9,16 @@ import numerics.functionals.*
 // 7. ЯДРО И ОПЕРАТОР ВОЛЬТЕРРА \mathcal V u(t) = \int_a^t K(t,s) u(s) ds
 // ============================================================================
 
-/** Ядро K(t,s) линейного уравнения Вольтерра и (при необходимости для xi) dK/dt. */
-class KernelV(val k: (Double, Double) -> Double, val kT: (Double, Double) -> Double = { _, _ -> 0.0 })
+/**
+ * Ядро K(t,s) линейного уравнения Вольтерра и аналитические частные производные:
+ * kT=K_t (для xi^<1>,xi^<2>), kS=K_s и kTT=K_tt (для (V u)'' в xi^<0>). По умолчанию нулевые.
+ */
+class KernelV(
+    val k: (Double, Double) -> Double,
+    val kT: (Double, Double) -> Double = { _, _ -> 0.0 },
+    val kS: (Double, Double) -> Double = { _, _ -> 0.0 },
+    val kTT: (Double, Double) -> Double = { _, _ -> 0.0 },
+)
 
 /**
  * Оператор Вольтерра: (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds, квадратура по [a,t].
@@ -80,6 +88,23 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
         val integral = if (t <= a) 0.0 else quad.integrate(subBreakpoints(t)) { s -> kernel.kT(t, s) * u(s) }
         return boundary + integral
     }
+
+    /**
+     * d^2/dt^2 (\mathcal V u)(t) по формуле (V2'') (deboorfix-spec.md §2.2, ACCEPT):
+     *   (\mathcal V u)''(t) = [2 K_t(t,t) + K_s(t,t)] u(t) + K(t,t) u'(t)
+     *                         + \int_a^t K_tt(t,s) u(s) ds.
+     * КРИТИЧЕСКИ: член K(t,t) u'(t) обязателен (при K(t,t)!=0), поэтому кроме u
+     * передаётся и первая производная uD=u' самой функции. Граничный/диагональный
+     * член остаётся и при t=a (интеграл по [a,a] нулевой).
+     */
+    fun applyDeriv2(t: Double, u: (Double) -> Double, uD: (Double) -> Double): Double {
+        if (t < a) return 0.0
+        val kd = kernel.k(t, t)
+        val diag = 2.0 * kernel.kT(t, t) + kernel.kS(t, t)
+        val boundary = diag * u(t) + kd * uD(t)
+        val integral = if (t <= a) 0.0 else quad.integrate(subBreakpoints(t)) { s -> kernel.kTT(t, s) * u(s) }
+        return boundary + integral
+    }
 }
 
 // ============================================================================
@@ -99,6 +124,7 @@ class ModelProblem(
     val secondKind: Boolean,
     val a: Double = 0.0,
     val b: Double = 1.0,
+    val exactDeriv2: (Double) -> Double = { 0.0 },
 ) {
     /** Точная правая часть f(t). */
     fun rhsExact(t: Double, op: VolterraOperator): Double {
@@ -110,6 +136,12 @@ class ModelProblem(
     fun rhsExactDeriv(t: Double, op: VolterraOperator): Double {
         val integralD = op.applyDeriv(t) { s -> exact(s) }
         return if (secondKind) exactDeriv(t) - integralD else integralD
+    }
+
+    /** d^2/dt^2 f(t) (для xi^<0>): II рода u*'' - (\mathcal V u*)'' по (V2''). */
+    fun rhsExactDeriv2(t: Double, op: VolterraOperator): Double {
+        val integralDD = op.applyDeriv2(t, { s -> exact(s) }, { s -> exactDeriv(s) })
+        return if (secondKind) exactDeriv2(t) - integralDD else integralDD
     }
 
     companion object {
@@ -124,18 +156,27 @@ class ModelProblem(
         /** V2: K=1/(1+t+s), u*=1/(t+1) (проверка порядка на полиномиальном базисе). */
         val V2 = ModelProblem(
             name = "V2",
-            kernel = KernelV({ t, s -> 1.0 / (1.0 + t + s) }, { t, s -> -1.0 / ((1.0 + t + s) * (1.0 + t + s)) }),
+            kernel = KernelV(
+                { t, s -> 1.0 / (1.0 + t + s) },
+                { t, s -> -1.0 / ((1.0 + t + s) * (1.0 + t + s)) },
+                { t, s -> -1.0 / ((1.0 + t + s) * (1.0 + t + s)) },
+                { t, s -> 2.0 / ((1.0 + t + s) * (1.0 + t + s) * (1.0 + t + s)) },
+            ),
             exact = { t -> 1.0 / (t + 1.0) }, exactDeriv = { t -> -1.0 / ((t + 1.0) * (t + 1.0)) },
             secondKind = true,
+            exactDeriv2 = { t -> 2.0 / ((t + 1.0) * (t + 1.0) * (t + 1.0)) },
         )
 
-        /** V2exp: K=e^{-(t-s)^2}, u*=e^t (согласован с phi^H). */
+        /** V2exp: K=e^{-(t-s)^2}, u*=e^t (согласован с phi^H). K(t,t)=1 != 0. */
         val V2exp = ModelProblem(
             name = "V2exp",
             kernel = KernelV({ t, s -> Math.exp(-(t - s) * (t - s)) },
-                { t, s -> -2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) }),
+                { t, s -> -2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
+                { t, s -> 2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
+                { t, s -> (4.0 * (t - s) * (t - s) - 2.0) * Math.exp(-(t - s) * (t - s)) }),
             exact = { t -> Math.exp(t) }, exactDeriv = { t -> Math.exp(t) },
             secondKind = true,
+            exactDeriv2 = { t -> Math.exp(t) },
         )
 
         /**
@@ -147,9 +188,10 @@ class ModelProblem(
          */
         val V2win = ModelProblem(
             name = "V2win",
-            kernel = KernelV({ t, s -> t - s }, { _, _ -> 1.0 }),
+            kernel = KernelV({ t, s -> t - s }, { _, _ -> 1.0 }, { _, _ -> -1.0 }, { _, _ -> 0.0 }),
             exact = { t -> Math.cos(t) }, exactDeriv = { t -> -Math.sin(t) },
             secondKind = true,
+            exactDeriv2 = { t -> -Math.cos(t) },
         )
 
         /**
@@ -158,9 +200,10 @@ class ModelProblem(
          */
         val V1 = ModelProblem(
             name = "V1",
-            kernel = KernelV({ t, s -> 1.0 + t - s }, { _, _ -> 1.0 }),
+            kernel = KernelV({ t, s -> 1.0 + t - s }, { _, _ -> 1.0 }, { _, _ -> -1.0 }, { _, _ -> 0.0 }),
             exact = { t -> Math.cos(t) }, exactDeriv = { t -> -Math.sin(t) },
             secondKind = false,
+            exactDeriv2 = { t -> -Math.cos(t) },
         )
     }
 }
@@ -187,6 +230,7 @@ class SecondKindSolver(
     val cL: Double,
     val fEff: (Double) -> Double,
     val fEffDeriv: (Double) -> Double,
+    val fEffDeriv2: (Double) -> Double = { 0.0 },
 ) {
     val grid = basis.grid
     val n = grid.n
@@ -200,19 +244,32 @@ class SecondKindSolver(
     private fun applyL(g: (Double) -> Double): (Double) -> Double = { t -> cL * op.apply(t, g) }
     private fun applyLDeriv(g: (Double) -> Double): (Double) -> Double = { t -> cL * op.applyDeriv(t, g) }
 
-    /** chi_j(g) по значениям g и g' (обёртка). */
-    private fun chiOf(g: (Double) -> Double, gD: (Double) -> Double): DoubleArray =
-        DoubleArray(dim) { funcs.chi(it - 2).apply(g, gD) }
+    /**
+     * (L g)''(t) = c_L (\mathcal V g)''(t) по (V2''): требует g И g' (член K(t,t) g'(t)).
+     * gD — первая производная самого операнда g.
+     */
+    private fun applyLDeriv2(g: (Double) -> Double, gD: (Double) -> Double): (Double) -> Double =
+        { t -> cL * op.applyDeriv2(t, g, gD) }
 
-    /** Матрица M_{j,i} = chi_j(L omega_i). Для xi учитывается производная (L omega_i)'. */
+    /** chi_j(g) по значениям g, g' и g'' (обёртка). */
+    private fun chiOf(
+        g: (Double) -> Double,
+        gD: (Double) -> Double,
+        gDD: (Double) -> Double = { 0.0 },
+    ): DoubleArray = DoubleArray(dim) { funcs.chi(it - 2).apply(g, gD, gDD) }
+
+    /** Матрица M_{j,i} = chi_j(L omega_i). Для xi — (L omega_i)', для xi^<0> — и (L omega_i)''. */
     fun matrixM(): Array<DoubleArray> {
         // Столбцы M независимы по i; cols[i] = столбец i.
         val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
             val idx = i - 2
             val omega = { s: Double -> basis.omega(idx, s) }
+            val omegaD = { s: Double -> basis.omegaDeriv(idx, s) }
             val Lom = applyL(omega)
             val LomD = applyLDeriv(omega)
-            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(Lom, LomD) }
+            // (L omega_i)'' по (V2'') требует omega_i И omega_i' (член K(t,t) omega_i').
+            val LomDD = applyLDeriv2(omega, omegaD)
+            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(Lom, LomD, LomDD) }
         }
         val m = LinearAlgebra.zeros(dim, dim)
         for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
@@ -223,10 +280,14 @@ class SecondKindSolver(
     fun matrixM2(): Array<DoubleArray> {
         val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
             val idx = i - 2
-            val Lom = applyL { s -> basis.omega(idx, s) }
+            val omega = { s: Double -> basis.omega(idx, s) }
+            val Lom = applyL(omega)
+            val LomD = applyLDeriv(omega)
             val LLom = applyL(Lom)
             val LLomD = applyLDeriv(Lom)
-            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(LLom, LLomD) }
+            // (L(L omega_i))'' требует u=L omega_i И u'=(L omega_i)'.
+            val LLomDD = applyLDeriv2(Lom, LomD)
+            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(LLom, LLomD, LLomDD) }
         }
         val m = LinearAlgebra.zeros(dim, dim)
         for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
@@ -234,13 +295,15 @@ class SecondKindSolver(
     }
 
     /** g_j = chi_j(f). */
-    fun vectorG(): DoubleArray = chiOf(fEff, fEffDeriv)
+    fun vectorG(): DoubleArray = chiOf(fEff, fEffDeriv, fEffDeriv2)
 
     /** d_j = chi_j(L f). */
     fun vectorD(): DoubleArray {
         val Lf = { t: Double -> cL * op.apply(t) { s -> fEff(s) } }
         val LfD = { t: Double -> cL * op.applyDeriv(t) { s -> fEff(s) } }
-        return chiOf(Lf, LfD)
+        // (L f)'' по (V2'') требует f И f'.
+        val LfDD = applyLDeriv2(fEff, fEffDeriv)
+        return chiOf(Lf, LfD, LfDD)
     }
 
     /** Базовая схема: (I - M) c = g. */
@@ -287,11 +350,14 @@ class SecondKindSolver(
         val c = LinearAlgebra.solve(a, rhs) // коэффициенты y_h
         // u_h^K = y_h + (I - P_chi)[f + L y_h]; (I - P_chi)w = w - P_chi w.
         val yh = { s: Double -> basis.evalSpline(c, s) }
+        val yhD = { s: Double -> basis.evalSplineDeriv(c, s) }
         val Lyh = applyL(yh)
         val LyhD = applyLDeriv(yh)
+        val LyhDD = applyLDeriv2(yh, yhD)
         val wFun = { t: Double -> fEff(t) + Lyh(t) }
         val wDFun = { t: Double -> fEffDeriv(t) + LyhD(t) }
-        val pwCoeffs = funcs.projectorCoeffs(wFun, wDFun)
+        val wDDFun = { t: Double -> fEffDeriv2(t) + LyhDD(t) }
+        val pwCoeffs = funcs.projectorCoeffs(wFun, wDFun, wDDFun)
         return SolutionFunc { t -> basis.evalSpline(c, t) + (wFun(t) - basis.evalSpline(pwCoeffs, t)) }
     }
 
@@ -554,7 +620,8 @@ fun secondKindSolver(problem: ModelProblem, basis: MinimalSplineBasis, funcs: Fu
                      op: VolterraOperator): SecondKindSolver =
     SecondKindSolver(basis, funcs, op, cL = 1.0,
         fEff = { t -> problem.rhsExact(t, op) },
-        fEffDeriv = { t -> problem.rhsExactDeriv(t, op) })
+        fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
+        fEffDeriv2 = { t -> problem.rhsExactDeriv2(t, op) })
 
 // ============================================================================
 // 12. HEALTH-CHECKS
@@ -647,21 +714,27 @@ object HealthChecks {
         return CheckResult("4. Биортогональность theta", err, 1e-9, true)
     }
 
-    /** 5. Биортогональность xi_i(omega_j)=delta (с производной). */
+    /** 5. Биортогональность xi^<r>_i(omega_j)=delta для r=0,1,2 (с 1-й и 2-й производными). */
     private fun checkBiorthXi(): CheckResult {
         val err = forEachGrid { grid ->
             var m = 0.0
             for (sys in allSys) {
                 val basis = MinimalSplineBasis(sys, grid)
-                val funcs = DeBoorFixFunctionals(basis)
-                for (i in -2..grid.n - 1) for (j in -2..grid.n - 1) {
-                    val v = funcs.chi(i).apply({ t -> basis.omega(j, t) }, { t -> basis.omegaDeriv(j, t) })
-                    m = maxOf(m, abs(v - if (i == j) 1.0 else 0.0))
+                for (r in 0..2) {
+                    val funcs = DeBoorFixFunctionals(basis, r)
+                    for (i in -2..grid.n - 1) for (j in -2..grid.n - 1) {
+                        val v = funcs.chi(i).apply(
+                            { t -> basis.omega(j, t) },
+                            { t -> basis.omegaDeriv(j, t) },
+                            { t -> basis.omegaDeriv2(j, t) },
+                        )
+                        m = maxOf(m, abs(v - if (i == j) 1.0 else 0.0))
+                    }
                 }
             }
             m
         }
-        return CheckResult("5. Биортогональность xi", err, 1e-9, true)
+        return CheckResult("5. Биортогональность xi<0,1,2>", err, 1e-9, true)
     }
 
     /** 6. Идемпотентность P_chi u_h = u_h для theta, xi (mu,lambda не обязаны). */
@@ -671,11 +744,18 @@ object HealthChecks {
             var m = 0.0
             for (sys in allSys) {
                 val basis = MinimalSplineBasis(sys, grid)
-                for (funcs in listOf(ProjFunctionals(basis), DeBoorFixFunctionals(basis))) {
+                val fams = listOf(
+                    ProjFunctionals(basis),
+                    DeBoorFixFunctionals(basis, 0),
+                    DeBoorFixFunctionals(basis, 1),
+                    DeBoorFixFunctionals(basis, 2),
+                )
+                for (funcs in fams) {
                     val c = DoubleArray(grid.n + 2) { rnd.nextDouble(-1.0, 1.0) }
                     val uh = { t: Double -> basis.evalSpline(c, t) }
                     val uhD = { t: Double -> basis.evalSplineDeriv(c, t) }
-                    val pc = funcs.projectorCoeffs(uh, uhD)
+                    val uhDD = { t: Double -> basis.evalSplineDeriv2(c, t) }
+                    val pc = funcs.projectorCoeffs(uh, uhD, uhDD)
                     for (i in c.indices) m = maxOf(m, abs(pc[i] - c[i]))
                 }
             }
@@ -792,14 +872,42 @@ object Tables {
         val funcs = family(fam, basis)
         val op = VolterraOperator(p.kernel, grid, quad)
         return SecondKindSolver(basis, funcs, op, 1.0,
-            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
+            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) },
+            { t -> p.rhsExactDeriv2(t, op) }) to grid
     }
 
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
         "theta" -> ProjFunctionals(basis)
-        "xi" -> DeBoorFixFunctionals(basis)
+        "xi", "xi1" -> DeBoorFixFunctionals(basis, 1)
+        "xi0" -> DeBoorFixFunctionals(basis, 0)
+        "xi2" -> DeBoorFixFunctionals(basis, 2)
         "mu" -> AveragingFunctionals(basis)
         else -> ThreePointFunctionals(basis)
+    }
+
+    /** Tded[p]: сходимость трёх xi (r=0,1,2) на базисах B/H/T, схемы база/Слоан/Кулк/ит.Кулк. */
+    fun tableDeBoorFix(p: ModelProblem) {
+        println("\n--- Tded[${p.name}]: де Бура--Фикса xi<0>,xi<1>,xi<2>, базисы B/H/T ---")
+        val schemes = listOf("база", "Слоан", "Кулк", "ит.Кулк")
+        for (fam in listOf("xi0", "xi1", "xi2")) {
+            println("  семейство $fam:")
+            for (sys in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
+                val errs = schemes.map { ArrayList<Double>() }
+                for (nn in NS) {
+                    val (s, grid) = makeSolver(p, sys, fam, nn)
+                    val ex = { t: Double -> p.exact(t) }
+                    errs[0].add(errorEh(ex, s.base().eval, grid))
+                    errs[1].add(errorEh(ex, s.sloan().eval, grid))
+                    errs[2].add(errorEh(ex, s.kulkarni().eval, grid))
+                    errs[3].add(errorEh(ex, s.iteratedKulkarni().eval, grid))
+                }
+                val ps = schemes.indices.map { orders(errs[it]) }
+                println("   базис ${sys.name}:")
+                for (i in NS.indices) println("     n=%4d | ".format(NS[i]) +
+                    schemes.indices.joinToString(" | ") { mi ->
+                        "%s:%s(%s)".format(schemes[mi], Fmt.e(errs[mi][i]), Fmt.p(ps[mi][i])) })
+            }
+        }
     }
 
     /** T1: V2exp, базисы B/H/T, базовая схема theta: E_h, p_h, C_h. */
@@ -917,6 +1025,7 @@ fun main() {
         Tables.tableMethods(p, sys)
         Tables.tableNystrom(p, sys)
         Tables.tableFamilies(p, sys)
+        Tables.tableDeBoorFix(p)
     }
     // Один пример I рода (сведение дифференцированием).
     Tables.tableF1()
