@@ -145,12 +145,25 @@ class ModelProblem(
     }
 
     companion object {
-        /** V2span: K=e^{t-2s}, u*=t^2 ∈ span{1,t,t^2}=phi^B (машинная точность на B). */
+        /**
+         * V2span: K=e^{t-2s}, u*=t^2 ∈ span{1,t,t^2}=phi^B (машинная точность на B).
+         *
+         * Производные ядра выписаны ПОЛНОСТЬЮ (K_t = K, K_s = -2K, K_tt = K), как и
+         * u*'' = 2. Ранее kS/kTT/exactDeriv2 оставались нулевыми по умолчанию при
+         * ненулевых истинных значениях, и вторая производная (Vu)'' вычислялась неверно
+         * для семейства xi^<0> — молча, без какой-либо диагностики.
+         */
         val V2span = ModelProblem(
             name = "V2span",
-            kernel = KernelV({ t, s -> Math.exp(t - 2.0 * s) }, { t, s -> Math.exp(t - 2.0 * s) }),
+            kernel = KernelV(
+                { t, s -> Math.exp(t - 2.0 * s) },
+                { t, s -> Math.exp(t - 2.0 * s) },
+                { t, s -> -2.0 * Math.exp(t - 2.0 * s) },
+                { t, s -> Math.exp(t - 2.0 * s) },
+            ),
             exact = { t -> t * t }, exactDeriv = { t -> 2.0 * t },
             secondKind = true,
+            exactDeriv2 = { 2.0 },
         )
 
         /** V2: K=1/(1+t+s), u*=1/(t+1) (проверка порядка на полиномиальном базисе). */
@@ -215,11 +228,15 @@ class ModelProblem(
 class SolutionFunc(val eval: (Double) -> Double)
 
 /**
- * Линейный решатель уравнения II рода u - L u = f, L = c_L * \mathcal K
- * (c_L = 1 для F2; c_L = -1/alpha для F1 Wazwaz, \mathcal K_eff = -(1/alpha)\mathcal K).
- * Правая часть f и её производная задаются явно (fEff/fEffDeriv) для переиспользования в F1.
+ * Линейный решатель уравнения Вольтерры II рода u - L u = f, L = c_L * \mathcal V,
+ * где (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds (ПЕРЕМЕННЫЙ верхний предел).
  *
- * Матрицы (discrete-problem.md):
+ * c_L = 1 для уравнения II рода; при редукции I->II рода (см. [FirstKindSolver])
+ * тоже c_L = 1, но с другим (редуцированным) ядром и правой частью.
+ * Правая часть f и её производные задаются явно (fEff/fEffDeriv/fEffDeriv2),
+ * чтобы решатель переиспользовался и для задач I рода.
+ *
+ * Матрицы дискретной задачи:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
  *   g_j      = chi_j(f),          d_j      = chi_j(L f).
  */
@@ -232,6 +249,22 @@ class SecondKindSolver(
     val fEffDeriv: (Double) -> Double,
     val fEffDeriv2: (Double) -> Double = { 0.0 },
 ) {
+    private companion object {
+        /**
+         * Предел числа итераций в схеме Кулкарни для квазиинтерполянтов (mu, lambda).
+         * Выбор реализации: теоретической гарантии сходимости нет (нет свойства P^2=P),
+         * поэтому нужен жёсткий предел; на модельных задачах сходимость наступает за единицы итераций.
+         */
+        const val KULKARNI_QUASI_MAX_ITERATIONS = 200
+
+        /**
+         * Критерий останова итерации Кулкарни для квазиинтерполянтов: равномерная норма
+         * разности соседних итерантов на контрольных точках. Значение вблизи машинной
+         * точности: дальнейшее уточнение не имеет смысла из-за шума квадратуры.
+         */
+        const val KULKARNI_QUASI_TOLERANCE = 1e-13
+    }
+
     val grid = basis.grid
     val n = grid.n
     val dim = n + 2
@@ -363,44 +396,43 @@ class SecondKindSolver(
 
     /**
      * Кулкарни для mu, lambda: итерация u^{(m+1)} = f + U^K_h u^{(m)},
-     * U^K_h u = P_chi(L u) + L(P_chi u) - P_chi(L(P_chi u)). Работа в узлах квадратуры.
+     * U^K_h u = P_chi(L u) + L(P_chi u) - P_chi(L(P_chi u)).
      * [численное наблюдение]: разрешимость/сходимость не гарантированы (нет P^2=P).
+     *
+     * Итерант хранится как НЕПРЕРЫВНАЯ функция: реконструкция того же порядка,
+     * что и базис (через basis.evalSpline и точную квадратуру op.apply), без понижающей
+     * кусочно-линейной интерполяции узловых значений.
+     *
+     * Ранее здесь использовалось хранение итеранта в виде значений на равномерной
+     * выборке с кусочно-линейным восстановлением, что ограничивало точность величиной
+     * O(h_sample^2) НЕЗАВИСИМО от порядка базиса. В решателе Фредгольма это было
+     * исправлено ранее; здесь применён тот же подход для согласованности двух решателей.
      */
-    private val sampleXs: DoubleArray = DoubleArray(20 * n + 1) { grid.a + (grid.b - grid.a) * it / (20 * n) }
-
     private fun kulkarniQuasi(): SolutionFunc {
-        var uVals = DoubleArray(sampleXs.size) { fEff(sampleXs[it]) }
-        for (iter in 0 until 200) {
-            val cur = uVals
-            val uFun = { t: Double -> evalNodalLinear(t, cur) }
-            val pc = funcs.projectorCoeffs(uFun)
+        var uFun: (Double) -> Double = { t -> fEff(t) }
+        // Контрольные точки только для критерия останова (в самой итерации не участвуют).
+        val checkPoints = DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
+        var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
+        for (iter in 0 until KULKARNI_QUASI_MAX_ITERATIONS) {
+            val curFun = uFun
+            val pc = funcs.projectorCoeffs(curFun)
             val pcFun = { s: Double -> basis.evalSpline(pc, s) }
-            val LuFun = applyL(uFun)                       // L u
-            val pLu = funcs.projectorCoeffs(LuFun)        // P_chi(L u)
-            val LPu = applyL(pcFun)                        // L(P_chi u)
-            val pLPu = funcs.projectorCoeffs(LPu)         // P_chi(L(P_chi u))
-            val next = DoubleArray(sampleXs.size) { k ->
-                val t = sampleXs[k]
-                fEff(t) + basis.evalSpline(pLu, t) + LPu(t) - basis.evalSpline(pLPu, t)
+            val luFun = applyL(curFun)                    // L u
+            val pLu = funcs.projectorCoeffs(luFun)        // P_chi(L u)
+            val lpu = applyL(pcFun)                       // L(P_chi u)
+            val pLPu = funcs.projectorCoeffs(lpu)         // P_chi(L(P_chi u))
+            val nextFun = { t: Double ->
+                fEff(t) + basis.evalSpline(pLu, t) + lpu(t) - basis.evalSpline(pLPu, t)
             }
+            val nextAtCheck = DoubleArray(checkPoints.size) { nextFun(checkPoints[it]) }
             var diff = 0.0
-            for (k in next.indices) diff = maxOf(diff, abs(next[k] - cur[k]))
-            uVals = next
-            if (diff < 1e-12) break
+            for (k in nextAtCheck.indices) diff = maxOf(diff, abs(nextAtCheck[k] - uAtCheck[k]))
+            uFun = nextFun
+            uAtCheck = nextAtCheck
+            if (diff < KULKARNI_QUASI_TOLERANCE) break
         }
-        val finalVals = uVals
-        return SolutionFunc { t -> evalNodalLinear(t, finalVals) }
-    }
-
-    /** Кусочно-линейное восстановление по значениям на sampleXs (для mu/lambda). */
-    private fun evalNodalLinear(t: Double, nodes: DoubleArray): Double {
-        val xs = sampleXs
-        if (t <= xs[0]) return nodes[0]
-        if (t >= xs[xs.size - 1]) return nodes[xs.size - 1]
-        var lo = 0; var hi = xs.size - 1
-        while (hi - lo > 1) { val mid = (lo + hi) / 2; if (xs[mid] <= t) lo = mid else hi = mid }
-        val w = (t - xs[lo]) / (xs[hi] - xs[lo])
-        return nodes[lo] * (1 - w) + nodes[hi] * w
+        val finalFun = uFun
+        return SolutionFunc { t -> finalFun(t) }
     }
 
     /** Итерированный Кулкарни: ^u_h^K = f + L u_h^K. */
@@ -544,10 +576,21 @@ class FirstKindSolver(
             for (t in ts) {
                 val ktt = Ktt(t)
                 require(abs(ktt) >= eps) {
-                    "Volterra first-kind solver requires K(t,t) != 0 (m=1); " +
-                        "|K(t,t)|=${abs(ktt)} at t=$t is too small"
+                    "Решатель уравнения Вольтерры I рода требует K(t,t) != 0 (случай m=1); " +
+                        "|K(t,t)|=${abs(ktt)} при t=$t слишком мало"
                 }
             }
+        }
+        // Семейство xi^<0> требует ВТОРОЙ производной образа (Wu)'' и правой части g''.
+        // После редукции I->II рода ядро K_W само задано через численное дифференцирование,
+        // а K_W_s и K_W_tt недоступны аналитически: попытка их получить дала бы трёхкратное
+        // численное дифференцирование с неконтролируемым шумом. Ранее такой вызов МОЛЧА
+        // возвращал неверный результат (K_W_s = K_W_tt = 0 по умолчанию) — теперь это
+        // явная ошибка вместо тихого искажения.
+        require(!funcs.usesSecondDerivative) {
+            "Решатель уравнения Вольтерры I рода не поддерживает семейство '${funcs.name}': " +
+                "после редукции I->II рода вторая производная ядра недоступна аналитически. " +
+                "Используйте theta, xi^<1>, xi^<2>, mu или lambda."
         }
     }
     // Редуцированное ядро W: K_W(t,s) = -K_t(t,s)/K(t,t); K_W_t — 5-точечной центральной

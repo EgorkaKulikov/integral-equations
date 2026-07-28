@@ -115,12 +115,25 @@ class ModelProblem(
     }
 
     companion object {
-        /** F2-poly: K=e^{t-2s}, u*=t^2 ∈ span{1,t,t^2}=phi^B (машинная точность на B). */
+        /**
+         * F2-poly: K=e^{t-2s}, u*=t^2 ∈ span{1,t,t^2}=phi^B (машинная точность на B).
+         *
+         * Производные ядра выписаны ПОЛНОСТЬЮ (K_t = K, K_s = -2K, K_tt = K), как и
+         * u*'' = 2. Ранее kS/kTT/exactDeriv2 оставались нулевыми по умолчанию при
+         * ненулевых истинных значениях: любой сценарий с семейством xi^<0> (которое
+         * читает вторые производные) получал молча неверную правую часть.
+         */
         val F2span = ModelProblem(
             name = "F2span",
-            kernel = KernelF({ t, s -> Math.exp(t - 2.0 * s) }, { t, s -> Math.exp(t - 2.0 * s) }),
+            kernel = KernelF(
+                { t, s -> Math.exp(t - 2.0 * s) },
+                { t, s -> Math.exp(t - 2.0 * s) },
+                { t, s -> -2.0 * Math.exp(t - 2.0 * s) },
+                { t, s -> Math.exp(t - 2.0 * s) },
+            ),
             exact = { t -> t * t }, exactDeriv = { t -> 2.0 * t },
             secondKind = true,
+            exactDeriv2 = { 2.0 },
         )
 
         /** F2-B: K=1/(1+t+s), u*=1/(t+1) (проверка порядка на полиномиальном базисе). */
@@ -149,13 +162,23 @@ class ModelProblem(
             exactDeriv2 = { t -> Math.exp(t) },
         )
 
-        /** F1: K=e^{-(t-s)^2}, u*=e^t, уравнение I рода (Wazwaz). */
+        /**
+         * F1: K=e^{-(t-s)^2}, u*=e^t, уравнение I рода (Wazwaz).
+         *
+         * Производные ядра и решения выписаны полностью (см. пояснение к F2span):
+         * K_s = 2(t-s)K, K_tt = (4(t-s)^2-2)K, u*'' = e^t.
+         */
         val F1 = ModelProblem(
             name = "F1",
-            kernel = KernelF({ t, s -> Math.exp(-(t - s) * (t - s)) },
-                { t, s -> -2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) }),
+            kernel = KernelF(
+                { t, s -> Math.exp(-(t - s) * (t - s)) },
+                { t, s -> -2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
+                { t, s -> 2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
+                { t, s -> (4.0 * (t - s) * (t - s) - 2.0) * Math.exp(-(t - s) * (t - s)) },
+            ),
             exact = { t -> Math.exp(t) }, exactDeriv = { t -> Math.exp(t) },
             secondKind = false,
+            exactDeriv2 = { t -> Math.exp(t) },
         )
     }
 }
@@ -439,10 +462,20 @@ class FirstKindSolver(
     val op: FredholmOperator,
     val alpha: Double = 1e-10,
 ) {
+    init {
+        require(alpha > 0.0) {
+            "FirstKindSolver: параметр регуляризации alpha должен быть положительным, получено alpha=$alpha"
+        }
+    }
+
     private val cL = -1.0 / alpha
     private val fEff = { t: Double -> problem.rhsExact(t, op) / alpha }
     private val fEffDeriv = { t: Double -> problem.rhsExactDeriv(t, op) / alpha }
-    private val inner = SecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv)
+    // Вторая производная правой части ОБЯЗАТЕЛЬНО пробрасывается во внутренний
+    // решатель: без неё семейство xi^<0>, читающее f'', молча получало ноль вместо
+    // истинного значения и строило неверную систему без какой-либо диагностики.
+    private val fEffDeriv2 = { t: Double -> problem.rhsExactDeriv2(t, op) / alpha }
+    private val inner = SecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv, fEffDeriv2)
 
     fun base(): SolutionFunc = inner.base()
     fun sloan(): SolutionFunc = inner.sloan()

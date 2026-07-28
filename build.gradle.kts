@@ -28,8 +28,28 @@ application {
     mainClass.set("solvers.fredholm.FredholmSolverKt")
 }
 
+// --- Разделение тестов по назначению ------------------------------------------
+// Обычный `test` — быстрый набор для повседневной работы и CI.
+// Из него исключён `BaselineSnapshotTool` — это не проверка, а генератор
+// эталонного снимка, который запускается осознанно задачей `captureBaseline`.
 tasks.test {
     useJUnitPlatform()
+    filter {
+        excludeTestsMatching("characterization.BaselineSnapshotTool")
+    }
+}
+
+// Снятие эталонного снимка численных результатов (в build/baseline/*.tsv).
+// Запускается вручную перед обоснованным изменением алгоритма, чтобы
+// зафиксировать старое и новое поведение.
+tasks.register<Test>("captureBaseline") {
+    group = "verification"
+    description = "Снять эталонный снимок E_h всех схем в build/baseline/"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("characterization.BaselineSnapshotTool") }
+    outputs.upToDateWhen { false }
 }
 
 // --- Coverage configuration -------------------------------------------------

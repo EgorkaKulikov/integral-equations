@@ -640,7 +640,17 @@ class SecondKindSolver(
             return problem.rhsExact(t, op) + lambda * acc
         }
         val p = pts.size
-        val x = DoubleArray(p) { problem.exact(pts[it]) }
+        // Начальное приближение — проекция постоянной функции P_theta(1) на сплайновое
+        // подпространство, вычисленная в опорных точках.
+        //
+        // Ранее здесь стояло `problem.exact(pts[it])` — ТОЧНОЕ РЕШЕНИЕ задачи. Это
+        // недопустимо: в реальной задаче точное решение неизвестно, такой старт делал
+        // метод невоспроизводимым, маскировал возможную расходимость из нейтрального
+        // приближения и лишал смысла счётчик итераций. Первоисточник предписывает
+        // именно проекцию постоянной: для ядер с dK/du(t,s,0) == 0 шаг из нулевого
+        // приближения вырождается, поэтому нейтральный старт — это P_theta(1), а не 0.
+        val constantProjection = funcs.projectorCoeffs { 1.0 }
+        val x = DoubleArray(p) { basis.evalSpline(constantProjection, pts[it]) }
         var iter = 0
         val newtonTol = maxOf(tol, 1e-12)
         var converged = false
