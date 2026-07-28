@@ -207,6 +207,18 @@ class SecondKindSolver(
     val fEffDeriv: (Double) -> Double,
     val fEffDeriv2: (Double) -> Double = { 0.0 },
 ) {
+    private companion object {
+        /**
+         * Предел числа итераций для комбинированного оператора Nyström.
+         * Выбор реализации: на модельных задачах сходимость достигается за единицы шагов;
+         * запас нужен для задач с нормой оператора, близкой к единице.
+         */
+        const val COMBINED_NYSTROM_MAX_ITERATIONS = 200
+
+        /** Критерий останова итерации комбинированного Nyström (равномерная норма в узлах). */
+        const val COMBINED_NYSTROM_TOLERANCE = 1e-13
+    }
+
     val grid = basis.grid
     val n = grid.n
     val dim = n + 2
@@ -402,10 +414,24 @@ class SecondKindSolver(
     }
 
     /** u^N_h(t) = f(t) + cL sum_r b_r K(t, eta_r) u_hat_r (nystrom-scheme.md, (1.8)). */
-    private fun nystromEval(t: Double, pts: DoubleArray, bAgg: DoubleArray, uHat: DoubleArray): Double {
+    private fun nystromEval(t: Double, pts: DoubleArray, bAgg: DoubleArray, uHat: DoubleArray): Double =
+        fEff(t) + nystromQuadrature(t, pts, bAgg, uHat)
+
+    /**
+     * Квадратурный оператор (L^N_h u)(t) = cL sum_r b_r K(t, eta_r) u(eta_r).
+     *
+     * Зависит от u только через её значения в опорных точках [uAtPoints] — именно
+     * это свойство делает оператор конечноранговым.
+     */
+    private fun nystromQuadrature(
+        t: Double,
+        pts: DoubleArray,
+        bAgg: DoubleArray,
+        uAtPoints: DoubleArray,
+    ): Double {
         var acc = 0.0
-        for (r in pts.indices) acc += bAgg[r] * op.kernel.k(t, pts[r]) * uHat[r]
-        return fEff(t) + cL * acc
+        for (r in pts.indices) acc += bAgg[r] * op.kernel.k(t, pts[r]) * uAtPoints[r]
+        return cL * acc
     }
 
     /** Матрица (I - A^N): A^N_{rho,r} = cL b_r K(eta_rho, eta_r) (nystrom-scheme.md, (1.6)). */
@@ -420,11 +446,15 @@ class SecondKindSolver(
     }
 
     /**
-     * Базовый сплайн-Nyström (nystrom-scheme.md, §1): подынтегральная функция
-     * g_t(s)=K(t,s)u(s) заменяется своей сплайн-(квази)проекцией, интеграл — квадратурой
-     * sum_j chi_j(g_t) W_j. Приводит к линейной системе (I - A^N) u_hat = f_hat по
-     * ЗНАЧЕНИЯМ решения в опорных точках {eta_r}. Приближение u^N_h лежит ВНЕ
-     * сплайнового пространства (восстановление по (1.8)). Не поддерживает семейство xi.
+     * КЛАССИЧЕСКИЙ сплайн-Nyström: подынтегральная функция g_t(s)=K(t,s)u(s)
+     * заменяется своей сплайн-(квази)проекцией, интеграл — квадратурой
+     * sum_j chi_j(g_t) W_j. Решается u = f + L^N_h u, что даёт линейную систему
+     * (I - A^N) u_hat = f_hat по ЗНАЧЕНИЯМ решения в опорных точках {eta_r}.
+     * Приближение u^N_h лежит ВНЕ сплайнового пространства. Не поддерживает семейство xi.
+     *
+     * ВАЖНО о порядке сходимости: это «голая» квадратура, которая сама по себе
+     * НЕ повышает порядок. Опубликованные оценки суперсходимости O(h^7)/O(h^8)
+     * относятся НЕ к ней, а к комбинированному оператору — см. [combinedNystrom].
      */
     fun nystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
@@ -441,6 +471,76 @@ class SecondKindSolver(
         val (pts, bAgg) = nystromSupport()
         val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) })
         val uNodes = DoubleArray(ng) { nystromEval(op.gNode[it], pts, bAgg, uHat) }
+        return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
+    }
+
+    /**
+     * КОМБИНИРОВАННЫЙ оператор Nyström: u^N_h = f + L_n u^N_h, где
+     *
+     *     L_n = P_chi L + (I - P_chi) L^N_h,
+     *
+     * то есть на образе проектора действует ТОЧНЫЙ оператор, а на его дополнении —
+     * квадратура. Отличие от [nystrom]: там решается u = f + L^N_h u («голая»
+     * квадратура, классический Nyström).
+     *
+     * Зачем это нужно: в разности L - L_n = (I - P_chi)(L - L^C_h) остаток проектора
+     * (I - P_chi) входит ДВАЖДЫ — явным множителем и внутри остатка квадратуры, —
+     * что и даёт суперсходимость. Именно к этому оператору, а не к голой квадратуре,
+     * относятся опубликованные оценки порядка O(h^7) и O(h^8) (см. список источников
+     * в docs/REFERENCES.md: Allouch, Remogna, Sbibih, Tahrichi, AMC 404 (2021), Art. 126227;
+     * Remogna, Sbibih, Tahrichi, Mathematics 11 (2023), Art. 3236).
+     *
+     * Способ решения: простая итерация u^{(m+1)} = f + L_n u^{(m)}. Оператор L_n
+     * конечного ранга, поэтому задача равносильна конечномерной СЛАУ; итерация выбрана
+     * как существенно более простая реализация (прямая сборка требует P×P интегралов
+     * вида ∫K(t,s)K(s,eta_r)ds). Сходимость линейна со знаменателем ||L_n|| и требует
+     * ||L_n|| < 1; при недостижении сходимости бросается исключение (а не возвращается
+     * молча неверный результат).
+     *
+     * @throws IllegalStateException если итерация не сошлась за отведённое число шагов.
+     */
+    fun combinedNystrom(): SolutionFunc {
+        val (pts, bAgg) = nystromSupport()
+        var uFun: (Double) -> Double = { t -> fEff(t) }
+        var uAtNodes = DoubleArray(ng) { uFun(op.gNode[it]) }
+        var converged = false
+        for (iter in 0 until COMBINED_NYSTROM_MAX_ITERATIONS) {
+            val currentFun = uFun
+            val currentNodes = uAtNodes
+            val currentAtPoints = DoubleArray(pts.size) { currentFun(pts[it]) }
+            // Точный оператор L на текущем итеранте и его проекция P_chi(L u).
+            val exactImage = { t: Double -> cL * op.applyNodes(t, currentNodes) }
+            val projectedExact = funcs.projectorCoeffs(exactImage)
+            // Квадратурный оператор L^N_h и его проекция P_chi(L^N_h u).
+            val quadratureImage = { t: Double -> nystromQuadrature(t, pts, bAgg, currentAtPoints) }
+            val projectedQuadrature = funcs.projectorCoeffs(quadratureImage)
+            // u^{(m+1)} = f + P_chi(L u) + L^N_h u - P_chi(L^N_h u).
+            val nextFun = { t: Double ->
+                fEff(t) + basis.evalSpline(projectedExact, t) +
+                    quadratureImage(t) - basis.evalSpline(projectedQuadrature, t)
+            }
+            val nextNodes = DoubleArray(ng) { nextFun(op.gNode[it]) }
+            var diff = 0.0
+            for (k in 0 until ng) diff = maxOf(diff, abs(nextNodes[k] - currentNodes[k]))
+            uFun = nextFun
+            uAtNodes = nextNodes
+            if (diff < COMBINED_NYSTROM_TOLERANCE) { converged = true; break }
+        }
+        check(converged) {
+            "Комбинированный Nyström не сошёлся за $COMBINED_NYSTROM_MAX_ITERATIONS итераций " +
+                "(требуется ||L_n|| < 1 для сходимости простой итерации)"
+        }
+        val resultFun = uFun
+        return SolutionFunc { t -> resultFun(t) }
+    }
+
+    /**
+     * Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с ТОЧНЫМ
+     * оператором L (аналог итерации Слоана; новой системы не требует).
+     */
+    fun iteratedCombinedNystrom(): SolutionFunc {
+        val combined = combinedNystrom()
+        val uNodes = DoubleArray(ng) { combined.eval(op.gNode[it]) }
         return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
     }
 }

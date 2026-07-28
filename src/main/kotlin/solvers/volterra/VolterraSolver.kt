@@ -263,6 +263,12 @@ class SecondKindSolver(
          * точности: дальнейшее уточнение не имеет смысла из-за шума квадратуры.
          */
         const val KULKARNI_QUASI_TOLERANCE = 1e-13
+
+        /** Предел числа итераций для комбинированного оператора Nyström. */
+        const val COMBINED_NYSTROM_MAX_ITERATIONS = 200
+
+        /** Критерий останова итерации комбинированного Nyström. */
+        const val COMBINED_NYSTROM_TOLERANCE = 1e-13
     }
 
     val grid = basis.grid
@@ -513,11 +519,23 @@ class SecondKindSolver(
     }
 
     /**
-     * Базовый сплайн-Nyström для Вольтерра (nystrom-scheme.md, §2): квадратура с
+     * КЛАССИЧЕСКИЙ сплайн-Nyström для уравнения Вольтерры: квадратура с
      * t-зависимыми весами W_j(t)=int_a^t omega_j. Приводит к линейной системе
-     * (I - A^{N,V}) u_hat = f_hat по значениям решения в опорных точках {eta_r};
-     * при упорядочении точек по возрастанию t матрица (блочно-)нижнетреугольна
-     * (причинность). Приближение вне сплайнового пространства. Не поддерживает xi.
+     * (I - A^{N,V}) u_hat = f_hat по значениям решения в опорных точках {eta_r}.
+     * Приближение вне сплайнового пространства. Не поддерживает семейство xi.
+     *
+     * О СТРУКТУРЕ МАТРИЦЫ: ранее здесь утверждалось, что при упорядочении точек по
+     * возрастанию матрица (блочно-)нижнетреугольна «по причинности». Это утверждение
+     * УДАЛЕНО как НЕПОДТВЕРЖДЁННОЕ: b_r(eta_rho) агрегирует коэффициенты функционалов,
+     * чьи опорные точки могут лежать правее eta_rho (носители omega_j перекрываются),
+     * поэтому в общем случае верхние элементы не нулевые. Код всё равно решает систему
+     * общим LU-разложением и на треугольность не полагается.
+     *
+     * ВАЖНО о порядке: это «голая» квадратура, сама по себе НЕ повышающая порядок;
+     * см. [combinedNystrom]. Для уравнения Вольтерры теоретических оценок суперсходимости
+     * в известной литературе нет ни для одного из вариантов (переменный верхний предел
+     * даёт t-зависимые веса и усечение последней ячейки — требуется отдельный анализ).
+     * Любые наблюдаемые порядки здесь — численное наблюдение, а не доказанный результат.
      */
     fun nystrom(): SolutionFunc {
         val sup = nystromSupport()
@@ -526,15 +544,75 @@ class SecondKindSolver(
     }
 
     /**
-     * Итерированный Nyström (nystrom-scheme.md, §3): u_hat^N_h(t)=f(t)+(L u^N_h)(t) с
-     * ТОЧНЫМ оператором Вольтерра L (замыкание applyL, как в sloan()). Одно интегрирование
-     * найденного u^N_h, новой системы не требуется (аналог итерации Слоана).
+     * Итерированный Nyström: u_hat^N_h(t)=f(t)+(L u^N_h)(t) с ТОЧНЫМ оператором
+     * Вольтерра L (замыкание applyL, как в sloan()). Одно интегрирование найденного
+     * u^N_h, новой системы не требуется (аналог итерации Слоана).
      */
     fun iteratedNystrom(): SolutionFunc {
         val sup = nystromSupport()
         val uHat = nystromSolve(sup)
         val uN = applyL { s -> nystromEval(sup, uHat, s) }
         return SolutionFunc { t -> fEff(t) + uN(t) }
+    }
+
+    /**
+     * КОМБИНИРОВАННЫЙ оператор Nyström для уравнения Вольтерры:
+     * u^N_h = f + L_n u^N_h, где L_n = P_chi L + (I - P_chi) L^N_h.
+     *
+     * На образе проектора действует ТОЧНЫЙ оператор, на дополнении — квадратура с
+     * t-зависимыми весами. Отличие от [nystrom]: там решается u = f + L^N_h u.
+     *
+     * СТАТУС ИСТОЧНИКА: конструкция L_n взята из теории для уравнения Фредгольма
+     * (см. [solvers.fredholm.SecondKindSolver.combinedNystrom]); для уравнения Вольтерры это
+     * АДАПТАЦИЯ: доказательства суперсходимости в известной литературе НЕТ. Поведение
+     * следует трактовать как численное наблюдение.
+     *
+     * @throws IllegalStateException если простая итерация не сошлась.
+     */
+    fun combinedNystrom(): SolutionFunc {
+        val sup = nystromSupport()
+        var uFun: (Double) -> Double = { t -> fEff(t) }
+        val checkPoints = DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
+        var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
+        var converged = false
+        for (iter in 0 until COMBINED_NYSTROM_MAX_ITERATIONS) {
+            val currentFun = uFun
+            val currentAtPoints = DoubleArray(sup.pts.size) { currentFun(sup.pts[it]) }
+            // Точный оператор L и его проекция P_chi(L u).
+            val exactImage = applyL(currentFun)
+            val projectedExact = funcs.projectorCoeffs(exactImage)
+            // Квадратурный оператор L^N_h с t-зависимыми весами и его проекция.
+            val quadratureImage = { t: Double ->
+                val b = nystromB(sup, t)
+                var acc = 0.0
+                for (r in sup.pts.indices) acc += b[r] * op.kernel.k(t, sup.pts[r]) * currentAtPoints[r]
+                cL * acc
+            }
+            val projectedQuadrature = funcs.projectorCoeffs(quadratureImage)
+            val nextFun = { t: Double ->
+                fEff(t) + basis.evalSpline(projectedExact, t) +
+                    quadratureImage(t) - basis.evalSpline(projectedQuadrature, t)
+            }
+            val nextAtCheck = DoubleArray(checkPoints.size) { nextFun(checkPoints[it]) }
+            var diff = 0.0
+            for (k in nextAtCheck.indices) diff = maxOf(diff, abs(nextAtCheck[k] - uAtCheck[k]))
+            uFun = nextFun
+            uAtCheck = nextAtCheck
+            if (diff < COMBINED_NYSTROM_TOLERANCE) { converged = true; break }
+        }
+        check(converged) {
+            "Комбинированный Nyström (Вольтерра) не сошёлся за " +
+                "$COMBINED_NYSTROM_MAX_ITERATIONS итераций"
+        }
+        val resultFun = uFun
+        return SolutionFunc { t -> resultFun(t) }
+    }
+
+    /** Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с точным L. */
+    fun iteratedCombinedNystrom(): SolutionFunc {
+        val combined = combinedNystrom()
+        val image = applyL { s -> combined.eval(s) }
+        return SolutionFunc { t -> fEff(t) + image(t) }
     }
 }
 // ============================================================================
