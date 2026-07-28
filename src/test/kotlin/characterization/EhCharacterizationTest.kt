@@ -97,9 +97,9 @@ class EhCharacterizationTest {
     fun fredholmMatchesBaseline() {
         val mismatches = mutableListOf<String>()
         val problems = listOf(
-            solvers.fredholm.ModelProblem.F2span,
-            solvers.fredholm.ModelProblem.F2,
-            solvers.fredholm.ModelProblem.F2exp,
+            problems.fredholm.FredholmProblem.F2span,
+            problems.fredholm.FredholmProblem.F2,
+            problems.fredholm.FredholmProblem.F2exp,
         )
         for (problem in problems) {
             for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
@@ -145,10 +145,10 @@ class EhCharacterizationTest {
     fun volterraMatchesBaseline() {
         val mismatches = mutableListOf<String>()
         val problems = listOf(
-            solvers.volterra.ModelProblem.V2span,
-            solvers.volterra.ModelProblem.V2,
-            solvers.volterra.ModelProblem.V2exp,
-            solvers.volterra.ModelProblem.V2win,
+            problems.volterra.VolterraProblem.V2span,
+            problems.volterra.VolterraProblem.V2,
+            problems.volterra.VolterraProblem.V2exp,
+            problems.volterra.VolterraProblem.V2win,
         )
         for (problem in problems) {
             for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
@@ -193,37 +193,21 @@ class EhCharacterizationTest {
     @Test
     fun urysonMatchesBaseline() {
         val mismatches = mutableListOf<String>()
-        for (problem in listOf(solvers.uryson.ModelProblem.A, solvers.uryson.ModelProblem.B)) {
+        for (problem in listOf(problems.uryson.UrysonProblem.A, problems.uryson.UrysonProblem.B)) {
             for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
                 for (n in listOf(8, 16)) {
                     val grid = Grid.uniform(n)
                     val basis = MinimalSplineBasis(system, grid)
-                    val funcs = solvers.uryson.ProjFunctionals(basis)
+                    val funcs = numerics.functionals.ProjFunctionals(basis)
                     val space = solvers.uryson.SplineSpace(basis, GaussLegendre(8))
                     val op = solvers.uryson.UrysohnOperator(problem.kernel, grid, GaussLegendre(8))
-                    val solver = solvers.uryson.SecondKindSolver(problem, basis, funcs, space, op)
+                    val solver = problems.uryson.secondKindSolver(problem, basis, funcs, space, op)
                     val exact = { t: Double -> problem.exact(t) }
                     val prefix = "U.${problem.name}.${system.name}.n$n"
-                    check(
-                        "$prefix.base",
-                        solvers.uryson.errorEhEval(exact, solver.base().eval, grid),
-                        mismatches,
-                    )
-                    check(
-                        "$prefix.sloan",
-                        solvers.uryson.errorEhEval(exact, solver.sloan().eval, grid),
-                        mismatches,
-                    )
-                    check(
-                        "$prefix.kulkarni",
-                        solvers.uryson.errorEhEval(exact, solver.kulkarni().eval, grid),
-                        mismatches,
-                    )
-                    check(
-                        "$prefix.nystrom",
-                        solvers.uryson.errorEhEval(exact, solver.nystrom().eval, grid),
-                        mismatches,
-                    )
+                    check("$prefix.base", errorEh(exact, solver.base().eval, grid), mismatches)
+                    check("$prefix.sloan", errorEh(exact, solver.sloan().eval, grid), mismatches)
+                    check("$prefix.kulkarni", errorEh(exact, solver.kulkarni().eval, grid), mismatches)
+                    check("$prefix.nystrom", errorEh(exact, solver.nystrom().eval, grid), mismatches)
                 }
             }
         }
@@ -239,15 +223,15 @@ class EhCharacterizationTest {
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
             val funcs = numerics.functionals.ProjFunctionals(basis)
 
-            val fp = solvers.fredholm.ModelProblem.F1
+            val fp = problems.fredholm.FredholmProblem.F1
             val fop = solvers.fredholm.FredholmOperator(fp.kernel, grid, GaussLegendre(8))
-            val fSolver = solvers.fredholm.FirstKindSolver(fp, basis, funcs, fop)
+            val fSolver = problems.fredholm.firstKindSolver(fp, basis, funcs, fop)
             check("F1.B.theta.n$n.base", errorEh({ t -> fp.exact(t) }, fSolver.base().eval, grid), mismatches)
             check("F1.B.theta.n$n.sloan", errorEh({ t -> fp.exact(t) }, fSolver.sloan().eval, grid), mismatches)
 
-            val vp = solvers.volterra.ModelProblem.V1
+            val vp = problems.volterra.VolterraProblem.V1
             val vop = solvers.volterra.VolterraOperator(vp.kernel, grid, GaussLegendre(8))
-            val vSolver = solvers.volterra.FirstKindSolver(vp, basis, funcs, vop)
+            val vSolver = problems.volterra.firstKindSolver(vp, basis, funcs, vop)
             check("V1.B.theta.n$n.base", errorEh({ t -> vp.exact(t) }, vSolver.base().eval, grid), mismatches)
             check("V1.B.theta.n$n.sloan", errorEh({ t -> vp.exact(t) }, vSolver.sloan().eval, grid), mismatches)
         }

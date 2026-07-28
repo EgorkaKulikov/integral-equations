@@ -38,7 +38,7 @@ class DefectRegressionTest {
      */
     @Test
     fun defect1_xi0OnSpanProblemIsExactForFredholm() {
-        val problem = solvers.fredholm.ModelProblem.F2span
+        val problem = problems.fredholm.FredholmProblem.F2span
         for (n in listOf(8, 16)) {
             val grid = Grid.uniform(n)
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
@@ -62,7 +62,7 @@ class DefectRegressionTest {
     /** Тот же дефект для решателя Вольтерры (задача V2span). */
     @Test
     fun defect1_xi0OnSpanProblemIsExactForVolterra() {
-        val problem = solvers.volterra.ModelProblem.V2span
+        val problem = problems.volterra.VolterraProblem.V2span
         for (n in listOf(8, 16)) {
             val grid = Grid.uniform(n)
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
@@ -87,6 +87,11 @@ class DefectRegressionTest {
      * ДЕФЕКТ 1 (проверка самих коэффициентов ядра). Прямая проверка того, что
      * производные ядра заданы согласованно с самим ядром: сравнение аналитических
      * K_s и K_tt с центральной конечной разностью.
+     *
+     * Для ядер Фредгольма проверяется только `K_tt`: производная по `s` в схемах
+     * Фредгольма не используется (пределы интегрирования постоянны) и удалена из
+     * [solvers.fredholm.KernelF]. В схемах Вольтерры `K_s` нужна для граничного члена
+     * формулы Лейбница, поэтому там проверяются обе производные.
      */
     @Test
     fun defect1_kernelDerivativesAreConsistentWithKernel() {
@@ -94,18 +99,13 @@ class DefectRegressionTest {
         val samplePoints = listOf(0.1 to 0.2, 0.5 to 0.3, 0.8 to 0.75)
 
         val fredholmKernels = listOf(
-            "F2span" to solvers.fredholm.ModelProblem.F2span.kernel,
-            "F1" to solvers.fredholm.ModelProblem.F1.kernel,
-            "F2" to solvers.fredholm.ModelProblem.F2.kernel,
-            "F2exp" to solvers.fredholm.ModelProblem.F2exp.kernel,
+            "F2span" to problems.fredholm.FredholmProblem.F2span.kernel,
+            "F1" to problems.fredholm.FredholmProblem.F1.kernel,
+            "F2" to problems.fredholm.FredholmProblem.F2.kernel,
+            "F2exp" to problems.fredholm.FredholmProblem.F2exp.kernel,
         )
         for ((name, kernel) in fredholmKernels) {
             for ((t, s) in samplePoints) {
-                val numericKs = (kernel.k(t, s + step) - kernel.k(t, s - step)) / (2 * step)
-                assertTrue(
-                    abs(kernel.kS(t, s) - numericKs) < 1e-6,
-                    "$name: K_s($t,$s)=${kernel.kS(t, s)} расходится с разностной ${numericKs}",
-                )
                 val numericKtt = (kernel.kT(t + step, s) - kernel.kT(t - step, s)) / (2 * step)
                 assertTrue(
                     abs(kernel.kTT(t, s) - numericKtt) < 1e-6,
@@ -115,9 +115,9 @@ class DefectRegressionTest {
         }
 
         val volterraKernels = listOf(
-            "V2span" to solvers.volterra.ModelProblem.V2span.kernel,
-            "V2" to solvers.volterra.ModelProblem.V2.kernel,
-            "V2exp" to solvers.volterra.ModelProblem.V2exp.kernel,
+            "V2span" to problems.volterra.VolterraProblem.V2span.kernel,
+            "V2" to problems.volterra.VolterraProblem.V2.kernel,
+            "V2exp" to problems.volterra.VolterraProblem.V2exp.kernel,
         )
         for ((name, kernel) in volterraKernels) {
             for ((t, s) in samplePoints) {
@@ -146,16 +146,16 @@ class DefectRegressionTest {
      */
     @Test
     fun defect2_firstKindSolverPassesSecondDerivative() {
-        val problem = solvers.fredholm.ModelProblem.F1
+        val problem = problems.fredholm.FredholmProblem.F1
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(8))
 
-        val viaXi0 = solvers.fredholm.FirstKindSolver(problem, basis, DeBoorFixFunctionals(basis, 0), op)
+        val viaXi0 = problems.fredholm.firstKindSolver(problem, basis, DeBoorFixFunctionals(basis, 0), op)
         val errorXi0 = errorEh({ t -> problem.exact(t) }, viaXi0.base().eval, grid)
         assertTrue(errorXi0.isFinite(), "Решение I рода через xi^<0> должно быть конечным, получено $errorXi0")
 
-        val viaTheta = solvers.fredholm.FirstKindSolver(problem, basis, ProjFunctionals(basis), op)
+        val viaTheta = problems.fredholm.firstKindSolver(problem, basis, ProjFunctionals(basis), op)
         val errorTheta = errorEh({ t -> problem.exact(t) }, viaTheta.base().eval, grid)
         assertTrue(
             errorXi0 < 100.0 * maxOf(errorTheta, 1e-12),
@@ -170,14 +170,14 @@ class DefectRegressionTest {
      */
     @Test
     fun defect2_volterraFirstKindRejectsSecondDerivativeFamilies() {
-        val problem = solvers.volterra.ModelProblem.V1
+        val problem = problems.volterra.VolterraProblem.V1
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(8))
         assertFailsWith<IllegalArgumentException>(
             "Решатель Вольтерры I рода обязан отвергать семейства, требующие второй производной",
         ) {
-            solvers.volterra.FirstKindSolver(problem, basis, DeBoorFixFunctionals(basis, 0), op)
+            problems.volterra.firstKindSolver(problem, basis, DeBoorFixFunctionals(basis, 0), op)
         }
     }
 
@@ -188,14 +188,14 @@ class DefectRegressionTest {
      */
     @Test
     fun defect3_firstKindSolverRejectsNonPositiveAlpha() {
-        val problem = solvers.fredholm.ModelProblem.F1
+        val problem = problems.fredholm.FredholmProblem.F1
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         for (badAlpha in listOf(0.0, -1e-10)) {
             assertFailsWith<IllegalArgumentException>("alpha=$badAlpha должен отвергаться") {
-                solvers.fredholm.FirstKindSolver(problem, basis, funcs, op, badAlpha)
+                problems.fredholm.firstKindSolver(problem, basis, funcs, op, badAlpha)
             }
         }
     }
@@ -262,19 +262,19 @@ class DefectRegressionTest {
      */
     @Test
     fun defect6_urysonNystromConvergesFromNeutralStart() {
-        for (problem in listOf(solvers.uryson.ModelProblem.A, solvers.uryson.ModelProblem.B)) {
+        for (problem in listOf(problems.uryson.UrysonProblem.A, problems.uryson.UrysonProblem.B)) {
             for (n in listOf(8, 16)) {
                 val grid = Grid.uniform(n)
                 val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-                val funcs = solvers.uryson.ProjFunctionals(basis)
+                val funcs = ProjFunctionals(basis)
                 val space = solvers.uryson.SplineSpace(basis, GaussLegendre(8))
                 val op = solvers.uryson.UrysohnOperator(problem.kernel, grid, GaussLegendre(8))
-                val solver = solvers.uryson.SecondKindSolver(problem, basis, funcs, space, op)
+                val solver = problems.uryson.secondKindSolver(problem, basis, funcs, space, op)
 
                 val nystromSolution = solver.nystrom()
                 val exact = { t: Double -> problem.exact(t) }
-                val nystromError = solvers.uryson.errorEhEval(exact, nystromSolution.eval, grid)
-                val baseError = solvers.uryson.errorEhEval(exact, solver.base().eval, grid)
+                val nystromError = errorEh(exact, nystromSolution.eval, grid)
+                val baseError = errorEh(exact, solver.base().eval, grid)
 
                 assertTrue(
                     nystromError.isFinite() && nystromError < 1.0,

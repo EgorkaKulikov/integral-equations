@@ -1,5 +1,8 @@
 package solvers.volterra
 
+import problems.volterra.VolterraProblem
+import problems.volterra.firstKindSolver
+import problems.volterra.secondKindSolver
 import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
@@ -9,7 +12,7 @@ import kotlin.test.assertTrue
 
 /**
  * FD-сверка второй производной образа Вольтерра (V u)''(t) по формуле (V2'')
- * (deboorfix-spec.md §4(в)) с центральной конечной разностью первой производной
+ * с центральной конечной разностью первой производной
  * (V u)'(t) (Лейбниц). Точки берутся ВНУТРИ гладких кусков сплайна (не в узлах),
  * т.к. omega_i'' разрывна в узлах.
  *
@@ -21,7 +24,7 @@ class VolterraDeriv2FDTest {
 
     @Test fun secondDerivOfImageMatchesFiniteDifference() {
         // V2, V2exp: K(t,t)!=0 (проверяют член K(t,t)u'); V2win: K(t,t)=0 (полнота диагонали).
-        val problems = listOf(ModelProblem.V2, ModelProblem.V2exp, ModelProblem.V2win)
+        val problems = listOf(VolterraProblem.V2, VolterraProblem.V2exp, VolterraProblem.V2win)
         val h = 1e-5
         for (p in problems) {
             val grid = Grid.uniform(8)
@@ -51,7 +54,7 @@ class VolterraDeriv2FDTest {
      * вручную и убеждаемся, что расхождение с FD становится значимым хотя бы где-то.
      */
     @Test fun boundaryTermIsNecessaryForKttNonzero() {
-        val p = ModelProblem.V2exp
+        val p = VolterraProblem.V2exp
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = VolterraOperator(p.kernel, grid, quad)

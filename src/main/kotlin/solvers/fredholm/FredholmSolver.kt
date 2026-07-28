@@ -1,28 +1,41 @@
 package solvers.fredholm
 
 import kotlin.math.abs
-import kotlin.system.exitProcess
 import numerics.*
 import numerics.functionals.*
 
-// ============================================================================
-// 7. ЯДРО И ОПЕРАТОР ФРЕДГОЛЬМА \mathcal K u(t) = \int_a^b K(t,s) u(s) ds
-// ============================================================================
-
 /**
- * Ядро K(t,s) линейного уравнения Фредгольма и аналитические частные производные:
- * kT=K_t (для xi^<1>,xi^<2>), kS=K_s, kTT=K_tt (для xi^<0>). По умолчанию нулевые.
+ * Ядро K(t,s) линейного уравнения Фредгольма вместе с аналитическими частными
+ * производными.
+ *
+ * @param k само ядро `K(t,s)`.
+ * @param kT производная `K_t(t,s)`; требуется семействам функционалов
+ *        де Бура–Фикса `xi^<1>`, `xi^<2>`.
+ * @param kTT вторая производная `K_tt(t,s)`; требуется семейству `xi^<0>`.
+ *
+ * Значения по умолчанию равны нулю и допустимы ТОЛЬКО тогда, когда соответствующая
+ * производная действительно тождественно нулевая, либо когда выбранное семейство
+ * функционалов её не использует: иначе система будет построена неверно без какой-либо
+ * диагностики.
  */
 class KernelF(
     val k: (Double, Double) -> Double,
     val kT: (Double, Double) -> Double = { _, _ -> 0.0 },
-    val kS: (Double, Double) -> Double = { _, _ -> 0.0 },
     val kTT: (Double, Double) -> Double = { _, _ -> 0.0 },
 )
 
 /**
- * Оператор Фредгольма: (\mathcal K u)(t) = \int_a^b K(t,s) u(s) ds, квадратура по [a,b].
- * Предвычисляются глобальные гауссовы узлы gNode/gW: \int h = sum_k gW[k] h(gNode[k]).
+ * Оператор Фредгольма `(K u)(t) = \int_a^b K(t,s) u(s) ds` с постоянными пределами
+ * интегрирования.
+ *
+ * При создании предвычисляются глобальные гауссовы узлы [gNode] и веса [gW]
+ * составной квадратуры, так что `\int h = sum_k gW[k] * h(gNode[k])`. Это позволяет
+ * многократно применять оператор к уже вычисленным в этих узлах значениям функции
+ * (см. [applyNodes]), не пересчитывая её заново.
+ *
+ * @param kernel ядро уравнения.
+ * @param grid сетка, задающая отрезок `[a,b]` и точки разбиения для составной квадратуры.
+ * @param quad квадратурная формула Гаусса–Лежандра на ячейке.
  */
 class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegendre) {
     val gNode: DoubleArray
@@ -77,114 +90,6 @@ class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegen
     }
 }
 
-// ============================================================================
-// 8. МОДЕЛЬНЫЕ ЗАДАЧИ
-// ============================================================================
-
-/**
- * Модельная задача: ядро, точное решение, род. Правая часть строится из точного
- * решения численно (квадратурой), без зашивания.
- * II рода: f = u* - \mathcal K u*;  I рода: f = \mathcal K u*.
- */
-class ModelProblem(
-    val name: String,
-    val kernel: KernelF,
-    val exact: (Double) -> Double,
-    val exactDeriv: (Double) -> Double,
-    val secondKind: Boolean,
-    val a: Double = 0.0,
-    val b: Double = 1.0,
-    val exactDeriv2: (Double) -> Double = { 0.0 },
-) {
-    /** Точная правая часть f(t). */
-    fun rhsExact(t: Double, op: FredholmOperator): Double {
-        val integral = op.apply(t) { s -> exact(s) }
-        return if (secondKind) exact(t) - integral else integral
-    }
-
-    /** d/dt f(t) (для xi-функционалов): II рода u*' - d/dt \mathcal K u*. */
-    fun rhsExactDeriv(t: Double, op: FredholmOperator): Double {
-        val integralD = op.applyDeriv(t) { s -> exact(s) }
-        return if (secondKind) exactDeriv(t) - integralD else integralD
-    }
-
-    /** d^2/dt^2 f(t) (для xi^<0>): II рода u*'' - d^2/dt^2 \mathcal K u*. */
-    fun rhsExactDeriv2(t: Double, op: FredholmOperator): Double {
-        val integralDD = op.applyDeriv2(t) { s -> exact(s) }
-        return if (secondKind) exactDeriv2(t) - integralDD else integralDD
-    }
-
-    companion object {
-        /**
-         * F2-poly: K=e^{t-2s}, u*=t^2 ∈ span{1,t,t^2}=phi^B (машинная точность на B).
-         *
-         * Производные ядра выписаны ПОЛНОСТЬЮ (K_t = K, K_s = -2K, K_tt = K), как и
-         * u*'' = 2. Ранее kS/kTT/exactDeriv2 оставались нулевыми по умолчанию при
-         * ненулевых истинных значениях: любой сценарий с семейством xi^<0> (которое
-         * читает вторые производные) получал молча неверную правую часть.
-         */
-        val F2span = ModelProblem(
-            name = "F2span",
-            kernel = KernelF(
-                { t, s -> Math.exp(t - 2.0 * s) },
-                { t, s -> Math.exp(t - 2.0 * s) },
-                { t, s -> -2.0 * Math.exp(t - 2.0 * s) },
-                { t, s -> Math.exp(t - 2.0 * s) },
-            ),
-            exact = { t -> t * t }, exactDeriv = { t -> 2.0 * t },
-            secondKind = true,
-            exactDeriv2 = { 2.0 },
-        )
-
-        /** F2-B: K=1/(1+t+s), u*=1/(t+1) (проверка порядка на полиномиальном базисе). */
-        val F2 = ModelProblem(
-            name = "F2",
-            kernel = KernelF(
-                { t, s -> 1.0 / (1.0 + t + s) },
-                { t, s -> -1.0 / ((1.0 + t + s) * (1.0 + t + s)) },
-                { t, s -> -1.0 / ((1.0 + t + s) * (1.0 + t + s)) },
-                { t, s -> 2.0 / ((1.0 + t + s) * (1.0 + t + s) * (1.0 + t + s)) },
-            ),
-            exact = { t -> 1.0 / (t + 1.0) }, exactDeriv = { t -> -1.0 / ((t + 1.0) * (t + 1.0)) },
-            secondKind = true,
-            exactDeriv2 = { t -> 2.0 / ((t + 1.0) * (t + 1.0) * (t + 1.0)) },
-        )
-
-        /** F2-H: K=e^{-(t-s)^2}, u*=e^t (согласован с phi^H). */
-        val F2exp = ModelProblem(
-            name = "F2exp",
-            kernel = KernelF({ t, s -> Math.exp(-(t - s) * (t - s)) },
-                { t, s -> -2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
-                { t, s -> 2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
-                { t, s -> (4.0 * (t - s) * (t - s) - 2.0) * Math.exp(-(t - s) * (t - s)) }),
-            exact = { t -> Math.exp(t) }, exactDeriv = { t -> Math.exp(t) },
-            secondKind = true,
-            exactDeriv2 = { t -> Math.exp(t) },
-        )
-
-        /**
-         * F1: K=e^{-(t-s)^2}, u*=e^t, уравнение I рода (Wazwaz).
-         *
-         * Производные ядра и решения выписаны полностью (см. пояснение к F2span):
-         * K_s = 2(t-s)K, K_tt = (4(t-s)^2-2)K, u*'' = e^t.
-         */
-        val F1 = ModelProblem(
-            name = "F1",
-            kernel = KernelF(
-                { t, s -> Math.exp(-(t - s) * (t - s)) },
-                { t, s -> -2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
-                { t, s -> 2.0 * (t - s) * Math.exp(-(t - s) * (t - s)) },
-                { t, s -> (4.0 * (t - s) * (t - s) - 2.0) * Math.exp(-(t - s) * (t - s)) },
-            ),
-            exact = { t -> Math.exp(t) }, exactDeriv = { t -> Math.exp(t) },
-            secondKind = false,
-            exactDeriv2 = { t -> Math.exp(t) },
-        )
-    }
-}
-// ============================================================================
-// 9. ЯДРО КОЛЛОКАЦИИ + РЕШАТЕЛЬ УРАВНЕНИЯ II РОДА (ЛИНЕЙНО)
-// ============================================================================
 
 /** Результат решения: вычислитель u_h(t). */
 class SolutionFunc(val eval: (Double) -> Double)
@@ -194,7 +99,7 @@ class SolutionFunc(val eval: (Double) -> Double)
  * (c_L = 1 для F2; c_L = -1/alpha для F1 Wazwaz, \mathcal K_eff = -(1/alpha)\mathcal K).
  * Правая часть f и её производная задаются явно (fEff/fEffDeriv) для переиспользования в F1.
  *
- * Матрицы (discrete-problem.md):
+ * Матрицы дискретной задачи:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
  *   g_j      = chi_j(f),          d_j      = chi_j(L f).
  */
@@ -246,12 +151,10 @@ class SecondKindSolver(
     fun matrixM(): Array<DoubleArray> {
         // Столбцы M независимы по i; cols[i] = столбец i.
         val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
-            val ln = LomegaNodes[i]
             val on = omegaNodes[i]
             val Lom = { t: Double -> cL * op.applyNodes(t, on) }
             val LomD = { t: Double -> cL * op.applyDerivNodes(t, on) }
             val LomDD = { t: Double -> cL * op.applyDeriv2Nodes(t, on) }
-            require(ln.size == ng)
             DoubleArray(dim) { j -> funcs.chi(j - 2).apply(Lom, LomD, LomDD) }
         }
         val m = LinearAlgebra.zeros(dim, dim)
@@ -379,15 +282,15 @@ class SecondKindSolver(
         return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
     }
 
-    // --- Nyström (сплайн-квадратура; nystrom-scheme.md, §1, §3) -------------
+    // --- Nyström (сплайн-квадратура; см. docs/REFERENCES.md, раздел 3) -------
 
     /**
-     * Опорные точки {eta_r} и агрегированные веса b_r базового Nyström (nystrom-scheme.md,
-     * (1.4)): b_r = sum_j sum_{q: s_{j,q}=eta_r} c_{j,q} W_j, W_j = int_a^b omega_j.
+     * Опорные точки {eta_r} и агрегированные веса b_r базового Nyström:
+     * b_r = sum_j sum_{q: s_{j,q}=eta_r} c_{j,q} W_j, W_j = int_a^b omega_j.
      * Точки упорядочены по возрастанию (для единообразия с Вольтерра; для F2 порядок
      * несуществен). Семейство xi (де Бура--Фикса) НЕ поддерживается: его функционалы
      * используют производную и не сводятся к линейной комбинации значений
-     * (известное ограничение, nystrom-scheme.md §1.4 [адаптация]).
+     * (известное ограничение метода; обходится семейством xitilde).
      */
     private fun nystromSupport(): Pair<DoubleArray, DoubleArray> {
         require(!funcs.usesDerivative) {
@@ -413,7 +316,7 @@ class SecondKindSolver(
         return pts to bAgg
     }
 
-    /** u^N_h(t) = f(t) + cL sum_r b_r K(t, eta_r) u_hat_r (nystrom-scheme.md, (1.8)). */
+    /** u^N_h(t) = f(t) + cL sum_r b_r K(t, eta_r) u_hat_r — восстановление решения. */
     private fun nystromEval(t: Double, pts: DoubleArray, bAgg: DoubleArray, uHat: DoubleArray): Double =
         fEff(t) + nystromQuadrature(t, pts, bAgg, uHat)
 
@@ -434,7 +337,7 @@ class SecondKindSolver(
         return cL * acc
     }
 
-    /** Матрица (I - A^N): A^N_{rho,r} = cL b_r K(eta_rho, eta_r) (nystrom-scheme.md, (1.6)). */
+    /** Матрица (I - A^N): A^N_{rho,r} = cL b_r K(eta_rho, eta_r). */
     private fun nystromMatrix(pts: DoubleArray, bAgg: DoubleArray): Array<DoubleArray> {
         val p = pts.size
         val a = LinearAlgebra.zeros(p, p)
@@ -463,7 +366,7 @@ class SecondKindSolver(
     }
 
     /**
-     * Итерированный Nyström (nystrom-scheme.md, §3): u_hat^N_h(t)=f(t)+(L u^N_h)(t) с
+     * Итерированный Nyström: u_hat^N_h(t)=f(t)+(L u^N_h)(t) с
      * ТОЧНЫМ оператором L (высокоточная квадратура op.applyNodes, как в sloan()). Одно
      * интегрирование найденного u^N_h, новой системы не требуется (аналог итерации Слоана).
      */
@@ -544,24 +447,53 @@ class SecondKindSolver(
         return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
     }
 }
-// ============================================================================
-// 10. РЕШАТЕЛЬ УРАВНЕНИЯ I РОДА — МЕТОД WAZWAZ (НЕ ТИХОНОВ)
-// ============================================================================
 
 /**
- * F1 по Wazwaz (r2.tex): (alpha I + \mathcal K) u_alpha = f  <=>
- * u_alpha - \mathcal K_eff u_alpha = f/alpha, \mathcal K_eff = -(1/alpha)\mathcal K.
- * Далее — та же схема II рода (база/Слоан/Кулкарни) с c_L = -1/alpha и правой
- * частью f/alpha. alpha = 10^{-10} — ВЫБОР (как в r2). РИСК: M ∝ alpha^{-1},
- * M2 ∝ alpha^{-2} (R2 numerical-scheme.md) — обусловленность растёт при alpha->0.
+ * Решатель некорректного уравнения Фредгольма ПЕРВОГО рода `K u = f` методом
+ * регуляризации.
+ *
+ * Математическая идея: уравнение заменяется возмущённым `(alpha I + K) u_alpha = f`,
+ * которое алгебраически эквивалентно уравнению ВТОРОГО рода
+ *
+ *     u_alpha - K_eff u_alpha = f / alpha,   K_eff = -(1/alpha) K,
+ *
+ * после чего применяется обычная схема второго рода с `c_L = -1/alpha`.
+ * Источник метода указан в `docs/REFERENCES.md` (раздел «Уравнения первого рода»).
+ *
+ * ОГРАНИЧЕНИЕ ПО ОБУСЛОВЛЕННОСТИ: элементы матрицы `M` растут как `alpha^{-1}`,
+ * а `M2` — как `alpha^{-2}`, поэтому при малых `alpha` задача становится плохо
+ * обусловленной. По этой причине публикуются только базовая схема и итерация Слоана:
+ * схема Кулкарни, использующая `M2`, для уравнения первого рода признана неприменимой.
+ *
+ * @param basis базис минимальных сплайнов.
+ * @param funcs семейство аппроксимационных функционалов.
+ * @param op оператор Фредгольма с исходным ядром.
+ * @param rhs правая часть `f(t)` исходного уравнения первого рода.
+ * @param rhsDeriv первая производная `f'(t)`.
+ * @param rhsDeriv2 вторая производная `f''(t)`; нужна семейству `xi^<0>`.
+ * @param alpha параметр регуляризации; должен быть строго положителен.
+ * @throws IllegalArgumentException если `alpha <= 0`.
  */
 class FirstKindSolver(
-    val problem: ModelProblem,
     val basis: MinimalSplineBasis,
     val funcs: FunctionalFamily,
     val op: FredholmOperator,
-    val alpha: Double = 1e-10,
+    rhs: (Double) -> Double,
+    rhsDeriv: (Double) -> Double,
+    rhsDeriv2: (Double) -> Double = { 0.0 },
+    val alpha: Double = DEFAULT_REGULARIZATION,
 ) {
+    companion object {
+        /**
+         * Значение параметра регуляризации по умолчанию.
+         *
+         * Это ЭКСПЕРИМЕНТАЛЬНЫЙ выбор авторов цитируемой работы, а не рекомендация
+         * из теории метода регуляризации: оптимальное `alpha` зависит от уровня шума
+         * в данных и в общем случае должно подбираться (например, по принципу невязки).
+         */
+        const val DEFAULT_REGULARIZATION = 1e-10
+    }
+
     init {
         require(alpha > 0.0) {
             "FirstKindSolver: параметр регуляризации alpha должен быть положительным, получено alpha=$alpha"
@@ -569,424 +501,29 @@ class FirstKindSolver(
     }
 
     private val cL = -1.0 / alpha
-    private val fEff = { t: Double -> problem.rhsExact(t, op) / alpha }
-    private val fEffDeriv = { t: Double -> problem.rhsExactDeriv(t, op) / alpha }
+    private val fEff = { t: Double -> rhs(t) / alpha }
+    private val fEffDeriv = { t: Double -> rhsDeriv(t) / alpha }
     // Вторая производная правой части ОБЯЗАТЕЛЬНО пробрасывается во внутренний
     // решатель: без неё семейство xi^<0>, читающее f'', молча получало ноль вместо
     // истинного значения и строило неверную систему без какой-либо диагностики.
-    private val fEffDeriv2 = { t: Double -> problem.rhsExactDeriv2(t, op) / alpha }
+    private val fEffDeriv2 = { t: Double -> rhsDeriv2(t) / alpha }
     private val inner = SecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv, fEffDeriv2)
 
+    /** Базовая коллокационная схема для регуляризованного уравнения. */
     fun base(): SolutionFunc = inner.base()
+
+    /** Итерация Слоана, применённая к регуляризованному уравнению. */
     fun sloan(): SolutionFunc = inner.sloan()
-    fun kulkarni(): SolutionFunc = inner.kulkarni()
-    fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
-}
-
-/** Фабрика решателя II рода для модельной задачи (c_L = 1, f = u* - \mathcal K u*). */
-fun secondKindSolver(problem: ModelProblem, basis: MinimalSplineBasis, funcs: FunctionalFamily,
-                     op: FredholmOperator): SecondKindSolver =
-    SecondKindSolver(basis, funcs, op, cL = 1.0,
-        fEff = { t -> problem.rhsExact(t, op) },
-        fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
-        fEffDeriv2 = { t -> problem.rhsExactDeriv2(t, op) })
-
-// ============================================================================
-// 12. HEALTH-CHECKS
-// ============================================================================
-
-
-/**
- * Набор health-checks (миррор UrysonSolver). Критический провал -> exit(1).
- */
-object HealthChecks {
-    private val quad = GaussLegendre(8)
-    private val gridsU = Grid.uniform(8)
-    private val gridsQ = Grid.quasiUniform(8)
-    private val sampleTs = (0..200).map { it / 200.0 }
-    private val allSys = listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)
-
-    fun runAll(): List<CheckResult> = listOf(
-        checkSplineVsB(), checkSplineVsH(), checkPartitionOfUnity(),
-        checkBiorthTheta(), checkBiorthXi(), checkProjectorIdempotent(),
-        checkExactOnSpan(), checkThetaReduction(), checkQuadrature(),
-        checkRhsConsistency(), checkBaseSanity(), checkNystromExactOnSpan(),
-    )
-
-    private fun forEachGrid(action: (Grid) -> Double): Double = maxOf(action(gridsU), action(gridsQ))
-
-    /** 1. omega == omegaB (+производные). */
-    private fun checkSplineVsB(): CheckResult {
-        val err = forEachGrid { grid ->
-            val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-            var m = 0.0
-            for (ti in sampleTs) {
-                val t = grid.a + (grid.b - grid.a) * ti
-                for (j in -2..grid.n - 1) if (nonDegenerate(grid, j)) {
-                    m = maxOf(m, abs(basis.omega(j, t) - ReferenceSplines.omegaB(grid, j, t)))
-                    m = maxOf(m, abs(basis.omegaDeriv(j, t) - ReferenceSplines.omegaBDeriv(grid, j, t)))
-                }
-            }
-            m
-        }
-        return CheckResult("1. omega == omegaB (и произв.)", err, 1e-10, true)
-    }
-
-    /** 2. omega == omegaH. */
-    private fun checkSplineVsH(): CheckResult {
-        val err = forEachGrid { grid ->
-            val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
-            var m = 0.0
-            for (ti in sampleTs) {
-                val t = grid.a + (grid.b - grid.a) * ti
-                for (j in -2..grid.n - 1) if (nonDegenerate(grid, j))
-                    m = maxOf(m, abs(basis.omega(j, t) - ReferenceSplines.omegaH(grid, j, t)))
-            }
-            m
-        }
-        return CheckResult("2. omega == omegaH", err, 1e-10, true)
-    }
-
-    /** 3. Разбиение единицы. */
-    private fun checkPartitionOfUnity(): CheckResult {
-        val err = forEachGrid { grid ->
-            var m = 0.0
-            for (sys in allSys) {
-                val basis = MinimalSplineBasis(sys, grid)
-                for (ti in sampleTs) {
-                    val t = grid.a + (grid.b - grid.a) * ti
-                    var sum = 0.0
-                    for (j in -2..grid.n - 1) sum += basis.omega(j, t)
-                    m = maxOf(m, abs(sum - 1.0))
-                }
-            }
-            m
-        }
-        return CheckResult("3. Разбиение единицы", err, 1e-10, true)
-    }
-
-    /** 4. Биортогональность theta_i(omega_j)=delta. */
-    private fun checkBiorthTheta(): CheckResult {
-        val err = forEachGrid { grid ->
-            var m = 0.0
-            for (sys in allSys) {
-                val basis = MinimalSplineBasis(sys, grid)
-                val funcs = ProjFunctionals(basis)
-                for (i in -2..grid.n - 1) for (j in -2..grid.n - 1) {
-                    val v = funcs.chi(i).apply({ t -> basis.omega(j, t) }, { t -> basis.omegaDeriv(j, t) })
-                    m = maxOf(m, abs(v - if (i == j) 1.0 else 0.0))
-                }
-            }
-            m
-        }
-        return CheckResult("4. Биортогональность theta", err, 1e-9, true)
-    }
-
-    /** 5. Биортогональность xi^<r>_i(omega_j)=delta для r=0,1,2 (с 1-й и 2-й производными). */
-    private fun checkBiorthXi(): CheckResult {
-        val err = forEachGrid { grid ->
-            var m = 0.0
-            for (sys in allSys) {
-                val basis = MinimalSplineBasis(sys, grid)
-                for (r in 0..2) {
-                    val funcs = DeBoorFixFunctionals(basis, r)
-                    for (i in -2..grid.n - 1) for (j in -2..grid.n - 1) {
-                        val v = funcs.chi(i).apply(
-                            { t -> basis.omega(j, t) },
-                            { t -> basis.omegaDeriv(j, t) },
-                            { t -> basis.omegaDeriv2(j, t) },
-                        )
-                        m = maxOf(m, abs(v - if (i == j) 1.0 else 0.0))
-                    }
-                }
-            }
-            m
-        }
-        return CheckResult("5. Биортогональность xi<0,1,2>", err, 1e-9, true)
-    }
-
-    /** 6. Идемпотентность P_chi u_h = u_h для theta, xi (mu,lambda не обязаны). */
-    private fun checkProjectorIdempotent(): CheckResult {
-        val rnd = kotlin.random.Random(777)
-        val err = forEachGrid { grid ->
-            var m = 0.0
-            for (sys in allSys) {
-                val basis = MinimalSplineBasis(sys, grid)
-                val fams = listOf(
-                    ProjFunctionals(basis),
-                    DeBoorFixFunctionals(basis, 0),
-                    DeBoorFixFunctionals(basis, 1),
-                    DeBoorFixFunctionals(basis, 2),
-                )
-                for (funcs in fams) {
-                    val c = DoubleArray(grid.n + 2) { rnd.nextDouble(-1.0, 1.0) }
-                    val uh = { t: Double -> basis.evalSpline(c, t) }
-                    val uhD = { t: Double -> basis.evalSplineDeriv(c, t) }
-                    val uhDD = { t: Double -> basis.evalSplineDeriv2(c, t) }
-                    val pc = funcs.projectorCoeffs(uh, uhD, uhDD)
-                    for (i in c.indices) m = maxOf(m, abs(pc[i] - c[i]))
-                }
-            }
-            m
-        }
-        return CheckResult("6. Идемпотентность theta,xi", err, 1e-8, true)
-    }
-
-    /** 7. Точность на span{1,rho,sigma}: P_chi g = g для g=rho (все семейства). */
-    private fun checkExactOnSpan(): CheckResult {
-        val err = forEachGrid { grid ->
-            var m = 0.0
-            for (sys in allSys) {
-                val basis = MinimalSplineBasis(sys, grid)
-                val fams: List<FunctionalFamily> = listOf(
-                    ProjFunctionals(basis), DeBoorFixFunctionals(basis),
-                    AveragingFunctionals(basis), ThreePointFunctionals(basis),
-                )
-                for (funcs in fams) {
-                    val pc = funcs.projectorCoeffs({ t -> sys.rho(t) }, { t -> sys.rhoD(t) })
-                    for (ti in sampleTs) {
-                        val t = grid.a + (grid.b - grid.a) * ti
-                        m = maxOf(m, abs(sys.rho(t) - basis.evalSpline(pc, t)))
-                    }
-                }
-            }
-            m
-        }
-        return CheckResult("7. Точность на span (все chi)", err, 1e-8, true)
-    }
-
-    /** 8. Редукция theta к (pr_func_b) {1/14,-2/7,10/7,-2/7,1/14}. */
-    private fun checkThetaReduction(): CheckResult {
-        val grid = Grid.uniform(8)
-        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val funcs = ProjFunctionals(basis)
-        val expected = doubleArrayOf(1.0 / 14.0, -2.0 / 7.0, 10.0 / 7.0, -2.0 / 7.0, 1.0 / 14.0)
-        var m = 0.0
-        for (j in 0..grid.n - 3) {
-            val cf = funcs.closedFormInternal(j).coeffs
-            for (k in cf.indices) m = maxOf(m, abs(cf[k] - expected[k]))
-        }
-        return CheckResult("8. Редукция theta к (pr_func_b)", m, 1e-10, true)
-    }
-
-    /** 9. Точность квадратуры: t^k до 15, e^t, 1/(t+1). */
-    private fun checkQuadrature(): CheckResult {
-        val bp = doubleArrayOf(0.0, 1.0)
-        var m = 0.0
-        for (k in 0..15) m = maxOf(m, abs(quad.integrate(bp) { t -> Math.pow(t, k.toDouble()) } - 1.0 / (k + 1)))
-        m = maxOf(m, abs(quad.integrate(bp) { t -> Math.exp(t) } - (Math.E - 1.0)))
-        m = maxOf(m, abs(quad.integrate(bp) { t -> 1.0 / (t + 1.0) } - Math.log(2.0)))
-        return CheckResult("9. Точность квадратуры", m, 1e-10, true)
-    }
-
-    /** 10. Согласованность правой части: на span-задаче F2span база(B) даёт машинную точность. */
-    private fun checkRhsConsistency(): CheckResult {
-        val grid = Grid.uniform(8)
-        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val funcs = ProjFunctionals(basis)
-        val op = FredholmOperator(ModelProblem.F2span.kernel, grid, quad)
-        val solver = secondKindSolver(ModelProblem.F2span, basis, funcs, op)
-        val eh = errorEh({ t -> ModelProblem.F2span.exact(t) }, solver.base().eval, grid)
-        return CheckResult("10. Точность на span-задаче (база B)", eh, 1e-8, true)
-    }
 
     /**
-     * 12. Nyström точен на span-задаче: если ядро зависит лишь от t (K=1+t), то
-     * g_t(s)=K(t)u*(s) с u*=s^2 лежит в span{1,s,s^2}=phi^B -> квадратура Nyström точна
-     * и приближение воспроизводит u* до машинной точности (nystrom-scheme.md §1, п.7).
+     * Схема Кулкарни для регуляризованного уравнения.
+     *
+     * НЕ РЕКОМЕНДУЕТСЯ к применению: схема использует матрицу `M2`, элементы которой
+     * растут как `alpha^{-2}`, что при типичных `alpha ~ 1e-10` делает систему
+     * численно неразрешимой. Метод сохранён для полноты API и экспериментов.
      */
-    private fun checkNystromExactOnSpan(): CheckResult {
-        val grid = Grid.uniform(8)
-        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val funcs = ProjFunctionals(basis)
-        val kernel = KernelF({ t, _ -> 1.0 + t })
-        val prob = ModelProblem("F2nyst", kernel, { s -> s * s }, { s -> 2.0 * s }, secondKind = true)
-        val op = FredholmOperator(kernel, grid, quad)
-        val solver = secondKindSolver(prob, basis, funcs, op)
-        val eh = errorEh({ t -> prob.exact(t) }, solver.nystrom().eval, grid)
-        return CheckResult("12. Nyström точен на span (база B)", eh, 1e-8, true)
-    }
+    fun kulkarni(): SolutionFunc = inner.kulkarni()
 
-    /** 11. Sanity: базовая схема II рода сходится (E_8 > E_16 для F2/H). */
-    private fun checkBaseSanity(): CheckResult {
-        fun ehAt(nn: Int): Double {
-            val grid = Grid.uniform(nn)
-            val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
-            val funcs = ProjFunctionals(basis)
-            val op = FredholmOperator(ModelProblem.F2.kernel, grid, quad)
-            val solver = secondKindSolver(ModelProblem.F2, basis, funcs, op)
-            return errorEh({ t -> ModelProblem.F2.exact(t) }, solver.base().eval, grid)
-        }
-        val e8 = ehAt(8); val e16 = ehAt(16)
-        val ratio = if (e16 > 0) e8 / e16 else Double.POSITIVE_INFINITY
-        val ratioMin = 4.0   // фактор >= 2^2 => наблюдаемый порядок >= 2
-        val sane = e8 < 1e-1 && e16 <= e8 && ratio >= ratioMin
-        val measured = if (sane) ratioMin / ratio else 1e9
-        return CheckResult("11. Sanity базовой схемы (порядок>=2)", measured, 1.0, true)
-    }
+    /** Итерированная схема Кулкарни; те же ограничения, что и у [kulkarni]. */
+    fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
 }
-// ============================================================================
-// 13. ФОРМАТИРОВАНИЕ + ТАБЛИЦЫ + MAIN
-// ============================================================================
-
-object Tables {
-    // n=128 не требуется (решение пользователя); сетки ограничены n<=64.
-    private val NS = listOf(8, 16, 32, 64)
-    private val quad = GaussLegendre(8)
-
-    private fun makeSolver(p: ModelProblem, sys: GeneratingSystem, fam: String, nn: Int): Pair<SecondKindSolver, Grid> {
-        val grid = Grid.uniform(nn)
-        val basis = MinimalSplineBasis(sys, grid)
-        val funcs = family(fam, basis)
-        val op = FredholmOperator(p.kernel, grid, quad)
-        return SecondKindSolver(basis, funcs, op, 1.0,
-            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) },
-            { t -> p.rhsExactDeriv2(t, op) }) to grid
-    }
-
-    private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
-        "theta" -> ProjFunctionals(basis)
-        "xi", "xi1" -> DeBoorFixFunctionals(basis, 1)
-        "xi0" -> DeBoorFixFunctionals(basis, 0)
-        "xi2" -> DeBoorFixFunctionals(basis, 2)
-        "mu" -> AveragingFunctionals(basis)
-        else -> ThreePointFunctionals(basis)
-    }
-
-    /** Tded[p]: сходимость трёх xi (r=0,1,2) на базисах B/H/T, схемы база/Слоан/Кулк/ит.Кулк. */
-    fun tableDeBoorFix(p: ModelProblem) {
-        println("\n--- Tded[${p.name}]: де Бура--Фикса xi<0>,xi<1>,xi<2>, базисы B/H/T ---")
-        val schemes = listOf("база", "Слоан", "Кулк", "ит.Кулк")
-        for (fam in listOf("xi0", "xi1", "xi2")) {
-            println("  семейство $fam:")
-            for (sys in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
-                val errs = schemes.map { ArrayList<Double>() }
-                for (nn in NS) {
-                    val (s, grid) = makeSolver(p, sys, fam, nn)
-                    val ex = { t: Double -> p.exact(t) }
-                    errs[0].add(errorEh(ex, s.base().eval, grid))
-                    errs[1].add(errorEh(ex, s.sloan().eval, grid))
-                    errs[2].add(errorEh(ex, s.kulkarni().eval, grid))
-                    errs[3].add(errorEh(ex, s.iteratedKulkarni().eval, grid))
-                }
-                val ps = schemes.indices.map { orders(errs[it]) }
-                println("   базис ${sys.name}:")
-                for (i in NS.indices) println("     n=%4d | ".format(NS[i]) +
-                    schemes.indices.joinToString(" | ") { mi ->
-                        "%s:%s(%s)".format(schemes[mi], Fmt.e(errs[mi][i]), Fmt.p(ps[mi][i])) })
-            }
-        }
-    }
-
-    /** T1[p]: базисы B/H/T, базовая схема theta: E_h, p_h, C_h. */
-    fun tablePhi(p: ModelProblem) {
-        println("\n--- T1[${p.name}]: theta, базисы B/H/T (E_h,p_h,C_h) ---")
-        for (sys in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
-            val errs = ArrayList<Double>(); val hs = ArrayList<Double>()
-            for (nn in NS) { val (s, grid) = makeSolver(p, sys, "theta", nn)
-                hs.add(grid.h); errs.add(errorEh({ t -> p.exact(t) }, s.base().eval, grid)) }
-            val ps = orders(errs)
-            println("  базис ${sys.name}:")
-            for (i in NS.indices) println("   n=%4d h=%s E_h=%s p_h=%s C_h=%s".format(
-                NS[i], Fmt.h(hs[i]), Fmt.e(errs[i]), Fmt.p(ps[i]), Fmt.e(errs[i] / Math.pow(hs[i], 3.0))))
-        }
-    }
-
-    /** T2[p]: сравнение база/Слоан/Кулкарни/итер.Кулкарни (theta). */
-    fun tableMethods(p: ModelProblem, sys: GeneratingSystem) {
-        println("\n--- T2[${p.name}]: базис ${sys.name}, theta: база/Слоан/Кулкарни/итер.Кулкарни (E_h,p_h) ---")
-        val names = listOf("база", "Слоан", "Кулк", "ит.Кулк")
-        val errs = names.map { ArrayList<Double>() }
-        for (nn in NS) {
-            val (s, grid) = makeSolver(p, sys, "theta", nn)
-            val ex = { t: Double -> p.exact(t) }
-            errs[0].add(errorEh(ex, s.base().eval, grid))
-            errs[1].add(errorEh(ex, s.sloan().eval, grid))
-            errs[2].add(errorEh(ex, s.kulkarni().eval, grid))
-            errs[3].add(errorEh(ex, s.iteratedKulkarni().eval, grid))
-        }
-        val ps = names.indices.map { orders(errs[it]) }
-        for (i in NS.indices) println("   n=%4d | ".format(NS[i]) +
-            names.indices.joinToString(" | ") { mi -> "%s:%s(%s)".format(names[mi], Fmt.e(errs[mi][i]), Fmt.p(ps[mi][i])) })
-    }
-
-    /** Сравнение семейств theta/xi/mu/lambda (базовая схема). */
-    fun tableFamilies(p: ModelProblem, sys: GeneratingSystem) {
-        println("\n--- Семейства[${p.name}]: базис ${sys.name}, базовая схема (E_h,p_h) ---")
-        for (fam in listOf("theta", "xi", "mu", "lambda")) {
-            val errs = ArrayList<Double>()
-            for (nn in NS) { val (s, grid) = makeSolver(p, sys, fam, nn)
-                errs.add(errorEh({ t -> p.exact(t) }, s.base().eval, grid)) }
-            val ps = orders(errs)
-            println("  %-7s: ".format(fam) + NS.indices.joinToString(" ") { i -> "%s(%s)".format(Fmt.e(errs[i]), Fmt.p(ps[i])) })
-        }
-    }
-
-    /** T3[p]: база/Слоан/Nyström/итер.Nyström (theta), базис sys. */
-    fun tableNystrom(p: ModelProblem, sys: GeneratingSystem) {
-        println("\n--- T3[${p.name}]: базис ${sys.name}, theta: база/Слоан/Nyström/итер.Nyström (E_h,p_h) ---")
-        val names = listOf("база", "Слоан", "Nyst", "ит.Nyst")
-        val errs = names.map { ArrayList<Double>() }
-        for (nn in NS) {
-            val (s, grid) = makeSolver(p, sys, "theta", nn)
-            val ex = { t: Double -> p.exact(t) }
-            errs[0].add(errorEh(ex, s.base().eval, grid))
-            errs[1].add(errorEh(ex, s.sloan().eval, grid))
-            errs[2].add(errorEh(ex, s.nystrom().eval, grid))
-            errs[3].add(errorEh(ex, s.iteratedNystrom().eval, grid))
-        }
-        val ps = names.indices.map { orders(errs[it]) }
-        for (i in NS.indices) println("   n=%4d | ".format(NS[i]) +
-            names.indices.joinToString(" | ") { mi -> "%s:%s(%s)".format(names[mi], Fmt.e(errs[mi][i]), Fmt.p(ps[mi][i])) })
-    }
-
-    /** F1 (Wazwaz, alpha=1e-10): база/Слоан, базис H. */
-    fun tableF1() {
-        println("\n--- F1 Wazwaz (alpha=1e-10), базис H, theta: база/Слоан ---")
-        val p = ModelProblem.F1
-        for (nn in listOf(8, 16, 32)) {
-            val grid = Grid.uniform(nn)
-            val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
-            val op = FredholmOperator(p.kernel, grid, quad)
-            val solver = FirstKindSolver(p, basis, ProjFunctionals(basis), op, alpha = 1e-10)
-            val ehB = errorEh({ t -> p.exact(t) }, solver.base().eval, grid)
-            val ehS = errorEh({ t -> p.exact(t) }, solver.sloan().eval, grid)
-            println("   n=%4d E_h(база)=%s E_h(Слоан)=%s".format(nn, Fmt.e(ehB), Fmt.e(ehS)))
-        }
-        println("   [риск R2: обусловленность M propto alpha^{-1}; выбор alpha — эвристика r2]")
-    }
-}
-
-fun main() {
-    println("=".repeat(72))
-    println("FredholmSolver — линейные уравнения Фредгольма (new-01)")
-    println("=".repeat(72))
-    println("HEALTH-CHECKS:")
-    var anyFail = false
-    for (r in HealthChecks.runAll()) {
-        val verdict = if (r.ok) "OK  " else "FAIL"
-        if (!r.ok && r.critical) anyFail = true
-        println("  [$verdict] ${r.name.padEnd(38)} measured=${"%.3e".format(r.measured)} thr=${"%.0e".format(r.threshold)}")
-    }
-    if (anyFail) { println("\nКРИТИЧЕСКИЙ ПРОВАЛ health-check. Расчёт остановлен."); exitProcess(1) }
-    println("\nВсе критические health-checks пройдены.\n")
-
-    println("=".repeat(72)); println("ТАБЛИЦЫ"); println("=".repeat(72))
-    // Два численных примера II рода (каждый — полный набор сравнений):
-    //   F2  : K=1/(1+t+s), u*=1/(t+1) (рациональный); F2exp: K=e^{-(t-s)^2}, u*=e^t.
-    val secondKindExamples = listOf(
-        ModelProblem.F2 to GeneratingSystem.B,
-        ModelProblem.F2exp to GeneratingSystem.B,
-    )
-    for ((p, sys) in secondKindExamples) {
-        Tables.tablePhi(p)
-        Tables.tableMethods(p, sys)
-        Tables.tableNystrom(p, sys)
-        Tables.tableFamilies(p, sys)
-        Tables.tableDeBoorFix(p)
-    }
-    // Один пример I рода (Wazwaz).
-    Tables.tableF1()
-    println("\nРасчёт завершён.")
-}
-

@@ -12,6 +12,9 @@ import numerics.functionals.errorEh
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import problems.fredholm.FredholmProblem
+import problems.fredholm.secondKindSolver
+import problems.fredholm.firstKindSolver
 
 /**
  * Characterization (golden) tests for the Fredholm solvers.
@@ -27,7 +30,7 @@ class FredholmCoverageTest {
 
     private fun finite(x: Double) = !x.isNaN() && !x.isInfinite()
 
-    private fun build(p: ModelProblem, sys: GeneratingSystem, n: Int): SecondKindSolver {
+    private fun build(p: FredholmProblem, sys: GeneratingSystem, n: Int): SecondKindSolver {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(sys, grid)
         val funcs = ProjFunctionals(basis)
@@ -36,20 +39,20 @@ class FredholmCoverageTest {
     }
 
     /**
-     * Exercises all ModelProblem companion entries (F2span/F2/F2exp/F1) plus the
+     * Exercises all FredholmProblem companion entries (F2span/F2/F2exp/F1) plus the
      * second-kind base solver via the factory. Reference: each E_h reproduced by the
      * current implementation must stay finite and small (<1e-1). Protects against a
      * regression that breaks rhs assembly or the (I-M)c=g solve.
      */
     @Test fun allModelProblems_baseFinite() {
-        for (p in listOf(ModelProblem.F2span, ModelProblem.F2, ModelProblem.F2exp)) {
+        for (p in listOf(FredholmProblem.F2span, FredholmProblem.F2, FredholmProblem.F2exp)) {
             val s = build(p, GeneratingSystem.B, 8)
             val e = errorEh({ t -> p.exact(t) }, s.base().eval, s.grid)
             assertTrue(finite(e) && e < 1e-1, "${p.name}: E_h=$e")
         }
         // F2span lies in span{1,t,t^2}=phi^B -> near machine precision on basis B.
-        val sSpan = build(ModelProblem.F2span, GeneratingSystem.B, 8)
-        val eSpan = errorEh({ t -> ModelProblem.F2span.exact(t) }, sSpan.base().eval, sSpan.grid)
+        val sSpan = build(FredholmProblem.F2span, GeneratingSystem.B, 8)
+        val eSpan = errorEh({ t -> FredholmProblem.F2span.exact(t) }, sSpan.base().eval, sSpan.grid)
         assertTrue(eSpan < 1e-8, "F2span should be near-exact on B: $eSpan")
     }
 
@@ -59,8 +62,8 @@ class FredholmCoverageTest {
      * fixed from the current run; checks that the post-processing schemes run end-to-end.
      */
     @Test fun f2_secondKind_allSchemes_projectorTheta() {
-        val s = build(ModelProblem.F2, GeneratingSystem.B, 8)
-        val exact = { t: Double -> ModelProblem.F2.exact(t) }
+        val s = build(FredholmProblem.F2, GeneratingSystem.B, 8)
+        val exact = { t: Double -> FredholmProblem.F2.exact(t) }
         for (sol in listOf(s.base(), s.sloan(), s.kulkarni(), s.iteratedKulkarni())) {
             val e = errorEh(exact, sol.eval, s.grid)
             assertTrue(finite(e) && e < 1e-2, "scheme E_h=$e")
@@ -76,10 +79,10 @@ class FredholmCoverageTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
         val funcs = DeBoorFixFunctionals(basis)
-        val op = FredholmOperator(ModelProblem.F2exp.kernel, grid, quad)
+        val op = FredholmOperator(FredholmProblem.F2exp.kernel, grid, quad)
         val solver = SecondKindSolver(basis, funcs, op, 1.0,
-            { t -> ModelProblem.F2exp.rhsExact(t, op) }, { t -> ModelProblem.F2exp.rhsExactDeriv(t, op) })
-        val e = errorEh({ t -> ModelProblem.F2exp.exact(t) }, solver.kulkarni().eval, grid)
+            { t -> FredholmProblem.F2exp.rhsExact(t, op) }, { t -> FredholmProblem.F2exp.rhsExactDeriv(t, op) })
+        val e = errorEh({ t -> FredholmProblem.F2exp.exact(t) }, solver.kulkarni().eval, grid)
         assertTrue(finite(e) && e < 1e-2, "xi kulkarni E_h=$e")
     }
 
@@ -93,12 +96,12 @@ class FredholmCoverageTest {
     @Test fun f2_kulkarniQuasi_muAndLambda() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val op = FredholmOperator(ModelProblem.F2.kernel, grid, quad)
+        val op = FredholmOperator(FredholmProblem.F2.kernel, grid, quad)
         for (funcs in listOf(AveragingFunctionals(basis), ThreePointFunctionals(basis))) {
             val solver = SecondKindSolver(basis, funcs, op, 1.0,
-                { t -> ModelProblem.F2.rhsExact(t, op) }, { t -> ModelProblem.F2.rhsExactDeriv(t, op) })
-            val e = errorEh({ t -> ModelProblem.F2.exact(t) }, solver.kulkarni().eval, grid)
-            val eIt = errorEh({ t -> ModelProblem.F2.exact(t) }, solver.iteratedKulkarni().eval, grid)
+                { t -> FredholmProblem.F2.rhsExact(t, op) }, { t -> FredholmProblem.F2.rhsExactDeriv(t, op) })
+            val e = errorEh({ t -> FredholmProblem.F2.exact(t) }, solver.kulkarni().eval, grid)
+            val eIt = errorEh({ t -> FredholmProblem.F2.exact(t) }, solver.iteratedKulkarni().eval, grid)
             assertTrue(finite(e) && e < 5e-1, "quasi kulkarni E_h=$e")
             assertTrue(finite(eIt) && eIt < 5e-1, "quasi iterated E_h=$eIt")
         }
@@ -113,10 +116,10 @@ class FredholmCoverageTest {
     @Test fun f2_kulkarniQuasi_convergesToStableFixedPoint() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val op = FredholmOperator(ModelProblem.F2.kernel, grid, quad)
+        val op = FredholmOperator(FredholmProblem.F2.kernel, grid, quad)
         val funcs = AveragingFunctionals(basis)
         val solver = SecondKindSolver(basis, funcs, op, 1.0,
-            { t -> ModelProblem.F2.rhsExact(t, op) }, { t -> ModelProblem.F2.rhsExactDeriv(t, op) })
+            { t -> FredholmProblem.F2.rhsExact(t, op) }, { t -> FredholmProblem.F2.rhsExactDeriv(t, op) })
         val first = solver.kulkarni()
         val second = solver.kulkarni()
         val ts = doubleArrayOf(0.0, 0.13, 0.37, 0.5, 0.71, 0.99, 1.0)
@@ -133,7 +136,7 @@ class FredholmCoverageTest {
      * dim=n+2 and contain only finite entries (fixed from current run).
      */
     @Test fun matricesAndVectors_shapeAndFinite() {
-        val s = build(ModelProblem.F2, GeneratingSystem.B, 8)
+        val s = build(FredholmProblem.F2, GeneratingSystem.B, 8)
         val dim = s.dim
         val m = s.matrixM(); val m2 = s.matrixM2(); val g = s.vectorG(); val d = s.vectorD()
         assertTrue(m.size == dim && m2.size == dim && g.size == dim && d.size == dim)
@@ -149,14 +152,14 @@ class FredholmCoverageTest {
     @Test fun fredholmOperator_nodeApis_consistent() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val op = FredholmOperator(ModelProblem.F2.kernel, grid, quad)
+        val op = FredholmOperator(FredholmProblem.F2.kernel, grid, quad)
         val one = DoubleArray(op.gNode.size) { 1.0 }
         val t = 0.37
         assertTrue(abs(op.applyNodes(t, one) - op.apply(t) { 1.0 }) < 1e-9)
         assertTrue(finite(op.applyDerivNodes(t, one)))
         assertTrue(finite(op.applyDeriv(t) { 1.0 }))
         // rhsExact (first-kind branch) for F1.
-        assertTrue(finite(ModelProblem.F1.rhsExact(t, op)) && finite(ModelProblem.F1.rhsExactDeriv(t, op)))
+        assertTrue(finite(FredholmProblem.F1.rhsExact(t, op)) && finite(FredholmProblem.F1.rhsExactDeriv(t, op)))
     }
 
     /**
@@ -173,9 +176,9 @@ class FredholmCoverageTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
         val funcs = ProjFunctionals(basis)
-        val op = FredholmOperator(ModelProblem.F1.kernel, grid, quad)
-        val solver = FirstKindSolver(ModelProblem.F1, basis, funcs, op)
-        val exact = { t: Double -> ModelProblem.F1.exact(t) }
+        val op = FredholmOperator(FredholmProblem.F1.kernel, grid, quad)
+        val solver = firstKindSolver(FredholmProblem.F1, basis, funcs, op)
+        val exact = { t: Double -> FredholmProblem.F1.exact(t) }
         // Accurate, well-conditioned schemes.
         assertTrue(errorEh(exact, solver.base().eval, grid) < 1e-3)
         assertTrue(errorEh(exact, solver.sloan().eval, grid) < 1e-3)
@@ -190,8 +193,8 @@ class FredholmCoverageTest {
      * guards against a regression that destroys spatial convergence.
      */
     @Test fun f2_converges_n8_to_n16() {
-        val e8 = errorEh({ t -> ModelProblem.F2.exact(t) }, build(ModelProblem.F2, GeneratingSystem.B, 8).base().eval, Grid.uniform(8))
-        val e16 = errorEh({ t -> ModelProblem.F2.exact(t) }, build(ModelProblem.F2, GeneratingSystem.B, 16).base().eval, Grid.uniform(16))
+        val e8 = errorEh({ t -> FredholmProblem.F2.exact(t) }, build(FredholmProblem.F2, GeneratingSystem.B, 8).base().eval, Grid.uniform(8))
+        val e16 = errorEh({ t -> FredholmProblem.F2.exact(t) }, build(FredholmProblem.F2, GeneratingSystem.B, 16).base().eval, Grid.uniform(16))
         assertTrue(e16 < e8, "no convergence: e8=$e8 e16=$e16")
     }
 

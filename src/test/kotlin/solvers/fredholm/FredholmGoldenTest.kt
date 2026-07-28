@@ -7,6 +7,7 @@ import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import problems.fredholm.FredholmProblem
 
 /**
  * Light golden/regression test (n=8,16): rebuild a minimal solver and check key E_h
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
  * Does NOT compare full stdout.
  */
 class FredholmGoldenTest {
-    private fun ehBase(p: ModelProblem, n: Int): Double {
+    private fun ehBase(p: FredholmProblem, n: Int): Double {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
@@ -25,8 +26,8 @@ class FredholmGoldenTest {
     }
 
     @Test fun f2_basis_b_n8_n16() {
-        val e8 = ehBase(ModelProblem.F2, 8)
-        val e16 = ehBase(ModelProblem.F2, 16)
+        val e8 = ehBase(FredholmProblem.F2, 8)
+        val e16 = ehBase(FredholmProblem.F2, 16)
         assertTrue(approx(e8, 1.014e-4), "E_h(n=8)=$e8 expected ~1.014e-4")
         assertTrue(approx(e16, 1.246e-5), "E_h(n=16)=$e16 expected ~1.246e-5")
         assertTrue(e16 < e8, "should converge")

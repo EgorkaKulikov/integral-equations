@@ -1,5 +1,8 @@
 package solvers.volterra
 
+import problems.volterra.VolterraProblem
+import problems.volterra.firstKindSolver
+import problems.volterra.secondKindSolver
 import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
@@ -33,7 +36,7 @@ import kotlin.test.assertTrue
  */
 class CombinedNystromVolterraTest {
 
-    private fun solverFor(problem: ModelProblem, n: Int): Pair<SecondKindSolver, Grid> {
+    private fun solverFor(problem: VolterraProblem, n: Int): Pair<SecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
@@ -57,7 +60,7 @@ class CombinedNystromVolterraTest {
      */
     @Test
     fun combinedIsComparableToClassical() {
-        for (problem in listOf(ModelProblem.V2, ModelProblem.V2exp)) {
+        for (problem in listOf(VolterraProblem.V2, VolterraProblem.V2exp)) {
             for (n in listOf(8, 16)) {
                 val (solver, grid) = solverFor(problem, n)
                 val exact = { t: Double -> problem.exact(t) }
@@ -75,7 +78,7 @@ class CombinedNystromVolterraTest {
     /** Результаты конечны и сходятся при измельчении сетки. */
     @Test
     fun combinedConvergesUnderRefinement() {
-        val problem = ModelProblem.V2
+        val problem = VolterraProblem.V2
         val exact = { t: Double -> problem.exact(t) }
         val errors = listOf(8, 16, 32).map { n ->
             val (solver, grid) = solverFor(problem, n)
@@ -88,7 +91,7 @@ class CombinedNystromVolterraTest {
     /** Итерированный вариант не хуже исходного. */
     @Test
     fun iteratedCombinedIsNotWorse() {
-        val problem = ModelProblem.V2
+        val problem = VolterraProblem.V2
         for (n in listOf(8, 16)) {
             val (solver, grid) = solverFor(problem, n)
             val exact = { t: Double -> problem.exact(t) }

@@ -1,5 +1,8 @@
 package solvers.volterra
 
+import problems.volterra.VolterraProblem
+import problems.volterra.firstKindSolver
+import problems.volterra.secondKindSolver
 import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
@@ -25,7 +28,7 @@ class VolterraCoverageTest {
     private val quad = GaussLegendre(8)
     private fun finite(x: Double) = !x.isNaN() && !x.isInfinite()
 
-    private fun build(p: ModelProblem, sys: GeneratingSystem, n: Int): SecondKindSolver {
+    private fun build(p: VolterraProblem, sys: GeneratingSystem, n: Int): SecondKindSolver {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(sys, grid)
         val funcs = ProjFunctionals(basis)
@@ -34,18 +37,18 @@ class VolterraCoverageTest {
     }
 
     /**
-     * Exercises all ModelProblem companion entries (V2span/V2/V2exp/V2win) base solver.
+     * Exercises all VolterraProblem companion entries (V2span/V2/V2exp/V2win) base solver.
      * Reference: each E_h finite and < 1e-1 (fixed from current run). V2span lies in
      * span{1,t,t^2}=phi^B so it is near machine precision on basis B.
      */
     @Test fun allModelProblems_baseFinite() {
-        for (p in listOf(ModelProblem.V2span, ModelProblem.V2, ModelProblem.V2exp, ModelProblem.V2win)) {
+        for (p in listOf(VolterraProblem.V2span, VolterraProblem.V2, VolterraProblem.V2exp, VolterraProblem.V2win)) {
             val s = build(p, GeneratingSystem.B, 8)
             val e = errorEh({ t -> p.exact(t) }, s.base().eval, s.grid)
             assertTrue(finite(e) && e < 1e-1, "${p.name}: E_h=$e")
         }
-        val sSpan = build(ModelProblem.V2span, GeneratingSystem.B, 8)
-        val eSpan = errorEh({ t -> ModelProblem.V2span.exact(t) }, sSpan.base().eval, sSpan.grid)
+        val sSpan = build(VolterraProblem.V2span, GeneratingSystem.B, 8)
+        val eSpan = errorEh({ t -> VolterraProblem.V2span.exact(t) }, sSpan.base().eval, sSpan.grid)
         assertTrue(eSpan < 1e-7, "V2span should be near-exact on B: $eSpan")
     }
 
@@ -55,8 +58,8 @@ class VolterraCoverageTest {
      * the Volterra-specific Leibniz boundary term inside applyDeriv via xi-free schemes.
      */
     @Test fun v2_secondKind_allSchemes_projectorTheta() {
-        val s = build(ModelProblem.V2, GeneratingSystem.B, 8)
-        val exact = { t: Double -> ModelProblem.V2.exact(t) }
+        val s = build(VolterraProblem.V2, GeneratingSystem.B, 8)
+        val exact = { t: Double -> VolterraProblem.V2.exact(t) }
         for (sol in listOf(s.base(), s.sloan(), s.kulkarni(), s.iteratedKulkarni())) {
             val e = errorEh(exact, sol.eval, s.grid)
             assertTrue(finite(e) && e < 1e-2, "scheme E_h=$e")
@@ -72,10 +75,10 @@ class VolterraCoverageTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
         val funcs = DeBoorFixFunctionals(basis)
-        val op = VolterraOperator(ModelProblem.V2win.kernel, grid, quad)
+        val op = VolterraOperator(VolterraProblem.V2win.kernel, grid, quad)
         val solver = SecondKindSolver(basis, funcs, op, 1.0,
-            { t -> ModelProblem.V2win.rhsExact(t, op) }, { t -> ModelProblem.V2win.rhsExactDeriv(t, op) })
-        val e = errorEh({ t -> ModelProblem.V2win.exact(t) }, solver.kulkarni().eval, grid)
+            { t -> VolterraProblem.V2win.rhsExact(t, op) }, { t -> VolterraProblem.V2win.rhsExactDeriv(t, op) })
+        val e = errorEh({ t -> VolterraProblem.V2win.exact(t) }, solver.kulkarni().eval, grid)
         assertTrue(finite(e) && e < 1e-2, "xi kulkarni E_h=$e")
     }
 
@@ -88,12 +91,12 @@ class VolterraCoverageTest {
     @Test fun v2_kulkarniQuasi_muAndLambda() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val op = VolterraOperator(ModelProblem.V2.kernel, grid, quad)
+        val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
         for (funcs in listOf(AveragingFunctionals(basis), ThreePointFunctionals(basis))) {
             val solver = SecondKindSolver(basis, funcs, op, 1.0,
-                { t -> ModelProblem.V2.rhsExact(t, op) }, { t -> ModelProblem.V2.rhsExactDeriv(t, op) })
-            val e = errorEh({ t -> ModelProblem.V2.exact(t) }, solver.kulkarni().eval, grid)
-            val eIt = errorEh({ t -> ModelProblem.V2.exact(t) }, solver.iteratedKulkarni().eval, grid)
+                { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
+            val e = errorEh({ t -> VolterraProblem.V2.exact(t) }, solver.kulkarni().eval, grid)
+            val eIt = errorEh({ t -> VolterraProblem.V2.exact(t) }, solver.iteratedKulkarni().eval, grid)
             assertTrue(finite(e) && e < 5e-1, "quasi kulkarni E_h=$e")
             assertTrue(finite(eIt) && eIt < 5e-1, "quasi iterated E_h=$eIt")
         }
@@ -109,10 +112,10 @@ class VolterraCoverageTest {
     @Test fun v2_kulkarniQuasi_convergesToStableFixedPoint() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val op = VolterraOperator(ModelProblem.V2.kernel, grid, quad)
+        val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
         val funcs = AveragingFunctionals(basis)
         val solver = SecondKindSolver(basis, funcs, op, 1.0,
-            { t -> ModelProblem.V2.rhsExact(t, op) }, { t -> ModelProblem.V2.rhsExactDeriv(t, op) })
+            { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
         val first = solver.kulkarni()
         val second = solver.kulkarni()
         val ts = doubleArrayOf(0.0, 0.13, 0.37, 0.5, 0.71, 0.99, 1.0)
@@ -129,7 +132,7 @@ class VolterraCoverageTest {
      * finiteness on V2, n=8. Reference fixed from current run.
      */
     @Test fun matricesAndVectors_shapeAndFinite() {
-        val s = build(ModelProblem.V2, GeneratingSystem.B, 8)
+        val s = build(VolterraProblem.V2, GeneratingSystem.B, 8)
         val dim = s.dim
         val m = s.matrixM(); val m2 = s.matrixM2(); val g = s.vectorG(); val d = s.vectorD()
         assertTrue(m.size == dim && m2.size == dim && g.size == dim && d.size == dim)
@@ -145,7 +148,7 @@ class VolterraCoverageTest {
      */
     @Test fun volterraOperator_boundaryAndZeroCases() {
         val grid = Grid.uniform(8)
-        val op = VolterraOperator(ModelProblem.V1.kernel, grid, quad)
+        val op = VolterraOperator(VolterraProblem.V1.kernel, grid, quad)
         assertTrue(abs(op.apply(grid.a) { 1.0 }) < 1e-15)
         // K(a,a)=1+a-a=1 for V1; applyDeriv(a, u=1) = 1*1 + 0 = 1.
         assertTrue(abs(op.applyDeriv(grid.a) { 1.0 } - 1.0) < 1e-12)
@@ -162,9 +165,9 @@ class VolterraCoverageTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
-        val op = VolterraOperator(ModelProblem.V1.kernel, grid, quad)
-        val solver = FirstKindSolver(ModelProblem.V1, basis, funcs, op)
-        val exact = { t: Double -> ModelProblem.V1.exact(t) }
+        val op = VolterraOperator(VolterraProblem.V1.kernel, grid, quad)
+        val solver = firstKindSolver(VolterraProblem.V1, basis, funcs, op)
+        val exact = { t: Double -> VolterraProblem.V1.exact(t) }
         for (sol in listOf(solver.base(), solver.sloan(), solver.kulkarni(), solver.iteratedKulkarni())) {
             val e = errorEh(exact, sol.eval, grid)
             assertTrue(finite(e) && e < 1e-1, "V1 scheme E_h=$e")
@@ -181,9 +184,9 @@ class VolterraCoverageTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
-        val op = VolterraOperator(ModelProblem.V1.kernel, grid, quad)
-        val solver = FirstKindSolver(ModelProblem.V1, basis, funcs, op)
-        val e = errorEh({ t -> ModelProblem.V1.exact(t) }, solver.base().eval, grid)
+        val op = VolterraOperator(VolterraProblem.V1.kernel, grid, quad)
+        val solver = firstKindSolver(VolterraProblem.V1, basis, funcs, op)
+        val e = errorEh({ t -> VolterraProblem.V1.exact(t) }, solver.base().eval, grid)
         // Measured ~1.3e-5 with the 4th-order stencil; threshold set with ~7x margin.
         assertTrue(finite(e) && e < 1e-4, "V1 base E_h=$e")
     }
@@ -193,8 +196,8 @@ class VolterraCoverageTest {
      * Reference behaviour fixed from current implementation.
      */
     @Test fun v2_converges_n8_to_n16() {
-        val e8 = errorEh({ t -> ModelProblem.V2.exact(t) }, build(ModelProblem.V2, GeneratingSystem.B, 8).base().eval, Grid.uniform(8))
-        val e16 = errorEh({ t -> ModelProblem.V2.exact(t) }, build(ModelProblem.V2, GeneratingSystem.B, 16).base().eval, Grid.uniform(16))
+        val e8 = errorEh({ t -> VolterraProblem.V2.exact(t) }, build(VolterraProblem.V2, GeneratingSystem.B, 8).base().eval, Grid.uniform(8))
+        val e16 = errorEh({ t -> VolterraProblem.V2.exact(t) }, build(VolterraProblem.V2, GeneratingSystem.B, 16).base().eval, Grid.uniform(16))
         assertTrue(e16 < e8, "no convergence: e8=$e8 e16=$e16")
     }
 
@@ -213,9 +216,9 @@ class VolterraCoverageTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = DeBoorFixFunctionals(basis)
-        val op = VolterraOperator(ModelProblem.V1.kernel, grid, quad)
-        val solver = FirstKindSolver(ModelProblem.V1, basis, funcs, op)
-        val exact = { t: Double -> ModelProblem.V1.exact(t) }
+        val op = VolterraOperator(VolterraProblem.V1.kernel, grid, quad)
+        val solver = firstKindSolver(VolterraProblem.V1, basis, funcs, op)
+        val exact = { t: Double -> VolterraProblem.V1.exact(t) }
         assertTrue(finite(errorEh(exact, solver.base().eval, grid)))
         assertTrue(finite(errorEh(exact, solver.sloan().eval, grid)))
     }
@@ -230,9 +233,9 @@ class VolterraCoverageTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
-        val op = VolterraOperator(ModelProblem.V2win.kernel, grid, quad)
+        val op = VolterraOperator(VolterraProblem.V2win.kernel, grid, quad)
         val ex = assertFailsWith<IllegalArgumentException> {
-            FirstKindSolver(ModelProblem.V2win, basis, funcs, op)
+            firstKindSolver(VolterraProblem.V2win, basis, funcs, op)
         }
         assertTrue(ex.message?.contains("K(t,t)") == true, "message: ${ex.message}")
     }

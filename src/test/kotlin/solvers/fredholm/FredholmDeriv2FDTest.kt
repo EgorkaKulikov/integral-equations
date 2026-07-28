@@ -6,17 +6,18 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import problems.fredholm.FredholmProblem
 
 /**
  * FD-сверка второй производной образа Фредгольма (K u)''(t) = int K_tt u ds
- * с центральной конечной разностью (deboorfix-spec.md §4(в)). Точки берутся
+ * с центральной конечной разностью. Точки берутся
  * ВНУТРИ гладких кусков сплайна (не в узлах), т.к. omega_i'' разрывна в узлах.
  */
 class FredholmDeriv2FDTest {
     private val quad = GaussLegendre(8)
 
     @Test fun secondDerivOfImageMatchesFiniteDifference() {
-        val problems = listOf(ModelProblem.F2, ModelProblem.F2exp)
+        val problems = listOf(FredholmProblem.F2, FredholmProblem.F2exp)
         val h = 1e-4
         for (p in problems) {
             val grid = Grid.uniform(8)

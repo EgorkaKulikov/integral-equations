@@ -5,248 +5,236 @@ import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
 import numerics.MinimalSplineBasis
+import numerics.functionals.ProjFunctionals
+import numerics.functionals.errorEh
+import problems.uryson.UrysonProblem
+import problems.uryson.firstKindSolver
+import problems.uryson.noisyRightHandSide
+import problems.uryson.noisyThetaCoefficients
+import problems.uryson.secondKindSolver
 import kotlin.math.abs
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Characterization (golden) tests for the Uryson (nonlinear) solvers and helpers.
+ * Характеризационные тесты решателей нелинейного уравнения Урысона и вспомогательных типов.
  *
- * IMPORTANT: numeric thresholds are NOT analytic truth. Reference values were fixed by
- * running the CURRENT implementation once and serve only as a regression net for the
- * upcoming HPC refactor. Newton/Tikhonov/Morozov tolerances are generous and documented
- * per test. Golden E_h ceilings catch NaN / divergence / blow-up, not theory.
+ * ВАЖНО: числовые пороги здесь не являются аналитической истиной. Эталонные значения
+ * зафиксированы однократным запуском текущей реализации и служат сетью безопасности
+ * от регрессий: они ловят появление NaN, расходимость и «взрыв» решения, но не
+ * подтверждают теоретические порядки сходимости.
  */
 class UrysonCoverageTest {
+
     private val quad = GaussLegendre(8)
+
     private fun finite(x: Double) = !x.isNaN() && !x.isInfinite()
 
-    private fun ctx(p: ModelProblem, sys: GeneratingSystem, n: Int): SecondKindSolver {
+    private fun solverFor(
+        problem: UrysonProblem,
+        system: GeneratingSystem,
+        n: Int,
+    ): SecondKindSolver {
         val grid = Grid.uniform(n)
-        val basis = MinimalSplineBasis(sys, grid)
+        val basis = MinimalSplineBasis(system, grid)
         val funcs = ProjFunctionals(basis)
         val space = SplineSpace(basis, quad)
-        val op = UrysohnOperator(p.kernel, grid, quad)
-        return SecondKindSolver(p, basis, funcs, space, op)
+        val op = UrysohnOperator(problem.kernel, grid, quad)
+        return secondKindSolver(problem, basis, funcs, space, op)
     }
 
-    // ---------------------- small types ----------------------
+    /** Проверка флага `ok` у [CheckResult]: превышение порога означает провал. */
+    @Test
+    fun checkResultFlags() {
+        assertTrue(CheckResult("x", 1e-12, 1e-10, true).ok)
+        assertFalse(CheckResult("y", 1.0, 1e-10, false).ok)
+    }
 
-    /** Direct unit test of Quintuple: destructuring and field order (a,b,c,d,e). */
-    @Test fun quintuple_fields() {
-        val q = Quintuple(1.0, 2.0, 3.0, 4.0, 5.0)
-        val (a, b, c, d, e) = q
-        assertTrue(a == 1.0 && b == 2.0 && c == 3.0 && d == 4.0 && e == 5.0)
-        assertEquals(q, Quintuple(1.0, 2.0, 3.0, 4.0, 5.0))
+    /** Поля и вычислитель [FirstKindSolution] — простой носитель данных. */
+    @Test
+    fun firstKindSolutionFields() {
+        val solution = FirstKindSolution(doubleArrayOf(1.0, 2.0), { t -> t * t }, 1e-3, 1e-4, 0.5)
+        assertTrue(solution.coeffs.size == 2)
+        assertTrue(solution.alpha == 1e-3 && solution.resid == 1e-4 && solution.omega == 0.5)
+        assertTrue(abs(solution.eval(3.0) - 9.0) < 1e-12)
+    }
+
+    /** Поля [SolutionFunc]: вычислитель и счётчик итераций. */
+    @Test
+    fun solutionFuncFields() {
+        val solution = SolutionFunc({ t -> t + 1 }, 7)
+        assertTrue(abs(solution.eval(1.0) - 2.0) < 1e-12 && solution.iterations == 7)
     }
 
     /**
-     * Direct unit test of CheckResult: ok flag. measured<=threshold -> ok=true;
-     * measured>threshold -> ok=false. Covers the getter.
+     * Свойства [SplineSpace]: сумма весов равна длине отрезка, матрица Грама
+     * симметрична, квадратичная форма стабилизатора неотрицательна.
      */
-    @Test fun checkResult_flags() {
-        val pass = CheckResult("x", 1e-12, 1e-10, true)
-        val fail = CheckResult("y", 1.0, 1e-10, false)
-        assertTrue(pass.ok)
-        assertFalse(fail.ok)
-    }
-
-    /**
-     * Direct unit test of FirstKindSolution fields and eval wrapper. Reference values
-     * are arbitrary literals (pure data holder, no numeric semantics here).
-     */
-    @Test fun firstKindSolution_fields() {
-        val s = FirstKindSolution(doubleArrayOf(1.0, 2.0), { t -> t * t }, 1e-3, 1e-4, 0.5)
-        assertTrue(s.coeffs.size == 2 && s.alpha == 1e-3 && s.resid == 1e-4 && s.omega == 0.5)
-        assertTrue(abs(s.eval(3.0) - 9.0) < 1e-12)
-    }
-
-    /** Covers SolutionFunc(eval, iterations) holder. */
-    @Test fun solutionFunc_fields() {
-        val sf = SolutionFunc({ t -> t + 1 }, 7)
-        assertTrue(abs(sf.eval(1.0) - 2.0) < 1e-12 && sf.iterations == 7)
-    }
-
-    // ---------------------- ProjFunctional / ProjFunctionals ----------------------
-
-    /**
-     * Covers ProjFunctional.apply / applyValues / absSum and biorthogonality
-     * theta_i(omega_j)=delta_ij of ProjFunctionals (reference: analytic identity,
-     * tol 1e-8). Also covers cTheta(), closedFormInternal, theta() accessor.
-     */
-    @Test fun projFunctionals_biorthogonalityAndApis() {
-        val grid = Grid.uniform(8)
-        val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val funcs = ProjFunctionals(basis)
-        for (i in -2..grid.n - 1) for (j in -2..grid.n - 1) {
-            val v = funcs.theta(i).apply { t -> basis.omega(j, t) }
-            assertTrue(abs(v - if (i == j) 1.0 else 0.0) < 1e-8, "theta_$i(omega_$j)=$v")
-        }
-        // applyValues consistency with apply on the functional's own nodes.
-        val th = funcs.theta(0)
-        val vals = DoubleArray(th.nodes.size) { th.nodes[it] }
-        assertTrue(abs(th.applyValues(vals) - th.apply { t -> t }) < 1e-12)
-        assertTrue(th.absSum() >= 1.0)
-        assertTrue(funcs.cTheta() >= 1.0)
-        // closedFormInternal matches the built internal functional on uniform grid.
-        val cf = funcs.closedFormInternal(2)
-        val approxOk = cf.coeffs.size == 5 && cf.coeffs.all { finite(it) }
-        assertTrue(approxOk)
-        // projectorCoeffs reproduces a function in span (constant 1).
-        val pc = funcs.projectorCoeffs { 1.0 }
-        assertTrue(abs(basis.evalSpline(pc, 0.5) - 1.0) < 1e-8)
-    }
-
-    // ---------------------- SplineSpace ----------------------
-
-    /**
-     * Covers SplineSpace: weights (sum == b-a), wInt (integrals of omega_j), gramR
-     * (symmetric, banded), omegaReg quadratic form (>=0). Reference: weightsSum==1.0
-     * analytic (b-a=1), gram symmetry exact, omegaReg(0)=0.
-     */
-    @Test fun splineSpace_weightsGramReg() {
+    @Test
+    fun splineSpaceWeightsGramAndRegularizer() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val space = SplineSpace(basis, quad)
         assertTrue(abs(space.weightsSum() - 1.0) < 1e-12)
         assertTrue(space.weights.sum() > 0 && space.wInt.all { finite(it) })
-        val dim = space.dim
-        for (i in 0 until dim) for (j in 0 until dim)
-            assertTrue(abs(space.gramR[i][j] - space.gramR[j][i]) < 1e-12)
-        assertTrue(abs(space.omegaReg(DoubleArray(dim))) < 1e-15)
-        assertTrue(space.omegaReg(DoubleArray(dim) { 1.0 }) > 0.0)
+        for (i in 0 until space.dim) {
+            for (j in 0 until space.dim) {
+                assertTrue(abs(space.gramR[i][j] - space.gramR[j][i]) < 1e-12)
+            }
+        }
+        assertTrue(abs(space.omegaReg(DoubleArray(space.dim))) < 1e-15)
+        assertTrue(space.omegaReg(DoubleArray(space.dim) { 1.0 }) > 0.0)
     }
 
-    // ---------------------- Operator + ModelProblem ----------------------
-
     /**
-     * Covers UrysohnOperator.apply / frechet / applyNodes and ModelProblem.rhsExact for
-     * all four problems A,B,C,D (both kinds). Reference: applyNodes(tau, x*at nodes)
-     * matches apply within 1e-9 (analytic consistency); all rhs finite.
+     * Согласованность интерфейсов [UrysohnOperator] и правой части для всех четырёх
+     * модельных задач: вычисление по предвычисленным узлам совпадает с вычислением
+     * через замыкание.
      */
-    @Test fun operator_apis_and_allModelProblems_rhs() {
+    @Test
+    fun operatorApisAgreeForAllProblems() {
         val grid = Grid.uniform(8)
-        for (p in listOf(ModelProblem.A, ModelProblem.B, ModelProblem.C, ModelProblem.D)) {
-            val op = UrysohnOperator(p.kernel, grid, quad)
+        val problems = listOf(
+            UrysonProblem.A, UrysonProblem.B, UrysonProblem.C, UrysonProblem.D,
+        )
+        for (problem in problems) {
+            val op = UrysohnOperator(problem.kernel, grid, quad)
             val t = 0.4
-            val xNodes = DoubleArray(op.gNode.size) { p.exact(op.gNode[it]) }
+            val xNodes = DoubleArray(op.gNode.size) { problem.exact(op.gNode[it]) }
             val viaNodes = op.applyNodes(t, xNodes)
-            val viaClosure = op.apply(t) { s -> p.exact(s) }
-            assertTrue(abs(viaNodes - viaClosure) < 1e-9, "${p.name} applyNodes mismatch")
-            assertTrue(finite(op.frechet(t, { s -> p.exact(s) }, { 1.0 })))
-            assertTrue(finite(p.rhsExact(t, op)))
-            // kernel dkdu finite
-            assertTrue(finite(p.kernel.dkdu(t, 0.3, 1.0)))
+            val viaClosure = op.apply(t) { s -> problem.exact(s) }
+            assertTrue(
+                abs(viaNodes - viaClosure) < 1e-9,
+                "${problem.name}: applyNodes и apply должны совпадать",
+            )
+            assertTrue(finite(op.frechet(t, { s -> problem.exact(s) }, { 1.0 })))
+            assertTrue(finite(problem.rhsExact(t, op)))
+            assertTrue(finite(problem.kernel.dkdu(t, 0.3, 1.0)))
         }
     }
 
-    // ---------------------- CollocationCore ----------------------
-
-    /**
-     * Covers CollocationCore.uAtSupport / xiVector / bMatrix on problem A, n=8.
-     * Reference: xiVector size n+2, bMatrix (n+2)x(n+2), all finite (fixed from run).
-     */
-    @Test fun collocationCore_xiAndJacobian() {
+    /** Вектор `Xi` и якобиан `B` имеют правильные размеры и конечны. */
+    @Test
+    fun collocationCoreProducesFiniteXiAndJacobian() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
-        val op = UrysohnOperator(ModelProblem.A.kernel, grid, quad)
+        val op = UrysohnOperator(UrysonProblem.A.kernel, grid, quad)
         val core = CollocationCore(basis, funcs, op)
-        val c = funcs.projectorCoeffs { t -> ModelProblem.A.exact(t) }
-        val xi = core.xiVector(c)
-        val b = core.bMatrix(c)
+        val coefficients = funcs.projectorCoeffs({ t -> UrysonProblem.A.exact(t) })
+        val xi = core.xiVector(coefficients)
+        val jacobian = core.bMatrix(coefficients)
         assertTrue(xi.size == grid.n + 2 && xi.all { finite(it) })
-        assertTrue(b.size == grid.n + 2 && b.all { row -> row.size == grid.n + 2 && row.all { finite(it) } })
-        assertTrue(core.uAtSupport(c).all { finite(it) })
+        assertTrue(
+            jacobian.size == grid.n + 2 &&
+                jacobian.all { row -> row.size == grid.n + 2 && row.all { finite(it) } },
+        )
+        assertTrue(core.uAtSupport(coefficients).all { finite(it) })
     }
 
-    // ---------------------- SecondKindSolver schemes ----------------------
-
-    /**
-     * Covers SecondKindSolver base/sloan/kulkarni/nystrom for problem A (lambda=-1,
-     * contractive). Reference E_h fixed from current run: base ~1.0e-4 at n=8,
-     * all schemes finite and < 1e-2. Tolerance is a regression ceiling, not theory.
-     */
-    @Test fun problemA_allSchemes() {
-        val s = ctx(ModelProblem.A, GeneratingSystem.B, 8)
-        val exact = { t: Double -> ModelProblem.A.exact(t) }
-        for (sol in listOf(s.base(), s.sloan(), s.kulkarni(), s.nystrom())) {
-            val e = errorEhEval(exact, sol.eval, s.grid)
-            assertTrue(finite(e) && e < 1e-2, "A scheme E_h=$e")
-        }
-        // errorEh(problem,...) overload coverage.
-        assertTrue(finite(errorEh(ModelProblem.A, s.base(), s.grid)))
-    }
-
-    /**
-     * Covers problem B (cubic kernel, lambda=1, NON-contractive -> exercises the Newton
-     * preconditioner path in solveBase/kulkarni that simple iteration could not handle).
-     * Reference E_h fixed from current run: finite and < 1e-1 for base/sloan/nystrom,
-     * basis H, n=8.
-     */
-    @Test fun problemB_nonContractive_schemes() {
-        val s = ctx(ModelProblem.B, GeneratingSystem.H, 8)
-        val exact = { t: Double -> ModelProblem.B.exact(t) }
-        for (sol in listOf(s.base(), s.sloan(), s.nystrom())) {
-            val e = errorEhEval(exact, sol.eval, s.grid)
-            assertTrue(finite(e) && e < 1e-1, "B scheme E_h=$e")
+    /** Все четыре схемы второго рода дают конечный результат на сжимающей задаче A. */
+    @Test
+    fun problemAllSchemesAreFinite() {
+        val solver = solverFor(UrysonProblem.A, GeneratingSystem.B, 8)
+        val exact = { t: Double -> UrysonProblem.A.exact(t) }
+        val solutions = listOf(solver.base(), solver.sloan(), solver.kulkarni(), solver.nystrom())
+        for (solution in solutions) {
+            val error = errorEh(exact, solution.eval, solver.grid)
+            assertTrue(finite(error) && error < 1e-2, "Задача A: E_h = $error")
         }
     }
 
-    /** Convergence sanity (characterization): problem A base E_h decreases n=8->16. */
-    @Test fun problemA_converges() {
-        val e8 = errorEhEval({ t -> ModelProblem.A.exact(t) }, ctx(ModelProblem.A, GeneratingSystem.B, 8).base().eval, Grid.uniform(8))
-        val e16 = errorEhEval({ t -> ModelProblem.A.exact(t) }, ctx(ModelProblem.A, GeneratingSystem.B, 16).base().eval, Grid.uniform(16))
-        assertTrue(e16 < e8, "no convergence e8=$e8 e16=$e16")
+    /**
+     * Задача B с кубическим ядром при `lambda = 1` НЕсжимающая: простая итерация
+     * расходится, поэтому тест проверяет именно ньютоновский путь решателя.
+     */
+    @Test
+    fun problemBNonContractiveSchemesConverge() {
+        val solver = solverFor(UrysonProblem.B, GeneratingSystem.H, 8)
+        val exact = { t: Double -> UrysonProblem.B.exact(t) }
+        for (solution in listOf(solver.base(), solver.sloan(), solver.nystrom())) {
+            val error = errorEh(exact, solution.eval, solver.grid)
+            assertTrue(finite(error) && error < 1e-1, "Задача B: E_h = $error")
+        }
     }
 
-    // ---------------------- FirstKindSolver (Tikhonov/Morozov) ----------------------
+    /** Базовая схема сходится: погрешность убывает при переходе n = 8 -> 16. */
+    @Test
+    fun problemAConverges() {
+        val exact = { t: Double -> UrysonProblem.A.exact(t) }
+        val errorN8 = errorEh(exact, solverFor(UrysonProblem.A, GeneratingSystem.B, 8).base().eval, Grid.uniform(8))
+        val errorN16 = errorEh(exact, solverFor(UrysonProblem.A, GeneratingSystem.B, 16).base().eval, Grid.uniform(16))
+        assertTrue(errorN16 < errorN8, "Нет сходимости: E_8 = $errorN8, E_16 = $errorN16")
+    }
 
     /**
-     * Covers FirstKindSolver for problem C (first kind, smooth kernel): noisyThetaF
-     * (delta=0 branch and delta>0 branch), solveFixedAlpha (Gauss-Newton),
-     * residual, and solveMorozov noise-free path. Reference: solution finite, alpha>0,
-     * resid finite (fixed from current run). Regularization quality not asserted (ill-posed).
+     * Регуляризованный решатель на задаче C: ветви генератора шума при нулевом и
+     * ненулевом уровне, шаг Гаусса–Ньютона, вычисление невязки и путь Морозова без шума.
      */
-    @Test fun problemC_firstKind_morozov_noiseFree() {
+    @Test
+    fun firstKindSolverOnProblemCWithoutNoise() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val space = SplineSpace(basis, quad)
-        val op = UrysohnOperator(ModelProblem.C.kernel, grid, quad)
-        val solver = FirstKindSolver(ModelProblem.C, basis, funcs, space, op)
-        // delta=0 branch of noisyThetaF.
-        val tf0 = solver.noisyThetaF(0.0, 1L)
-        assertTrue(tf0.size == grid.n + 2 && tf0.all { finite(it) })
-        // delta>0 branch (noise scaling).
-        val tfN = solver.noisyThetaF(1e-3, 42L)
-        assertTrue(tfN.all { finite(it) })
-        // solveFixedAlpha + residual.
-        val c0 = funcs.projectorCoeffs { 1.0 }
-        val c = solver.solveFixedAlpha(tf0, 1e-4, c0)
-        assertTrue(c.all { finite(it) } && finite(solver.residual(c, tf0)))
-        // Morozov noise-free path (delta==0 continuation).
-        val sol = solver.solveMorozov(0.0, 1L)
-        assertTrue(sol.alpha > 0 && finite(sol.resid) && finite(sol.eval(0.5)))
+        val op = UrysohnOperator(UrysonProblem.C.kernel, grid, quad)
+        val solver = firstKindSolver(basis, funcs, space, op)
+
+        val thetaExact = noisyThetaCoefficients(UrysonProblem.C, solver, op, grid, quad, 0.0, 1L)
+        assertTrue(thetaExact.size == grid.n + 2 && thetaExact.all { finite(it) })
+
+        val thetaNoisy = noisyThetaCoefficients(UrysonProblem.C, solver, op, grid, quad, 1e-3, 42L)
+        assertTrue(thetaNoisy.all { finite(it) })
+
+        val start = funcs.projectorCoeffs({ 1.0 })
+        val coefficients = solver.solveFixedAlpha(thetaExact, 1e-4, start)
+        assertTrue(coefficients.all { finite(it) })
+        assertTrue(finite(solver.residual(coefficients, thetaExact)))
+
+        val solution = solver.solveMorozov(thetaExact, 0.0)
+        assertTrue(solution.alpha > 0 && finite(solution.resid) && finite(solution.eval(0.5)))
     }
 
     /**
-     * Covers FirstKindSolver Morozov WITH noise (delta>0) and the cubic-kernel problem D,
-     * which exercises the non-zero warm-start restart logic (dK/du(.,.,0)=0 -> B=0).
-     * Reference fixed from current run: chosen solution finite, alpha>0, resid finite.
-     * This is a regression net for the continuation/restart branch, not an accuracy claim.
+     * Путь Морозова с шумом на задаче D с кубическим ядром: `dK/du(t,s,0) = 0`,
+     * поэтому проверяется ветвь перезапуска с ненулевого начального приближения.
      */
-    @Test fun problemD_firstKind_morozov_withNoise() {
+    @Test
+    fun firstKindSolverOnProblemDWithNoise() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
         val funcs = ProjFunctionals(basis)
         val space = SplineSpace(basis, quad)
-        val op = UrysohnOperator(ModelProblem.D.kernel, grid, quad)
-        val solver = FirstKindSolver(ModelProblem.D, basis, funcs, space, op)
-        val sol = solver.solveMorozov(1e-2, 7L)
-        assertTrue(sol.alpha > 0 && finite(sol.resid) && finite(sol.omega))
-        assertTrue(finite(sol.eval(0.3)))
+        val op = UrysohnOperator(UrysonProblem.D.kernel, grid, quad)
+        val solver = firstKindSolver(basis, funcs, space, op)
+        val thetaFDelta = noisyThetaCoefficients(UrysonProblem.D, solver, op, grid, quad, 1e-2, 7L)
+        val solution = solver.solveMorozov(thetaFDelta, 1e-2)
+        assertTrue(solution.alpha > 0 && finite(solution.resid) && finite(solution.omega))
+        assertTrue(finite(solution.eval(0.3)))
+    }
+
+    /**
+     * Генератор шума детерминирован: при одном зерне результат воспроизводится
+     * побитово, при разных — различается.
+     */
+    @Test
+    fun noiseGeneratorIsReproducible() {
+        val grid = Grid.uniform(8)
+        val op = UrysohnOperator(UrysonProblem.C.kernel, grid, quad)
+        val exactRhs = { t: Double -> UrysonProblem.C.rhsExact(t, op) }
+        val first = noisyRightHandSide(exactRhs, grid, quad, 1e-2, 123L)
+        val second = noisyRightHandSide(exactRhs, grid, quad, 1e-2, 123L)
+        val other = noisyRightHandSide(exactRhs, grid, quad, 1e-2, 456L)
+        var differsFromOther = false
+        for (i in 0..20) {
+            val t = i / 20.0
+            assertTrue(first(t) == second(t), "Одно зерно должно давать идентичный шум в точке $t")
+            if (abs(first(t) - other(t)) > 1e-15) differsFromOther = true
+        }
+        assertTrue(differsFromOther, "Разные зёрна должны давать различный шум")
+        // При нулевом уровне шума возвращается исходная правая часть.
+        val noiseless = noisyRightHandSide(exactRhs, grid, quad, 0.0, 1L)
+        assertTrue(noiseless(0.5) == exactRhs(0.5))
     }
 }

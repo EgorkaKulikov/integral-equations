@@ -9,6 +9,7 @@ import numerics.functionals.errorEh
 import kotlin.math.ln
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import problems.fredholm.FredholmProblem
 
 /**
  * Тесты КОМБИНИРОВАННОГО оператора Nyström L_n = P_chi L + (I - P_chi) L^N_h.
@@ -22,7 +23,7 @@ import kotlin.test.assertTrue
  */
 class CombinedNystromTest {
 
-    private fun solverFor(problem: ModelProblem, n: Int): Pair<SecondKindSolver, Grid> {
+    private fun solverFor(problem: FredholmProblem, n: Int): Pair<SecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
@@ -42,7 +43,7 @@ class CombinedNystromTest {
      */
     @Test
     fun combinedIsMoreAccurateThanClassicalNystrom() {
-        val problem = ModelProblem.F2
+        val problem = FredholmProblem.F2
         for (n in listOf(8, 16, 32)) {
             val (solver, grid) = solverFor(problem, n)
             val exact = { t: Double -> problem.exact(t) }
@@ -62,7 +63,7 @@ class CombinedNystromTest {
      */
     @Test
     fun combinedHasHigherConvergenceOrderThanClassical() {
-        val problem = ModelProblem.F2
+        val problem = FredholmProblem.F2
         val exact = { t: Double -> problem.exact(t) }
 
         fun errorsFor(scheme: (SecondKindSolver) -> SolutionFunc): List<Double> =
@@ -88,7 +89,7 @@ class CombinedNystromTest {
     /** Итерированный комбинированный Nyström уточняет комбинированный (аналог итерации Слоана). */
     @Test
     fun iteratedCombinedRefinesCombined() {
-        val problem = ModelProblem.F2
+        val problem = FredholmProblem.F2
         for (n in listOf(8, 16)) {
             val (solver, grid) = solverFor(problem, n)
             val exact = { t: Double -> problem.exact(t) }
@@ -113,7 +114,7 @@ class CombinedNystromTest {
      */
     @Test
     fun combinedIsFarMoreAccurateThanClassicalOnSpanProblem() {
-        val problem = ModelProblem.F2span
+        val problem = FredholmProblem.F2span
         for (n in listOf(8, 16)) {
             val (solver, grid) = solverFor(problem, n)
             val exact = { t: Double -> problem.exact(t) }
@@ -130,7 +131,7 @@ class CombinedNystromTest {
     /** Комбинированный оператор, как и классический, не поддерживает семейство xi (нужны производные). */
     @Test
     fun combinedRejectsDerivativeFamilies() {
-        val problem = ModelProblem.F2
+        val problem = FredholmProblem.F2
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = numerics.functionals.DeBoorFixFunctionals(basis, 1)
