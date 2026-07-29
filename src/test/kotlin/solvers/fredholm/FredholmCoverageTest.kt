@@ -4,6 +4,7 @@ import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
 import numerics.MinimalSplineBasis
+import numerics.SolutionFunc
 import numerics.functionals.AveragingFunctionals
 import numerics.functionals.DeBoorFixFunctionals
 import numerics.functionals.ProjFunctionals
@@ -200,7 +201,7 @@ class FredholmCoverageTest {
 
     /** Trivial coverage of SolutionFunc.eval wrapper. */
     @Test fun solutionFunc_evalWrapper() {
-        val sf = SolutionFunc { t -> 2.0 * t }
+        val sf = SolutionFunc(eval = { t -> 2.0 * t })
         assertTrue(abs(sf.eval(3.0) - 6.0) < 1e-12)
     }
 }

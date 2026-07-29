@@ -4,3 +4,5 @@ build/
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 /.tasks/
+# Виртуальное окружение для разовой внешней сверки со SciPy (см. tools/verify_with_scipy.py)
+/.venv-verify/

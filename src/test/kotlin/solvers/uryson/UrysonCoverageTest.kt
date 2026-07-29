@@ -1,10 +1,10 @@
 package solvers.uryson
 
-import numerics.CheckResult
 import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
 import numerics.MinimalSplineBasis
+import numerics.SolutionFunc
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import problems.uryson.UrysonProblem
@@ -14,7 +14,7 @@ import problems.uryson.noisyThetaCoefficients
 import problems.uryson.secondKindSolver
 import kotlin.math.abs
 import kotlin.test.Test
-import kotlin.test.assertFalse
+
 import kotlin.test.assertTrue
 
 /**
@@ -44,13 +44,6 @@ class UrysonCoverageTest {
         return secondKindSolver(problem, basis, funcs, space, op)
     }
 
-    /** Проверка флага `ok` у [CheckResult]: превышение порога означает провал. */
-    @Test
-    fun checkResultFlags() {
-        assertTrue(CheckResult("x", 1e-12, 1e-10, true).ok)
-        assertFalse(CheckResult("y", 1.0, 1e-10, false).ok)
-    }
-
     /** Поля и вычислитель [FirstKindSolution] — простой носитель данных. */
     @Test
     fun firstKindSolutionFields() {
@@ -60,11 +53,31 @@ class UrysonCoverageTest {
         assertTrue(abs(solution.eval(3.0) - 9.0) < 1e-12)
     }
 
-    /** Поля [SolutionFunc]: вычислитель и счётчик итераций. */
+    /**
+     * Поля [SolutionFunc]: вычислитель, признак сходимости, счётчик итераций
+     * и достигнутая невязка.
+     */
     @Test
     fun solutionFuncFields() {
-        val solution = SolutionFunc({ t -> t + 1 }, 7)
-        assertTrue(abs(solution.eval(1.0) - 2.0) < 1e-12 && solution.iterations == 7)
+        val solution = SolutionFunc(
+            eval = { t -> t + 1 },
+            converged = false,
+            iterations = 7,
+            residual = 1e-5,
+        )
+        assertTrue(abs(solution.eval(1.0) - 2.0) < 1e-12)
+        assertTrue(!solution.converged && solution.iterations == 7 && solution.residual == 1e-5)
+    }
+
+    /**
+     * Значения по умолчанию [SolutionFunc] отвечают ПРЯМЫМ схемам: такие схемы
+     * решают СЛАУ и итераций не выполняют, поэтому сходимость тривиальна.
+     */
+    @Test
+    fun solutionFuncDefaultsDescribeDirectSchemes() {
+        val direct = SolutionFunc(eval = { t -> t })
+        assertTrue(direct.converged, "Прямая схема считается сошедшейся по построению")
+        assertTrue(direct.iterations == 0 && direct.residual == 0.0)
     }
 
     /**

@@ -60,6 +60,52 @@ application {
     mainClass.set("demo.fredholm.FredholmDemoKt")
 }
 
+// --- Внешняя сверка со SciPy: подготовка окружения ---------------------------
+// Сверка со SciPy/NumPy — единственная проверка, не замкнутая на код проекта,
+// поэтому она входит в ОБЫЧНЫЙ набор тестов, а не запускается разово.
+// Окружение готовится автоматически: иначе на машине без SciPy сверка молча
+// пропускалась бы и перестала быть гарантией.
+
+/** Каталог виртуального окружения со SciPy (вне репозитория, см. .gitignore). */
+val scipyVenvDir = layout.projectDirectory.dir(".venv-verify")
+
+/** Интерпретатор внутри venv; на Windows структура каталогов иная. */
+val scipyPython: String = if (System.getProperty("os.name").startsWith("Windows")) {
+    scipyVenvDir.file("Scripts/python.exe").asFile.absolutePath
+} else {
+    scipyVenvDir.file("bin/python").asFile.absolutePath
+}
+
+// Создание venv и установка SciPy/NumPy. Задача идемпотентна: при готовом
+// окружении она ничего не делает, поэтому пригодна как зависимость `test`.
+// К сети обращается только при первом запуске (далее срабатывает файл-маркер).
+tasks.register("setupScipyVerification") {
+    group = "verification"
+    description = "Подготовить окружение Python со SciPy для внешней сверки"
+    val marker = layout.buildDirectory.file("verification/scipy-env.ok")
+    outputs.file(marker)
+    val pythonPath = scipyPython
+    val venvPath = scipyVenvDir.asFile.absolutePath
+    doLast {
+        if (!File(pythonPath).exists()) {
+            logger.lifecycle("Создаётся виртуальное окружение $venvPath")
+            exec { commandLine("python3", "-m", "venv", venvPath) }
+        }
+        val probe = exec {
+            commandLine(pythonPath, "-c", "import scipy, numpy")
+            isIgnoreExitValue = true
+        }
+        if (probe.exitValue != 0) {
+            logger.lifecycle("Устанавливаются SciPy и NumPy (требуется сеть)")
+            exec { commandLine(pythonPath, "-m", "pip", "install", "--quiet", "--upgrade", "pip") }
+            exec { commandLine(pythonPath, "-m", "pip", "install", "--quiet", "scipy", "numpy") }
+        }
+        val markerFile = marker.get().asFile
+        markerFile.parentFile.mkdirs()
+        markerFile.writeText("Окружение SciPy готово: $pythonPath\n")
+    }
+}
+
 // --- Разделение тестов по назначению ------------------------------------------
 // Обычный `test` — быстрый набор для повседневной работы и CI.
 // Из него исключён `BaselineSnapshotTool` — это не проверка, а генератор
@@ -68,7 +114,13 @@ tasks.test {
     useJUnitPlatform()
     filter {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
+        excludeTestsMatching("verification.VerificationArtifactDumpTool")
     }
+    // Смок-тест сверки со SciPy требует готового окружения Python.
+    dependsOn("setupScipyVerification")
+    // Путь к интерпретатору передаётся тесту явно: искать его самостоятельно тест
+    // не должен — иначе на разных машинах он находил бы разные интерпретаторы.
+    systemProperty("scipy.python", scipyPython)
 }
 
 // Снятие эталонного снимка численных результатов (в build/baseline/*.tsv).
@@ -84,22 +136,32 @@ tasks.register<Test>("captureBaseline") {
     outputs.upToDateWhen { false }
 }
 
+// Выгрузка внутренних артефактов (узлы квадратуры, значения базиса, собранные
+// матрицы, образы операторов, правые части, E_h) в build/verification/ для
+// НЕЗАВИСИМОЙ внешней сверки скриптом tools/verify_with_scipy.py.
+// Это не проверка, а генератор данных, поэтому в обычный `test` не входит.
+//
+// ЗАМЕЧАНИЕ об общей сборке: плагин Kover привязывается ко ВСЕМ задачам типа
+// `Test`, поэтому и эта задача, и `captureBaseline` выполняются в составе
+// `./gradlew build`. На корректность это не влияет (обе только пишут файлы в
+// build/ и ничего не проверяют), но удлиняет сборку. Оставлено как есть:
+// побочным эффектом артефакты сверки всегда свежие, а попытка отвязаться от
+// Kover потребовала бы вмешательства в его внутреннюю конфигурацию.
+tasks.register<Test>("dumpVerificationArtifacts") {
+    group = "verification"
+    description = "Выгрузить внутренние артефакты в build/verification/ для сверки со SciPy"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("verification.VerificationArtifactDumpTool") }
+    outputs.upToDateWhen { false }
+}
+
 // --- Настройка измерения покрытия -------------------------------------------
 // Цель — высокое покрытие вычислительного ядра и логики решателей.
-// Демонстрации и бенчмарк живут в отдельном sourceSet `demo` и в отчёт не попадают
-// вовсе, поэтому исключать их по именам классов больше не требуется.
-// Остаются исключёнными только чистые форматтеры: они отвечают за представление
-// чисел, а не за алгоритмы.
-kover {
-    reports {
-        filters {
-            excludes {
-                // Форматирование чисел — задача представления, а не вычислений.
-                classes("numerics.Fmt", "numerics.FmtKt")
-            }
-        }
-    }
-}
+// Демонстрации, бенчмарк и форматтер чисел живут в отдельном sourceSet `demo`
+// и в отчёт не попадают вовсе, поэтому исключений по именам классов не требуется:
+// ранее исключавшийся `numerics.Fmt` перенесён в `demo.format.Fmt`.
 
 // Демонстрационные запуски: каждый решатель печатает свои таблицы сходимости.
 tasks.register<JavaExec>("runFredholm") {

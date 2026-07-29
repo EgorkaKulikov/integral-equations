@@ -6,6 +6,9 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.ParallelAssembly
 import numerics.backend.Backends
+import numerics.backend.LinAlgBackend
+import numerics.backend.MultikCpuBackend
+import numerics.backend.ReferenceBackend
 import numerics.functionals.ProjFunctionals
 import problems.fredholm.FredholmProblem
 import solvers.fredholm.FredholmOperator
@@ -211,6 +214,78 @@ private fun runScalabilityStudy(config: BenchmarkConfig): List<Triple<Int, Measu
     return results
 }
 
+/**
+ * Исследование (C): сравнение бэкендов линейной алгебры.
+ *
+ * Зачем: нативный бэкенд (multik/OpenBLAS) платит за каждый вызов конвертацией
+ * `Array<DoubleArray>` <-> `NDArray`, а `fromD2` читает результат поэлементно. На малых
+ * размерностях эти накладные расходы могут перевешивать выигрыш от нативного BLAS.
+ * Решение об оптимизации должно опираться на измерения, а не на предположения.
+ *
+ * Измеряются четыре операции на размерностях 16, 64, 256, 1024. Данные
+ * детерминированы (фиксированное зерно), матрица для `solve` строго диагонально
+ * доминирующая — иначе на больших размерностях случайная матрица вырождается.
+ */
+private fun runBackendComparison(config: BenchmarkConfig) {
+    println()
+    println("(C) Сравнение бэкендов линейной алгебры (медиана, мс)")
+    println("-".repeat(78))
+    println(
+        "%6s %10s %14s %14s %10s".format(
+            "размер", "операция", "multik,мс", "reference,мс", "multik/ref",
+        ),
+    )
+
+    val savedBackend = Backends.active
+    try {
+        for (size in listOf(16, 64, 256, 1024)) {
+            val random = kotlin.random.Random(seed = 20240517 + size)
+            val a = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
+            val b = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
+            val x = DoubleArray(size) { random.nextDouble(-1.0, 1.0) }
+            // Строго диагонально доминирующая матрица — гарантированно невырожденная.
+            val solvable = Array(size) { i ->
+                DoubleArray(size) { j -> if (i == j) size + 1.0 else a[i][j] / size }
+            }
+
+            val operations = linkedMapOf<String, (LinAlgBackend) -> Double>(
+                "matVec" to { backend -> backend.matVec(a, x)[0] },
+                "matMat" to { backend -> backend.matMat(a, b)[0][0] },
+                "addScaled" to { backend -> backend.addScaled(a, b, 1.5)[0][0] },
+                "solve" to { backend -> backend.solve(solvable, x)[0] },
+            )
+
+            for ((operationName, operation) in operations) {
+                val timings = LinkedHashMap<String, Measurement>()
+                for (backend in listOf<LinAlgBackend>(MultikCpuBackend, ReferenceBackend)) {
+                    // matMat и solve кубичны: на 1024 повторы сокращаются, чтобы бенчмарк
+                    // завершался за разумное время даже на медленном JVM-бэкенде.
+                    val heavy = operationName == "matMat" || operationName == "solve"
+                    val repetitions = if (size >= 512 && heavy) 3 else config.repetitions
+                    val warmups = if (size >= 512 && heavy) 1 else config.warmupRuns
+                    timings[backend.name] = repeatMeasurement(repetitions, warmups) {
+                        val start = System.nanoTime()
+                        blackHole += operation(backend)
+                        System.nanoTime() - start
+                    }
+                }
+                val multik = timings.getValue(MultikCpuBackend.name)
+                val reference = timings.getValue(ReferenceBackend.name)
+                val ratio = multik.median / reference.median
+                println(
+                    "%6d %10s %14.4f %14.4f %10.2f".format(
+                        size, operationName, multik.median, reference.median, ratio,
+                    ),
+                )
+            }
+        }
+    } finally {
+        Backends.use(savedBackend)
+    }
+    println()
+    println(" Колонка multik/ref: <1 — нативный бэкенд быстрее, >1 — быстрее чистый JVM.")
+}
+
 /** Выгружает результаты в CSV, чтобы измерения можно было приложить к отчёту. */
 private fun exportCsv(
     path: String,
@@ -273,6 +348,7 @@ fun main(args: Array<String>) {
     printEnvironment(config)
     val scaling = runScalingStudy(config)
     val scalability = runScalabilityStudy(config)
+    runBackendComparison(config)
     config.csvPath?.let { exportCsv(it, scaling, scalability) }
 
     println()

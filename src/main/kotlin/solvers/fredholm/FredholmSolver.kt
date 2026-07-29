@@ -91,9 +91,6 @@ class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegen
 }
 
 
-/** Результат решения: вычислитель u_h(t). */
-class SolutionFunc(val eval: (Double) -> Double)
-
 /**
  * Линейный решатель уравнения II рода u - L u = f, L = c_L * \mathcal K
  * (c_L = 1 для F2; c_L = -1/alpha для F1 Wazwaz, \mathcal K_eff = -(1/alpha)\mathcal K).
@@ -102,6 +99,14 @@ class SolutionFunc(val eval: (Double) -> Double)
  * Матрицы дискретной задачи:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
  *   g_j      = chi_j(f),          d_j      = chi_j(L f).
+ *
+ * @param throwOnDivergence поведение ИТЕРАЦИОННЫХ схем ([kulkarni] для
+ *        квазиинтерполянтов, [combinedNystrom]) при недостижении сходимости:
+ *        `true` (по умолчанию) — исключение, `false` — результат с
+ *        `converged = false` и достигнутой невязкой в [SolutionFunc.residual].
+ *        На прямые схемы не влияет. Параметр задан на уровне решателя,
+ *        а не каждого метода: это политика обработки ошибок, а не свойство
+ *        отдельной схемы.
  */
 class SecondKindSolver(
     val basis: MinimalSplineBasis,
@@ -111,6 +116,7 @@ class SecondKindSolver(
     val fEff: (Double) -> Double,
     val fEffDeriv: (Double) -> Double,
     val fEffDeriv2: (Double) -> Double = { 0.0 },
+    val throwOnDivergence: Boolean = true,
 ) {
     private companion object {
         /**
@@ -122,6 +128,16 @@ class SecondKindSolver(
 
         /** Критерий останова итерации комбинированного Nyström (равномерная норма в узлах). */
         const val COMBINED_NYSTROM_TOLERANCE = 1e-13
+
+        /**
+         * Предел числа итераций в схеме Кулкарни для квазиинтерполянтов (mu, lambda).
+         * Теоретической гарантии сходимости нет (нет свойства P^2 = P), поэтому
+         * предел обязателен; на модельных задачах достаточно единиц шагов.
+         */
+        const val KULKARNI_QUASI_MAX_ITERATIONS = 200
+
+        /** Критерий останова итерации Кулкарни для квазиинтерполянтов. */
+        const val KULKARNI_QUASI_TOLERANCE = 1e-13
     }
 
     val grid = basis.grid
@@ -197,14 +213,14 @@ class SecondKindSolver(
 
     fun base(): SolutionFunc {
         val c = solveBaseCoeffs()
-        return SolutionFunc { t -> basis.evalSpline(c, t) }
+        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) })
     }
 
     /** Слоан: ~u_h(t) = f(t) + (L u_h)(t). */
     fun sloan(): SolutionFunc {
         val c = solveBaseCoeffs()
         val uNodes = DoubleArray(ng) { basis.evalSpline(c, op.gNode[it]) }
-        return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
+        return SolutionFunc(eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) })
     }
 
     /**
@@ -235,7 +251,7 @@ class SecondKindSolver(
         val wDFun = { t: Double -> fEffDeriv(t) + cL * op.applyDerivNodes(t, yNodes) }
         val wDDFun = { t: Double -> fEffDeriv2(t) + cL * op.applyDeriv2Nodes(t, yNodes) }
         val pwCoeffs = funcs.projectorCoeffs(wFun, wDFun, wDDFun)
-        return SolutionFunc { t -> basis.evalSpline(c, t) + (wFun(t) - basis.evalSpline(pwCoeffs, t)) }
+        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) + (wFun(t) - basis.evalSpline(pwCoeffs, t)) })
     }
 
     /**
@@ -249,7 +265,10 @@ class SecondKindSolver(
         // без понижающей кусочно-линейной интерполяции узловых значений.
         var uFun: (Double) -> Double = { t -> fEff(t) }
         var uNodes = DoubleArray(ng) { fEff(op.gNode[it]) }
-        for (iter in 0 until 200) {
+        var converged = false
+        var performedIterations = 0
+        var lastDiff = Double.NaN
+        for (iter in 0 until KULKARNI_QUASI_MAX_ITERATIONS) {
             val curFun = uFun
             val curNodes = uNodes
             // P_chi u: коэффициенты chi_j(u) по непрерывной u^{(m)} (сохраняет порядок).
@@ -269,17 +288,49 @@ class SecondKindSolver(
             for (k in 0 until ng) diff = maxOf(diff, abs(nextNodes[k] - curNodes[k]))
             uFun = nextFun
             uNodes = nextNodes
-            if (diff < 1e-13) break
+            performedIterations = iter + 1
+            lastDiff = diff
+            if (diff < KULKARNI_QUASI_TOLERANCE) { converged = true; break }
         }
+        // Ранее несошедшийся итерант возвращался МОЛЧА: отличить его от верного
+        // результата было невозможно. Теперы действует единый контракт [reportConvergence].
+        reportConvergence(
+            converged = converged,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Схема Кулкарни для квазиинтерполянта '${funcs.name}' (Фредгольм)",
+            iterations = performedIterations,
+            maxIterations = KULKARNI_QUASI_MAX_ITERATIONS,
+            residual = lastDiff,
+            tolerance = KULKARNI_QUASI_TOLERANCE,
+            hint = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
+                "редукция Кулкарни неприменима и используется простая итерация, требующая " +
+                "сжатия (спектральный радиус оператора меньше единицы)",
+        )
         val finalFun = uFun
-        return SolutionFunc { t -> finalFun(t) }
+        return SolutionFunc(
+            eval = { t -> finalFun(t) },
+            converged = converged,
+            iterations = performedIterations,
+            residual = lastDiff,
+        )
     }
 
-    /** Итерированный Кулкарни: ^u_h^K = f + L u_h^K. */
+    /**
+     * Итерированный Кулкарни: ^u_h^K = f + L u_h^K.
+     *
+     * Признак сходимости НАСЛЕДУЕТСЯ от [kulkarni]: сама итерация Слоана — одно
+     * интегрирование без итераций, но её результат осмыслен лишь тогда, когда
+     * осмыслено исходное приближение.
+     */
     fun iteratedKulkarni(): SolutionFunc {
         val uK = kulkarni()
         val uNodes = DoubleArray(ng) { uK.eval(op.gNode[it]) }
-        return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
+        return SolutionFunc(
+            eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) },
+            converged = uK.converged,
+            iterations = uK.iterations,
+            residual = uK.residual,
+        )
     }
 
     // --- Nyström (сплайн-квадратура; см. docs/REFERENCES.md, раздел 3) -------
@@ -362,7 +413,7 @@ class SecondKindSolver(
     fun nystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
         val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) })
-        return SolutionFunc { t -> nystromEval(t, pts, bAgg, uHat) }
+        return SolutionFunc(eval = { t -> nystromEval(t, pts, bAgg, uHat) })
     }
 
     /**
@@ -374,7 +425,7 @@ class SecondKindSolver(
         val (pts, bAgg) = nystromSupport()
         val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) })
         val uNodes = DoubleArray(ng) { nystromEval(op.gNode[it], pts, bAgg, uHat) }
-        return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
+        return SolutionFunc(eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) })
     }
 
     /**
@@ -400,13 +451,15 @@ class SecondKindSolver(
      * ||L_n|| < 1; при недостижении сходимости бросается исключение (а не возвращается
      * молча неверный результат).
      *
-     * @throws IllegalStateException если итерация не сошлась за отведённое число шагов.
+     * @throws IllegalStateException если итерация не сошлась и [throwOnDivergence] равно `true`.
      */
     fun combinedNystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
         var uFun: (Double) -> Double = { t -> fEff(t) }
         var uAtNodes = DoubleArray(ng) { uFun(op.gNode[it]) }
         var converged = false
+        var performedIterations = 0
+        var lastDiff = Double.NaN
         for (iter in 0 until COMBINED_NYSTROM_MAX_ITERATIONS) {
             val currentFun = uFun
             val currentNodes = uAtNodes
@@ -427,14 +480,27 @@ class SecondKindSolver(
             for (k in 0 until ng) diff = maxOf(diff, abs(nextNodes[k] - currentNodes[k]))
             uFun = nextFun
             uAtNodes = nextNodes
+            performedIterations = iter + 1
+            lastDiff = diff
             if (diff < COMBINED_NYSTROM_TOLERANCE) { converged = true; break }
         }
-        check(converged) {
-            "Комбинированный Nyström не сошёлся за $COMBINED_NYSTROM_MAX_ITERATIONS итераций " +
-                "(требуется ||L_n|| < 1 для сходимости простой итерации)"
-        }
+        reportConvergence(
+            converged = converged,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Комбинированный Nyström (Фредгольм)",
+            iterations = performedIterations,
+            maxIterations = COMBINED_NYSTROM_MAX_ITERATIONS,
+            residual = lastDiff,
+            tolerance = COMBINED_NYSTROM_TOLERANCE,
+            hint = "Для сходимости простой итерации требуется ||L_n|| < 1",
+        )
         val resultFun = uFun
-        return SolutionFunc { t -> resultFun(t) }
+        return SolutionFunc(
+            eval = { t -> resultFun(t) },
+            converged = converged,
+            iterations = performedIterations,
+            residual = lastDiff,
+        )
     }
 
     /**
@@ -444,7 +510,13 @@ class SecondKindSolver(
     fun iteratedCombinedNystrom(): SolutionFunc {
         val combined = combinedNystrom()
         val uNodes = DoubleArray(ng) { combined.eval(op.gNode[it]) }
-        return SolutionFunc { t -> fEff(t) + cL * op.applyNodes(t, uNodes) }
+        // Признак сходимости наследуется от исходного комбинированного оператора.
+        return SolutionFunc(
+            eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) },
+            converged = combined.converged,
+            iterations = combined.iterations,
+            residual = combined.residual,
+        )
     }
 }
 
@@ -472,6 +544,8 @@ class SecondKindSolver(
  * @param rhsDeriv первая производная `f'(t)`.
  * @param rhsDeriv2 вторая производная `f''(t)`; нужна семейству `xi^<0>`.
  * @param alpha параметр регуляризации; должен быть строго положителен.
+ * @param throwOnDivergence политика обработки недостижения сходимости итерационными
+ *        схемами внутреннего решателя; см. [SecondKindSolver.throwOnDivergence].
  * @throws IllegalArgumentException если `alpha <= 0`.
  */
 class FirstKindSolver(
@@ -482,6 +556,7 @@ class FirstKindSolver(
     rhsDeriv: (Double) -> Double,
     rhsDeriv2: (Double) -> Double = { 0.0 },
     val alpha: Double = DEFAULT_REGULARIZATION,
+    val throwOnDivergence: Boolean = true,
 ) {
     companion object {
         /**
@@ -507,7 +582,8 @@ class FirstKindSolver(
     // решатель: без неё семейство xi^<0>, читающее f'', молча получало ноль вместо
     // истинного значения и строило неверную систему без какой-либо диагностики.
     private val fEffDeriv2 = { t: Double -> rhsDeriv2(t) / alpha }
-    private val inner = SecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv, fEffDeriv2)
+    private val inner =
+        SecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence)
 
     /** Базовая коллокационная схема для регуляризованного уравнения. */
     fun base(): SolutionFunc = inner.base()

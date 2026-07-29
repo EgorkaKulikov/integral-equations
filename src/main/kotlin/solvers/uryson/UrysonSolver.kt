@@ -1,18 +1,16 @@
 package solvers.uryson
 
-import java.util.logging.Logger
 import kotlin.math.abs
 import numerics.GaussLegendre
 import numerics.Grid
 import numerics.LinearAlgebra
 import numerics.MinimalSplineBasis
 import numerics.ParallelAssembly
+import numerics.SolutionFunc
 import numerics.functionals.ApproxFunctional
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.ValueFunctional
-
-/** Логгер решателей Урысона: предупреждения о недостижении сходимости и т. п. */
-private val urysonLogger: Logger = Logger.getLogger("solvers.uryson.UrysonSolver")
+import numerics.reportConvergence
 
 /**
  * Применяет функционал к функции значений, явно передавая нулевые производные.
@@ -205,8 +203,26 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
     }
 }
 
-/** Результат решения: вычислитель приближённого решения `x_h(t)` и число итераций. */
-class SolutionFunc(val eval: (Double) -> Double, val iterations: Int)
+
+
+/**
+ * Результат итераций Ньютона в пространстве коэффициентов.
+ *
+ * Ранее [SecondKindSolver.solveBase] возвращал `Pair<DoubleArray, Int>`, из которого
+ * было невозможно узнать, сошлась ли итерация: число итераций, равное пределу,
+ * одинаково возникает и при сходимости на последнем шаге, и при расходимости.
+ *
+ * @param coeffs найденные коэффициенты сплайна.
+ * @param converged признак достижения сходимости.
+ * @param iterations число выполненных итераций.
+ * @param residual последняя достигнутая норма невязки.
+ */
+class NewtonResult(
+    val coeffs: DoubleArray,
+    val converged: Boolean,
+    val iterations: Int,
+    val residual: Double,
+)
 
 /**
  * Ядро коллокационных вычислений: вектор `Xi(c) = Theta_h(U x_h)` и якобиан
@@ -323,6 +339,11 @@ class CollocationCore(
  * @param maxIter предел числа итераций Ньютона в БАЗОВОЙ схеме.
  * @param kulkarniMaxIter предел числа итераций квази-Ньютона в схеме Кулкарни.
  * @param nystromMaxIter предел числа итераций Ньютона в схеме Nyström.
+ * @param throwOnDivergence поведение при недостижении сходимости Ньютона:
+ *        `true` (по умолчанию) — исключение, `false` — результат с
+ *        `converged = false`. Ранее все три схемы только писали предупреждение
+ *        в лог и возвращали результат: при программном использовании библиотеки
+ *        такое предупреждение оставалось незамеченным.
  */
 class SecondKindSolver(
     val basis: MinimalSplineBasis,
@@ -335,6 +356,7 @@ class SecondKindSolver(
     val maxIter: Int = DEFAULT_MAX_ITERATIONS,
     val kulkarniMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
     val nystromMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
+    val throwOnDivergence: Boolean = true,
 ) {
     companion object {
         /** Критерий останова по умолчанию: близко к машинной точности. */
@@ -391,9 +413,10 @@ class SecondKindSolver(
      * итерации, поскольку сходится и при отсутствии сжатия (например, при `lambda = 1`
      * и кубическом ядре).
      *
-     * @return пара «коэффициенты сплайна, число выполненных итераций».
+     * @return коэффициенты сплайна вместе со сведениями о сходимости Ньютона.
+     * @throws IllegalStateException при недостижении сходимости, если [throwOnDivergence].
      */
-    fun solveBase(): Pair<DoubleArray, Int> {
+    fun solveBase(): NewtonResult {
         val c = thetaF.copyOf()
         var iter = 0
         val newtonTol = maxOf(tol, NEWTON_TOLERANCE_FLOOR)
@@ -411,13 +434,16 @@ class SecondKindSolver(
             lastStep = LinearAlgebra.normInf(delta)
             if (lastStep < newtonTol) { converged = true; break }
         }
-        if (!converged) {
-            urysonLogger.warning(
-                "Ньютон (solveBase) не сошёлся за $iter итераций (предел maxIter=$maxIter): " +
-                    "последняя невязка ||F||=$lastResidual, норма шага ||delta||=$lastStep",
-            )
-        }
-        return c to iter
+        reportConvergence(
+            converged = converged,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Ньютон (базовая схема Урысона)",
+            iterations = iter,
+            maxIterations = maxIter,
+            residual = lastResidual,
+            tolerance = newtonTol,
+        )
+        return NewtonResult(c, converged, iter, lastResidual)
     }
 
     /** Шаг Ньютона с якобианом `J = I - lambda B(c)` (строки собираются независимо). */
@@ -433,16 +459,28 @@ class SecondKindSolver(
 
     /** Базовое приближение `x_h` как сплайн. */
     fun base(): SolutionFunc {
-        val (c, iterations) = solveBase()
-        return SolutionFunc({ t -> basis.evalSpline(c, t) }, iterations)
+        val newton = solveBase()
+        val c = newton.coeffs
+        return SolutionFunc(
+            eval = { t -> basis.evalSpline(c, t) },
+            converged = newton.converged,
+            iterations = newton.iterations,
+            residual = newton.residual,
+        )
     }
 
     /** Итерация Слоана: `\tilde x_h(t) = f(t) + lambda (U x_h)(t)`. */
     fun sloan(): SolutionFunc {
-        val (c, iterations) = solveBase()
+        val newton = solveBase()
+        val c = newton.coeffs
         val splineSolution = { t: Double -> basis.evalSpline(c, t) }
         val eval = { t: Double -> rhs(t) + lambda * op.apply(t) { s -> splineSolution(s) } }
-        return SolutionFunc(eval, iterations)
+        return SolutionFunc(
+            eval = eval,
+            converged = newton.converged,
+            iterations = newton.iterations,
+            residual = newton.residual,
+        )
     }
 
     /**
@@ -495,18 +533,25 @@ class SecondKindSolver(
             lastStep = LinearAlgebra.normInf(delta)
             if (lastStep < newtonTol) { converged = true; break }
         }
-        if (!converged) {
-            urysonLogger.warning(
-                "Квази-Ньютон (kulkarni) не сошёлся за $iter итераций " +
-                    "(предел kulkarniMaxIter=$kulkarniMaxIter): последняя невязка ||F||=$lastResidual, " +
-                    "норма шага ||delta||=$lastStep",
-            )
-        }
+        reportConvergence(
+            converged = converged,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Квази-Ньютон (схема Кулкарни Урысона)",
+            iterations = iter,
+            maxIterations = kulkarniMaxIter,
+            residual = lastResidual,
+            tolerance = newtonTol,
+        )
         val yhNodes = DoubleArray(op.gNode.size) { basis.evalSpline(c, op.gNode[it]) }
         val gAtSupport = { t: Double -> rhs(t) + lambda * op.applyNodes(t, yhNodes) }
         val gCoeffs = funcs.projectorCoeffs(gAtSupport)
         val eval = { t: Double -> basis.evalSpline(c, t) + (gAtSupport(t) - basis.evalSpline(gCoeffs, t)) }
-        return SolutionFunc(eval, iter)
+        return SolutionFunc(
+            eval = eval,
+            converged = converged,
+            iterations = iter,
+            residual = lastResidual,
+        )
     }
 
     /**
@@ -582,14 +627,22 @@ class SecondKindSolver(
             lastStep = LinearAlgebra.normInf(delta)
             if (lastStep < newtonTol) { converged = true; break }
         }
-        if (!converged) {
-            urysonLogger.warning(
-                "Ньютон (nystrom) не сошёлся за $iter итераций (предел nystromMaxIter=$nystromMaxIter): " +
-                    "последняя невязка ||F||=$lastResidual, норма шага ||delta||=$lastStep",
-            )
-        }
+        reportConvergence(
+            converged = converged,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Ньютон (схема Nyström Урысона)",
+            iterations = iter,
+            maxIterations = nystromMaxIter,
+            residual = lastResidual,
+            tolerance = newtonTol,
+        )
         val xFinal = x
-        return SolutionFunc({ t -> evalAtVals(t, xFinal) }, iter)
+        return SolutionFunc(
+            eval = { t -> evalAtVals(t, xFinal) },
+            converged = converged,
+            iterations = iter,
+            residual = lastResidual,
+        )
     }
 }
 
@@ -626,6 +679,14 @@ class FirstKindSolution(
  * @param tau коэффициент запаса в принципе Морозова; теория требует лишь `tau > 1`.
  * @param gnTol критерий останова Гаусса–Ньютона по норме шага.
  * @param gnMaxIter предел числа итераций Гаусса–Ньютона при фиксированном `alpha`.
+ * @param throwOnDivergence поведение при недостижении сходимости Гаусса–Ньютона.
+ *        ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ — `false`, в отличие от остальных решателей.
+ *        Причина: [solveFixedAlpha] вызывается внутри гомотопии [solveMorozov]
+ *        десятки раз с тёплым стартом, и недостижение шагового критерия на
+ *        ОТДЕЛЬНОМ `alpha` — штатная часть пути по параметру регуляризации
+ *        (некорректная задача, промежуточные `alpha` заведомо плохо обусловлены),
+ *        а не ошибка: итоговое решение выбирается по принципу невязки Морозова.
+ *        Предупреждение в лог пишется в любом случае.
  */
 class FirstKindSolver(
     val basis: MinimalSplineBasis,
@@ -635,6 +696,7 @@ class FirstKindSolver(
     val tau: Double = DEFAULT_TAU,
     val gnTol: Double = DEFAULT_GN_TOLERANCE,
     val gnMaxIter: Int = DEFAULT_GN_MAX_ITERATIONS,
+    val throwOnDivergence: Boolean = false,
 ) {
     companion object {
         /**
@@ -715,9 +777,16 @@ class FirstKindSolver(
             lastStep = LinearAlgebra.normInf(delta)
             if (lastStep < gnTol) return c
         }
-        urysonLogger.warning(
-            "Гаусс–Ньютон (solveFixedAlpha, alpha=$alpha) не сошёлся за $gnMaxIter итераций: " +
-                "норма шага ||delta||=$lastStep",
+        reportConvergence(
+            converged = false,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Гаусс–Ньютон (Урысон, I род, alpha=$alpha)",
+            iterations = gnMaxIter,
+            maxIterations = gnMaxIter,
+            residual = lastStep,
+            tolerance = gnTol,
+            hint = "На отдельном alpha это ожидаемо внутри гомотопии по параметру " +
+                "регуляризации; итоговое alpha выбирается по принципу невязки Морозова",
         )
         return c
     }

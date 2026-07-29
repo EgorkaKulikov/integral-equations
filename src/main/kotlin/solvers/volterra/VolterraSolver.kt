@@ -120,9 +120,6 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
     }
 }
 
-/** Результат решения: вычислитель приближённого решения `u_h(t)` в произвольной точке. */
-class SolutionFunc(val eval: (Double) -> Double)
-
 /**
  * Линейный решатель уравнения Вольтерры II рода u - L u = f, L = c_L * \mathcal V,
  * где (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds (ПЕРЕМЕННЫЙ верхний предел).
@@ -135,6 +132,12 @@ class SolutionFunc(val eval: (Double) -> Double)
  * Матрицы дискретной задачи:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
  *   g_j      = chi_j(f),          d_j      = chi_j(L f).
+ *
+ * @param throwOnDivergence поведение ИТЕРАЦИОННЫХ схем ([kulkarni] для
+ *        квазиинтерполянтов, [combinedNystrom]) при недостижении сходимости:
+ *        `true` (по умолчанию) — исключение, `false` — результат с
+ *        `converged = false` и достигнутой невязкой в [numerics.SolutionFunc.residual].
+ *        На прямые схемы не влияет.
  */
 class SecondKindSolver(
     val basis: MinimalSplineBasis,
@@ -144,6 +147,7 @@ class SecondKindSolver(
     val fEff: (Double) -> Double,
     val fEffDeriv: (Double) -> Double,
     val fEffDeriv2: (Double) -> Double = { 0.0 },
+    val throwOnDivergence: Boolean = true,
 ) {
     private companion object {
         /**
@@ -251,14 +255,14 @@ class SecondKindSolver(
 
     fun base(): SolutionFunc {
         val c = solveBaseCoeffs()
-        return SolutionFunc { t -> basis.evalSpline(c, t) }
+        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) })
     }
 
     /** Слоан: ~u_h(t) = f(t) + (L u_h)(t). u_h — сплайн, L применяется замыканием. */
     fun sloan(): SolutionFunc {
         val c = solveBaseCoeffs()
         val splineImage = applyL { s -> basis.evalSpline(c, s) }
-        return SolutionFunc { t -> fEff(t) + splineImage(t) }
+        return SolutionFunc(eval = { t -> fEff(t) + splineImage(t) })
     }
 
     /**
@@ -293,7 +297,7 @@ class SecondKindSolver(
         val wDFun = { t: Double -> fEffDeriv(t) + yhImageDeriv(t) }
         val wDDFun = { t: Double -> fEffDeriv2(t) + yhImageDeriv2(t) }
         val pwCoeffs = funcs.projectorCoeffs(wFun, wDFun, wDDFun)
-        return SolutionFunc { t -> basis.evalSpline(c, t) + (wFun(t) - basis.evalSpline(pwCoeffs, t)) }
+        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) + (wFun(t) - basis.evalSpline(pwCoeffs, t)) })
     }
 
     /**
@@ -315,6 +319,9 @@ class SecondKindSolver(
         // Контрольные точки только для критерия останова (в самой итерации не участвуют).
         val checkPoints = DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
         var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
+        var converged = false
+        var performedIterations = 0
+        var lastDiff = Double.NaN
         for (iter in 0 until KULKARNI_QUASI_MAX_ITERATIONS) {
             val curFun = uFun
             val pc = funcs.projectorCoeffs(curFun)
@@ -331,17 +338,47 @@ class SecondKindSolver(
             for (k in nextAtCheck.indices) diff = maxOf(diff, abs(nextAtCheck[k] - uAtCheck[k]))
             uFun = nextFun
             uAtCheck = nextAtCheck
-            if (diff < KULKARNI_QUASI_TOLERANCE) break
+            performedIterations = iter + 1
+            lastDiff = diff
+            if (diff < KULKARNI_QUASI_TOLERANCE) { converged = true; break }
         }
+        // Ранее несошедшийся итерант возвращался МОЛЧА (как и в решателе Фредгольма);
+        // теперь действует единый контракт [reportConvergence].
+        reportConvergence(
+            converged = converged,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Схема Кулкарни для квазиинтерполянта '${funcs.name}' (Вольтерра)",
+            iterations = performedIterations,
+            maxIterations = KULKARNI_QUASI_MAX_ITERATIONS,
+            residual = lastDiff,
+            tolerance = KULKARNI_QUASI_TOLERANCE,
+            hint = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
+                "редукция Кулкарни неприменима и используется простая итерация",
+        )
         val finalFun = uFun
-        return SolutionFunc { t -> finalFun(t) }
+        return SolutionFunc(
+            eval = { t -> finalFun(t) },
+            converged = converged,
+            iterations = performedIterations,
+            residual = lastDiff,
+        )
     }
 
-    /** Итерированный Кулкарни: ^u_h^K = f + L u_h^K. */
+    /**
+     * Итерированный Кулкарни: ^u_h^K = f + L u_h^K.
+     *
+     * Признак сходимости наследуется от [kulkarni]: сама итерация Слоана итераций
+     * не выполняет, но её результат осмыслен лишь при осмысленном исходном приближении.
+     */
     fun iteratedKulkarni(): SolutionFunc {
         val kulkarniSolution = kulkarni()
         val kulkarniImage = applyL { s -> kulkarniSolution.eval(s) }
-        return SolutionFunc { t -> fEff(t) + kulkarniImage(t) }
+        return SolutionFunc(
+            eval = { t -> fEff(t) + kulkarniImage(t) },
+            converged = kulkarniSolution.converged,
+            iterations = kulkarniSolution.iterations,
+            residual = kulkarniSolution.residual,
+        )
     }
 
     // --- Nyström: сплайн-квадратура с зависящими от t весами --------------------
@@ -436,7 +473,7 @@ class SecondKindSolver(
     fun nystrom(): SolutionFunc {
         val sup = nystromSupport()
         val uHat = nystromSolve(sup)
-        return SolutionFunc { t -> nystromEval(sup, uHat, t) }
+        return SolutionFunc(eval = { t -> nystromEval(sup, uHat, t) })
     }
 
     /**
@@ -448,7 +485,7 @@ class SecondKindSolver(
         val sup = nystromSupport()
         val uHat = nystromSolve(sup)
         val uN = applyL { s -> nystromEval(sup, uHat, s) }
-        return SolutionFunc { t -> fEff(t) + uN(t) }
+        return SolutionFunc(eval = { t -> fEff(t) + uN(t) })
     }
 
     /**
@@ -463,7 +500,7 @@ class SecondKindSolver(
      * АДАПТАЦИЯ: доказательства суперсходимости в известной литературе НЕТ. Поведение
      * следует трактовать как численное наблюдение.
      *
-     * @throws IllegalStateException если простая итерация не сошлась.
+     * @throws IllegalStateException если итерация не сошлась и [throwOnDivergence] равно `true`.
      */
     fun combinedNystrom(): SolutionFunc {
         val sup = nystromSupport()
@@ -471,6 +508,8 @@ class SecondKindSolver(
         val checkPoints = DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
         var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
         var converged = false
+        var performedIterations = 0
+        var lastDiff = Double.NaN
         for (iter in 0 until COMBINED_NYSTROM_MAX_ITERATIONS) {
             val currentFun = uFun
             val currentAtPoints = DoubleArray(sup.pts.size) { currentFun(sup.pts[it]) }
@@ -494,21 +533,42 @@ class SecondKindSolver(
             for (k in nextAtCheck.indices) diff = maxOf(diff, abs(nextAtCheck[k] - uAtCheck[k]))
             uFun = nextFun
             uAtCheck = nextAtCheck
+            performedIterations = iter + 1
+            lastDiff = diff
             if (diff < COMBINED_NYSTROM_TOLERANCE) { converged = true; break }
         }
-        check(converged) {
-            "Комбинированный Nyström (Вольтерра) не сошёлся за " +
-                "$COMBINED_NYSTROM_MAX_ITERATIONS итераций"
-        }
+        reportConvergence(
+            converged = converged,
+            throwOnDivergence = throwOnDivergence,
+            methodName = "Комбинированный Nyström (Вольтерра)",
+            iterations = performedIterations,
+            maxIterations = COMBINED_NYSTROM_MAX_ITERATIONS,
+            residual = lastDiff,
+            tolerance = COMBINED_NYSTROM_TOLERANCE,
+            hint = "Для сходимости простой итерации требуется ||L_n|| < 1",
+        )
         val resultFun = uFun
-        return SolutionFunc { t -> resultFun(t) }
+        return SolutionFunc(
+            eval = { t -> resultFun(t) },
+            converged = converged,
+            iterations = performedIterations,
+            residual = lastDiff,
+        )
     }
 
-    /** Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с точным L. */
+    /**
+     * Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с точным L.
+     * Признак сходимости наследуется от [combinedNystrom].
+     */
     fun iteratedCombinedNystrom(): SolutionFunc {
         val combined = combinedNystrom()
         val image = applyL { s -> combined.eval(s) }
-        return SolutionFunc { t -> fEff(t) + image(t) }
+        return SolutionFunc(
+            eval = { t -> fEff(t) + image(t) },
+            converged = combined.converged,
+            iterations = combined.iterations,
+            residual = combined.residual,
+        )
     }
 }
 
@@ -530,8 +590,25 @@ class SecondKindSolver(
  * которое решается обычной схемой второго рода с `c_L = 1`. Источник метода указан
  * в `docs/REFERENCES.md` (раздел «Уравнения первого рода»).
  *
- * Случай `m = 1` (однократное дифференцирование) применим только при `K(t,t) != 0`;
- * это проверяется при создании решателя.
+ * Случай `m = 1` (однократное дифференцирование) применим только при `K(t,t) != 0`.
+ *
+ * ДИАГНОСТИКА ВЫРОЖДЕНИЯ ДИАГОНАЛИ — два независимых рубежа:
+ *
+ *  1. *Предварительная проверка при создании* — по всем точкам, где деление реально
+ *     выполняется на регулярной основе: узлы сетки, середины интервалов, гауссовы узлы
+ *     составной квадратуры редуцированного оператора и точки шаблона конечной разности
+ *     вокруг каждой из них. Даёт раннюю и дешёвую диагностику до начала счёта.
+ *  2. *Защита в самой точке деления* ([safeDiagonal]) — срабатывает при ЛЮБОМ вычислении,
+ *     в том числе в произвольной точке `t`, которую запросил пользователь у готового
+ *     решения. Именно она даёт гарантию: молчаливого `NaN`/`Inf` не возникает нигде.
+ *
+ * Второй рубеж необходим, потому что множество точек деления не является конечным и
+ * предвычислимым: оператор Вольтерры интегрирует по `[a,t]` с УСЕЧЁННОЙ последней
+ * ячейкой, поэтому гауссовы узлы зависят от `t`, а итерация Слоана вычисляет `g(t)`
+ * в любой запрошенной точке. Ранее в такой ситуации возвращался `NaN` без какого-либо
+ * сигнала: например, при диагонали, положительной в узлах и серединах, но нулевой
+ * в промежуточной точке, `base()` давала правдоподобное `E_h ~ 1.3e-5`, а `sloan()`
+ * молча возвращала `NaN`.
  *
  * @param basis базис минимальных сплайнов.
  * @param funcs семейство аппроксимационных функционалов.
@@ -540,8 +617,13 @@ class SecondKindSolver(
  * @param smoothPart гладкая часть решения, известная аналитически; из-под конечной
  *        разности она выносится, чтобы не усиливать шум (см. пояснение к [gEffDeriv]).
  * @param smoothPartDeriv производная гладкой части.
- * @throws IllegalArgumentException если `K(t,t)` близко к нулю в контрольных точках
- *         либо выбрано семейство функционалов, требующее второй производной.
+ * @param throwOnDivergence политика обработки недостижения сходимости итерационными
+ *        схемами внутреннего решателя; см. [SecondKindSolver.throwOnDivergence].
+ * @throws IllegalArgumentException если `K(t,t)` близко к нулю в контрольных точках;
+ *         если длина отрезка недостаточна для шаблона конечной разности; либо если
+ *         выбрано семейство функционалов, требующее второй производной.
+ * @throws IllegalStateException если `K(t,t)` обращается в ноль в точке деления,
+ *         обнаруженной уже во время счёта (см. [safeDiagonal]).
  */
 class FirstKindSolver(
     val basis: MinimalSplineBasis,
@@ -550,6 +632,7 @@ class FirstKindSolver(
     rhsDeriv: (Double) -> Double,
     smoothPart: (Double) -> Double,
     smoothPartDeriv: (Double) -> Double,
+    val throwOnDivergence: Boolean = true,
 ) {
     private companion object {
         /**
@@ -568,10 +651,28 @@ class FirstKindSolver(
          * При меньшем шаге (например, `1e-6`, оптимальном для второго порядка) начинает
          * доминировать ошибка округления и шум квадратуры.
          *
-         * ОГРАНИЧЕНИЕ: шаг абсолютный, поэтому на очень коротких отрезках
-         * (`b - a` порядка `1e-3` и меньше) шаблон `t ± 4h` выйдет за пределы области.
+         * ШАГ ОСТАВЛЕН АБСОЛЮТНЫМ ОСОЗНАННО. Относительный шаг (доля от `b - a`) снял бы
+         * ограничение на длину отрезка, но одновременно изменил бы численные результаты
+         * на ВСЕХ существующих задачах, включая V1: величина шага входит в ошибку
+         * аппроксимации `O(h^4)` и в ошибку округления `O(eps/h)`, поэтому смена шага
+         * сдвигает `E_h` в последних значащих цифрах. Такая замена — обоснованное
+         * изменение алгоритма, требующее осознанной пересъёмки эталона, и она не входит
+         * в задачу «добавить недостающую диагностику». Вместо этого отрезки, на которых
+         * шаблон не помещается, ЯВНО ЗАПРЕЩЕНЫ (см. [MIN_INTERVAL_STENCIL_STEPS]).
          */
         const val FINITE_DIFFERENCE_STEP = 1e-3
+
+        /**
+         * Минимальная длина отрезка `b - a`, выраженная в шагах [FINITE_DIFFERENCE_STEP].
+         *
+         * Оценка худшего случая по ветвям [deriv4]. Односторонняя ветвь выбирается для
+         * точек, отстоящих от конца меньше чем на `2h`, а её шаблон тянется на `4h` в
+         * противоположную сторону: суммарный охват достигает `2h + 4h = 6h`. Поэтому
+         * при `b - a >= 6h` шаблон гарантированно остаётся внутри `[a,b]` при любом `t`,
+         * а при меньшей длине — выходит за пределы, где ядро и оператор доопределены
+         * нулём, что молча исказило бы производную.
+         */
+        const val MIN_INTERVAL_STENCIL_STEPS = 6
 
         /**
          * Относительный допуск при сравнении точки с концами отрезка: защищает выбор
@@ -586,27 +687,56 @@ class FirstKindSolver(
     private val grid = basis.grid
     private val quad = GaussLegendre(REDUCED_OPERATOR_QUADRATURE_ORDER)
 
+    /** Ядро исходного уравнения I рода (нужно и в методах, не только в инициализаторах). */
+    private val sourceKernel = kernel
+
+    /**
+     * Диагональ ядра `K(t,t)` С ПРОВЕРКОЙ — знаменатель редукции I рода ко II.
+     *
+     * ВСЕ деления на диагональ выполняются через эту функцию, поэтому вырождение не может
+     * пройти незамеченным ни в одной точке — включая те, что невозможно перечислить
+     * заранее (гауссовы узлы усечённой ячейки `[x_k, t]` и произвольные точки `t`,
+     * запрошенные у готового решения).
+     *
+     * @throws IllegalStateException если `|K(t,t)|` ниже [KERNEL_DIAGONAL_TOLERANCE].
+     */
+    private fun safeDiagonal(t: Double): Double {
+        val diagonal = sourceKernel.k(t, t)
+        check(abs(diagonal) >= KERNEL_DIAGONAL_TOLERANCE) {
+            "Решатель уравнения Вольтерры I рода требует K(t,t) != 0 (случай m=1): " +
+                "в точке деления t=$t получено K(t,t)=$diagonal " +
+                "(|K(t,t)|=${abs(diagonal)} < порога $KERNEL_DIAGONAL_TOLERANCE). " +
+                "Эта точка не совпадает ни с узлом сетки, ни с серединой интервала, " +
+                "поэтому предварительная проверка её не охватила."
+        }
+        return diagonal
+    }
+
     /** Диагональ ядра `K(t,t)` — знаменатель редукции первого рода ко второму. */
-    private val kernelDiagonal = { t: Double -> kernel.k(t, t) }
+    private val kernelDiagonal = { t: Double -> safeDiagonal(t) }
 
     init {
+        // Отрезок обязан вмещать шаблон конечной разности: шаг абсолютный, а значит,
+        // на коротком отрезке точки t ± k*h вышли бы за [a,b], где ядро и оператор
+        // доопределены нулём — производная была бы искажена молча.
+        val intervalLength = grid.b - grid.a
+        val requiredLength = MIN_INTERVAL_STENCIL_STEPS * FINITE_DIFFERENCE_STEP
+        require(intervalLength >= requiredLength) {
+            "Решатель уравнения Вольтерры I рода неприменим на слишком коротком отрезке: " +
+                "b - a = $intervalLength, а шаблон конечной разности четвёртого порядка требует " +
+                "не менее $MIN_INTERVAL_STENCIL_STEPS шагов по $FINITE_DIFFERENCE_STEP, то есть " +
+                "b - a >= $requiredLength. Шаг разности абсолютен и не масштабируется с длиной " +
+                "отрезка, иначе точки шаблона выйдут за пределы области определения."
+        }
         // Редукция делит на K(t,t), поэтому обращение диагонали в ноль недопустимо.
-        // Проверяем узлы сетки и середины интервалов — точки, где деление реально
-        // выполняется. Без этой проверки ядро со слабой особенностью (например K = t - s,
-        // где K(t,t) = 0) дало бы NaN/Inf без какой-либо диагностики.
-        val breakpoints = grid.breakpoints
-        for (i in breakpoints.indices) {
-            val samples = if (i < breakpoints.size - 1) {
-                doubleArrayOf(breakpoints[i], 0.5 * (breakpoints[i] + breakpoints[i + 1]))
-            } else {
-                doubleArrayOf(breakpoints[i])
-            }
-            for (t in samples) {
-                val diagonal = kernelDiagonal(t)
-                require(abs(diagonal) >= KERNEL_DIAGONAL_TOLERANCE) {
-                    "Решатель уравнения Вольтерры I рода требует K(t,t) != 0 (случай m=1); " +
-                        "|K(t,t)|=${abs(diagonal)} при t=$t слишком мало"
-                }
+        // Проверяем ВСЕ точки, где деление выполняется на регулярной основе. Ранее
+        // проверялись только узлы и середины, хотя главный потребитель деления — это
+        // квадратура редуцированного оператора и шаблон конечной разности.
+        for (t in diagonalCheckPoints()) {
+            val diagonal = kernel.k(t, t)
+            require(abs(diagonal) >= KERNEL_DIAGONAL_TOLERANCE) {
+                "Решатель уравнения Вольтерры I рода требует K(t,t) != 0 (случай m=1); " +
+                    "K(t,t)=$diagonal при t=$t (|K(t,t)|=${abs(diagonal)}) слишком мало"
             }
         }
         // Семейство xi^<0> требует ВТОРОЙ производной образа (Wu)'' и правой части g''.
@@ -620,6 +750,52 @@ class FirstKindSolver(
                 "после редукции I->II рода вторая производная ядра недоступна аналитически. " +
                 "Используйте theta, xi^<1>, xi^<2>, mu или lambda."
         }
+    }
+
+    /**
+     * Точки, в которых редукция гарантированно делит на `K(t,t)` при любом сценарии.
+     *
+     * Собираются три группы:
+     *
+     *  1. узлы сетки и середины интервалов — опорные точки функционалов `theta`;
+     *  2. гауссовы узлы составной квадратуры редуцированного оператора по полным ячейкам
+     *     сетки — именно здесь `gEff` и редуцированное ядро вычисляются чаще всего;
+     *  3. весь шаблон конечной разности `t ± k*h`, `k = 1..4`, вокруг каждой точки
+     *     групп 1 и 2 — эти точки не совпадают ни с узлами, ни с серединами.
+     *
+     * Набор НЕ исчерпывающий и таким быть не может: оператор Вольтерры интегрирует по
+     * `[a,t]` с усечённой последней ячейкой, поэтому его гауссовы узлы зависят от `t`.
+     * Окончательную гарантию даёт [safeDiagonal], а этот список обеспечивает раннюю
+     * диагностику ещё до начала счёта.
+     */
+    private fun diagonalCheckPoints(): DoubleArray {
+        val breakpoints = grid.breakpoints
+        val (referenceNodes, _) = quad.refNodesWeights()
+        val base = ArrayList<Double>()
+        for (i in breakpoints.indices) {
+            base.add(breakpoints[i])
+            if (i < breakpoints.size - 1) {
+                val lo = breakpoints[i]
+                val hi = breakpoints[i + 1]
+                base.add(0.5 * (lo + hi))
+                // Гауссовы узлы ячейки [x_i, x_{i+1}] составной квадратуры.
+                val half = 0.5 * (hi - lo)
+                val mid = 0.5 * (hi + lo)
+                for (node in referenceNodes) base.add(mid + half * node)
+            }
+        }
+        // Шаблон конечной разности вокруг каждой базовой точки; точки вне [a,b]
+        // отбрасываются — там срабатывает односторонняя ветвь deriv4.
+        val all = ArrayList<Double>(base)
+        for (t in base) {
+            for (k in 1..4) {
+                val left = t - k * FINITE_DIFFERENCE_STEP
+                val right = t + k * FINITE_DIFFERENCE_STEP
+                if (left >= grid.a) all.add(left)
+                if (right <= grid.b) all.add(right)
+            }
+        }
+        return all.toDoubleArray()
     }
 
     /**
@@ -683,6 +859,7 @@ class FirstKindSolver(
 
     private val inner = SecondKindSolver(
         basis, funcs, reducedOperator, cL = 1.0, fEff = gEff, fEffDeriv = gEffDeriv,
+        throwOnDivergence = throwOnDivergence,
     )
 
     /** Базовая коллокационная схема для редуцированного уравнения. */

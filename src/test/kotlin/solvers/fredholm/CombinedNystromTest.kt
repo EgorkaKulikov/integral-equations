@@ -4,6 +4,7 @@ import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
 import numerics.MinimalSplineBasis
+import numerics.SolutionFunc
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import kotlin.math.ln

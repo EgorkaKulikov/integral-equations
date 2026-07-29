@@ -7,6 +7,7 @@ import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
 import numerics.MinimalSplineBasis
+import numerics.SolutionFunc
 import numerics.functionals.AveragingFunctionals
 import numerics.functionals.DeBoorFixFunctionals
 import numerics.functionals.ProjFunctionals
@@ -242,7 +243,7 @@ class VolterraCoverageTest {
 
     /** Trivial coverage of SolutionFunc.eval wrapper. */
     @Test fun solutionFunc_evalWrapper() {
-        val sf = SolutionFunc { t -> t + 1.0 }
+        val sf = SolutionFunc(eval = { t -> t + 1.0 })
         assertTrue(abs(sf.eval(4.0) - 5.0) < 1e-12)
     }
 }

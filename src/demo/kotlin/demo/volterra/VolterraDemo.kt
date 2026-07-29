@@ -1,6 +1,6 @@
 package demo.volterra
 
-import numerics.Fmt
+import demo.format.Fmt
 import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
