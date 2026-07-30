@@ -67,6 +67,30 @@ class PublishedValuesTest {
 
         /** Порядок квадратуры, единый для всех расчётов (как в демонстрациях и эталоне). */
         const val QUADRATURE_ORDER = 8
+
+        /**
+         * Нижние границы числа фактически выполняемых сверок по каждому тесту.
+         *
+         * Смысл — ЗАЩИТА ОТ ТИХОГО ВЫРОЖДЕНИЯ. Сверка устроена по принципу
+         * «есть ключ в эталоне — сверяем», поэтому опечатка в формировании ключа
+         * сама по себе НЕ вызвала бы падения: тест просто перестал бы сравнивать
+         * хоть что-либо и остался бы ложно-зелёным. Порог замыкает эту дыру.
+         *
+         * Значения взяты из фактического прогона и сверены с числом ключей в
+         * `published-values.tsv` (сверено + исключено как шум = все ключи группы):
+         *  - F2/F2exp: 282 ключа (164 `Eh` + 118 `ph`), фактически сверено 260, шум 22;
+         *  - F1: 66 ключей (42 `Eh` + 24 `ph`), фактически сверено 42, шум 0;
+         *  - V2/V2exp/V2win: 348 ключей (204 `Eh` + 144 `ph`), сверено 341, шум 7;
+         *  - V1: 12 ключей (12 `Eh`), фактически сверено 12, шум 0.
+         *
+         * Пороги взяты с небольшим запасом вниз от факта: число величин, попавших
+         * под [NOISE_FLOOR], может немного плавать между JDK/бэкендами, но обвал на
+         * порядок и тем более до нуля будет пойман.
+         */
+        const val MIN_CHECKS_FREDHOLM_SECOND = 250
+        const val MIN_CHECKS_FREDHOLM_FIRST = 40
+        const val MIN_CHECKS_VOLTERRA_SECOND = 330
+        const val MIN_CHECKS_VOLTERRA_FIRST = 12
     }
 
     /** Разобранная строка эталона. */
@@ -147,15 +171,38 @@ class PublishedValuesTest {
         }
     }
 
-    private fun report(verification: Verification, title: String) {
+    /**
+     * Нужно ли вообще вычислять `E_h` для данной конфигурации.
+     *
+     * В эталоне полный набор схем есть лишь для части комбинаций (в основном
+     * система B), для остальных — только `base`. Вычисленные `E_h` для ключей
+     * вне эталона всё равно отбрасывались, а стоили дорого: `errorEh` берёт
+     * `100n + 1` точек, и для итерационных схем Вольтерры каждая точка — сама
+     * квадратура с повторным вычислением решения.
+     *
+     * Учитывается не только ключ `Eh`, но и КОСВЕННОЕ участие в проверке
+     * порядков [checkOrders]: `p_h` для сетки `m` строится по `E_m` и `E_{2m}`,
+     * поэтому `E_h` на сетке `n` нужна также при наличии ключа `ph` для `n`
+     * или для `n/2`. Поэтому набор фактически выполняемых сверок не меняется.
+     */
+    private fun ehParticipatesInVerification(prefix: String, schemeName: String, n: Int): Boolean =
+        published.containsKey("$prefix.n$n.$schemeName.Eh") ||
+            published.containsKey("$prefix.n$n.$schemeName.ph") ||
+            published.containsKey("$prefix.n${n / 2}.$schemeName.ph")
+
+    private fun report(verification: Verification, title: String, minimumChecks: Int) {
         assertTrue(
             verification.missing.isEmpty(),
             "$title: ключи отсутствуют в эталоне published-values.tsv " +
                 "(${verification.missing.size} шт.):\n" + verification.missing.joinToString("\n").take(2000),
         )
+        println("$title: сверено ${verification.checked}, исключено как шум ${verification.skippedAsNoise}")
+        // Защита от вырождения: тест не должен молча деградировать до пустышки,
+        // если ключи теста и эталона разойдутся. Границы взяты из фактического прогона.
         assertTrue(
-            verification.checked > 0,
-            "$title: не сверено ни одной величины — проверьте согласованность ключей",
+            verification.checked >= minimumChecks,
+            "$title: сверено величин ${verification.checked}, ожидалось не менее " +
+                "$minimumChecks — проверьте согласованность ключей теста и эталона",
         )
         assertTrue(
             verification.mismatches.isEmpty(),
@@ -184,6 +231,7 @@ class PublishedValuesTest {
         for (problem in problems) {
             for (systemName in listOf("B", "H", "T")) {
                 for (familyName in listOf("theta", "xi0", "xi1", "xi2", "mu", "lambda")) {
+                    val prefix = "F.${problem.name}.$systemName.$familyName"
                     // Погрешности по сеткам: нужны и сами E_h, и порядки между соседними.
                     val errors = LinkedHashMap<String, MutableMap<Int, Double>>()
                     for (n in listOf(8, 16, 32, 64)) {
@@ -212,17 +260,21 @@ class PublishedValuesTest {
                             schemes["iterNystrom"] = solver.iteratedNystrom()
                         }
                         for ((schemeName, solution) in schemes) {
+                            // Сами схемы выше построены всегда (построение решения — тоже
+                            // проверка: оно обязано не бросать и не расходиться); отбрасывается
+                            // только дорогое вычисление E_h, которое нигде не используется.
+                            if (!ehParticipatesInVerification(prefix, schemeName, n)) continue
                             val eh = errorEh(exact, solution.eval, grid)
                             errors.getOrPut(schemeName) { linkedMapOf() }[n] = eh
-                            val key = "F.${problem.name}.$systemName.$familyName.n$n.$schemeName.Eh"
+                            val key = "$prefix.n$n.$schemeName.Eh"
                             if (published.containsKey(key)) check(verification, key, eh, isError = true)
                         }
                     }
-                    checkOrders(verification, "F.${problem.name}.$systemName.$familyName", errors)
+                    checkOrders(verification, prefix, errors)
                 }
             }
         }
-        report(verification, "Фредгольм II рода")
+        report(verification, "Фредгольм II рода", MIN_CHECKS_FREDHOLM_SECOND)
     }
 
     /** Задача Фредгольма I рода F1: базовая схема и итерация Слоана. */
@@ -253,7 +305,7 @@ class PublishedValuesTest {
                 }
             }
         }
-        report(verification, "Фредгольм I рода (F1)")
+        report(verification, "Фредгольм I рода (F1)", MIN_CHECKS_FREDHOLM_FIRST)
     }
 
     // ------------------------------------------------------------------------
@@ -272,6 +324,7 @@ class PublishedValuesTest {
         for (problem in problems) {
             for (systemName in listOf("B", "H", "T")) {
                 for (familyName in listOf("theta", "xi0", "xi1", "xi2", "mu", "lambda")) {
+                    val prefix = "V.${problem.name}.$systemName.$familyName"
                     val errors = LinkedHashMap<String, MutableMap<Int, Double>>()
                     for (n in listOf(8, 16, 32, 64)) {
                         val grid = Grid.uniform(n)
@@ -300,17 +353,20 @@ class PublishedValuesTest {
                             schemes["iterNystrom"] = solver.iteratedNystrom()
                         }
                         for ((schemeName, solution) in schemes) {
+                            // См. комментарий в [fredholmSecondKindMatchesPublishedValues]: решение
+                            // строится всегда, E_h — только при участии в сверке.
+                            if (!ehParticipatesInVerification(prefix, schemeName, n)) continue
                             val eh = errorEh(exact, solution.eval, grid)
                             errors.getOrPut(schemeName) { linkedMapOf() }[n] = eh
-                            val key = "V.${problem.name}.$systemName.$familyName.n$n.$schemeName.Eh"
+                            val key = "$prefix.n$n.$schemeName.Eh"
                             if (published.containsKey(key)) check(verification, key, eh, isError = true)
                         }
                     }
-                    checkOrders(verification, "V.${problem.name}.$systemName.$familyName", errors)
+                    checkOrders(verification, prefix, errors)
                 }
             }
         }
-        report(verification, "Вольтерра II рода")
+        report(verification, "Вольтерра II рода", MIN_CHECKS_VOLTERRA_SECOND)
     }
 
     /** Задача Вольтерры I рода V1: база, Слоан, Кулкарни. */
@@ -338,7 +394,7 @@ class PublishedValuesTest {
                 }
             }
         }
-        report(verification, "Вольтерра I рода (V1)")
+        report(verification, "Вольтерра I рода (V1)", MIN_CHECKS_VOLTERRA_FIRST)
     }
 
     /**

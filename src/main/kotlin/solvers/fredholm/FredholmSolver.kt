@@ -144,13 +144,46 @@ class SecondKindSolver(
     val n = grid.n
     val dim = n + 2
 
-    // L omega_i в глобальных гауссовых узлах: LomegaNodes[i][k] = c_L (\mathcal K omega_i)(gNode[k]).
     private val ng = op.gNode.size
-    private val LomegaNodes: Array<DoubleArray> = Array(dim) { ki ->
-        val i = ki - 2
-        DoubleArray(ng) { k -> cL * op.apply(op.gNode[k]) { s -> basis.omega(i, s) } }
+
+    /**
+     * `L omega_i` в глобальных гауссовых узлах:
+     * `LomegaNodes[i][k] = c_L (\mathcal K omega_{i-2})(gNode[k])`. ЛЕНИВОЕ поле.
+     *
+     * Почему ленивое: единственный потребитель — [matrixM2] (второе применение L),
+     * а внутри класса `M2` нужна только схеме Кулкарни для ПРОЕКТОРОВ
+     * ([kulkarni] → `kulkarniProjector`, где строится `I - M - M2 + M^2`); [matrixM2]
+     * публична и вызывается также из тестов. Остальные схемы — [base], [sloan],
+     * `kulkarniQuasi` для квазиинтерполянтов, всё семейство Nyström ([nystrom],
+     * [combinedNystrom]) — к `M2` не обращаются вовсе.
+     *
+     * Стоимость сборки велика: `dim * ng` интегралов (по одному на каждую пару
+     * `i, k`), и каждый из них — квадратура по `ng` узлам, то есть O(dim * ng^2)
+     * обращений к ядру. При эагерном поле эту цену платили ВСЕ схемы, в том числе
+     * те, которые её не используют.
+     *
+     * Режим ленивости — по умолчанию (`SYNCHRONIZED`), и это обязательно: поле
+     * читается из потоков параллельной сборки ([ParallelAssembly] в [matrixM2]),
+     * так что первое обращение возможно из рабочего потока, и `NONE` был бы гонкой.
+     * Узким местом синхронизация не становится: чтение идёт один раз на столбец
+     * (`dim` раз всего), а не во внутреннем цикле по узлам.
+     */
+    private val LomegaNodes: Array<DoubleArray> by lazy {
+        Array(dim) { ki ->
+            val i = ki - 2
+            DoubleArray(ng) { k -> cL * op.apply(op.gNode[k]) { s -> basis.omega(i, s) } }
+        }
     }
-    // omega_i в глобальных узлах (для второго применения L).
+
+    /**
+     * `omega_i` в глобальных узлах: `omegaNodes[i][k] = omega_{i-2}(gNode[k])` — аргумент
+     * для `applyNodes` при сборке [matrixM].
+     *
+     * Поле оставлено ЭАГЕРНЫМ НЕ потому, что нужно всем схемам (его читает только
+     * [matrixM], а семейство Nyström и `kulkarniQuasi` его не требуют), а потому, что
+     * оно дешёвое: `dim * ng` вычислений сплайна без обращений к ядру, то есть в `ng`
+     * раз дешевле [LomegaNodes]. Ленивость здесь дала бы только накладные расходы.
+     */
     private val omegaNodes: Array<DoubleArray> = Array(dim) { ki ->
         val i = ki - 2
         DoubleArray(ng) { k -> basis.omega(i, op.gNode[k]) }

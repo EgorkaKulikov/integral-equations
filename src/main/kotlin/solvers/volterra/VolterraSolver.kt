@@ -1,5 +1,6 @@
 package solvers.volterra
 
+import java.util.concurrent.atomic.AtomicReferenceArray
 import kotlin.math.abs
 import numerics.*
 import numerics.functionals.*
@@ -64,6 +65,170 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
     fun apply(t: Double, u: (Double) -> Double): Double {
         if (t <= a) return 0.0
         return quad.integrate(subBreakpoints(t)) { s -> kernel.k(t, s) * u(s) }
+    }
+
+    /**
+     * Гауссовы узлы ПОЛНЫХ ячеек сетки: `cellNodes[c][q]` — q-й узел составной
+     * квадратуры на ячейке `[x_c, x_{c+1}]`.
+     *
+     * Ключевое наблюдение: при интегрировании по `[a,t]` от `t` зависит ТОЛЬКО последняя,
+     * усечённая ячейка `[x_k, t]`; узлы всех полных ячеек одни и те же при любом `t`.
+     * Формула здесь дословно повторяет [GaussLegendre.integrate] (`half`, `mid`,
+     * `mid + half * refNodes[q]`) на тех же аргументах, поэтому узлы совпадают
+     * ПОБИТОВО со значениями, которые вычислила бы сама квадратура.
+     *
+     * ИНВАРИАНТ (важно): это СНИМОК, материализуемый один раз, тогда как
+     * некэшированный путь [apply] читает `grid.breakpoints` при каждом вызове.
+     * Поэтому два пути эквивалентны ПРИ УСЛОВИИ неизменности содержимого
+     * `grid.breakpoints` после первого обращения к `cellNodes`. [Grid.breakpoints] —
+     * публичный `DoubleArray` с изменяемым содержимым, так что формально это
+     * ничем не защищено; фактически в проекте записей в массив нет, а
+     * инкапсуляция таких массивов — отдельный пункт плана рефакторинга (3.4).
+     *
+     * О ПОРЯДКЕ ИНИЦИАЛИЗАЦИИ: выражение использует [refNodes], объявлённый НИЖЕ;
+     * корректность обеспечена ИМЕННО ленивостью (к моменту первого обращения
+     * конструктор уже завершён). Замена `by lazy` на немедленную инициализацию
+     * без переноса [refNodes] выше дала бы `NullPointerException`.
+     */
+    private val cellNodes: Array<DoubleArray> by lazy {
+        val bp = grid.breakpoints
+        Array(bp.size - 1) { c ->
+            val lo = bp[c]
+            val hi = bp[c + 1]
+            val half = 0.5 * (hi - lo)
+            val mid = 0.5 * (hi + lo)
+            DoubleArray(refNodes.size) { q -> mid + half * refNodes[q] }
+        }
+    }
+
+    /** Эталонные узлы/веса квадратуры на [-1,1]: чтение в горячем цикле без аллокаций. */
+    private val refNodes: DoubleArray = quad.refNodesWeights().first
+    private val refWeights: DoubleArray = quad.refNodesWeights().second
+
+    /**
+     * Кэш значений подынтегральной функции `u(s)` в узлах ПОЛНЫХ ячеек сетки.
+     *
+     * Назначение — снять квадратичную стоимость применения оператора Вольтерры:
+     * без кэша каждое обращение `apply(t, u)` при своём `t` заново вычисляло `u`
+     * во всех `8 * (число полных ячеек)` узлах, хотя сами узлы от `t` не зависят.
+     *
+     * Кэш ЖЁСТКО СВЯЗАН с одной функцией `u` (она хранится в поле и другой быть не может),
+     * поэтому подмена значений между разными подынтегральными функциями невозможна
+     * конструктивно. Размер ограничен сеткой: `n * nodesPerSub` чисел (при n=64 — 512).
+     *
+     * Кэш ТАКЖЕ СВЯЗАН С ОПЕРАТОРОМ, создавшим его (см. [IntegrandCache.owner] и
+     * проверку в [apply]). Проверка нужна именно потому, что САМ ТИП владельца не
+     * различает: в Kotlin у `inner class` нет типа, параметризованного внешним
+     * ЭКЗЕМПЛЯРОМ, поэтому выражение `op2.apply(t, op1.integrandCache(u))`
+     * компилируется без ошибок и без проверки дало бы молча неверные числа.
+     *
+     * Кэшировать допустимо только ЧИСТУЮ `u` (детерминированную, без побочных эффектов).
+     * Фактические потребители — ВСЕ вызовы [SecondKindSolver.applyL] (базисные `omega_i`
+     * и их образы в `matrixM`/`matrixM2`, сплайны `evalSpline` в `sloan`/`kulkarni*`,
+     * итеранты `kulkarniQuasi`/`combinedNystrom`, образы Nyström), все они чистые.
+     * ВНИМАНИЕ: `vectorD` кэш НЕ использует — он идёт через старую перегрузку
+     * `apply(t, u)` и `applyDeriv`; `applyLDeriv`/`applyLDeriv2` тоже не кэшируются
+     * (у них другие ядра `kT`/`kTT`).
+     *
+     * ПОТОКОБЕЗОПАСНОСТЬ: значения ячейки публикуются целым массивом через
+     * [AtomicReferenceArray], что даёт корректную публикацию (happens-before) без
+     * блокировок. Гонка двух потоков на одной ячейке безвредна: `u` чиста, значит оба
+     * вычислят побитово одинаковые числа, а победитель CAS определяет, чей массив увидят
+     * остальные. Точки сериализации в горячем цикле нет — только volatile-чтение на ячейку.
+     */
+    inner class IntegrandCache internal constructor(internal val u: (Double) -> Double) {
+        /**
+         * Экземпляр оператора, создавший этот кэш — единственный, чьи узлы соответствуют
+         * хранимым значениям.
+         *
+         * Почему явное свойство, а не неявная ссылка `inner class`: неявная ссылка
+         * на внешний экземпляр доступна только ИЗНУТРИ тела `IntegrandCache`
+         * (`this@VolterraOperator`) и не читается снаружи, то есть из [apply], где и
+         * нужна проверка. Поэтому ссылка зафиксирована в поле при создании.
+         * Стоимость — одна ссылка на кэш (не на вызов и не на узел).
+         */
+        internal val owner: VolterraOperator = this@VolterraOperator
+
+        private val cells = AtomicReferenceArray<DoubleArray>(cellNodes.size)
+
+        /** Значения `u` в узлах полной ячейки `c`; вычисляются при первом обращении. */
+        internal fun values(c: Int): DoubleArray {
+            cells.get(c)?.let { return it }
+            val nodes = cellNodes[c]
+            val computed = DoubleArray(nodes.size) { q -> u(nodes[q]) }
+            cells.compareAndSet(c, null, computed)
+            return cells.get(c) ?: computed
+        }
+    }
+
+    /** Создаёт кэш узловых значений для КОНКРЕТНОЙ подынтегральной функции. */
+    fun integrandCache(u: (Double) -> Double): IntegrandCache = IntegrandCache(u)
+
+    /**
+     * То же, что [apply], но значения `u` в узлах полных ячеек берутся из [cache].
+     *
+     * Арифметика повторена ДОСЛОВНО за [subBreakpoints] + [GaussLegendre.integrate]:
+     * тот же отбор точек разбиения, тот же порядок обхода (ячейки слева направо, внутри
+     * ячейки — узлы по возрастанию индекса), те же `half`/`mid`, то же простое
+     * накопление `sum += half * w_q * (K(t,s_q) * u(s_q))` без выноса множителей.
+     * Отличие ровно одно: `u(s_q)` на полных ячейках не вычисляется повторно.
+     *
+     * ТРЕБОВАНИЕ К ВЛАДЕЛЬЦУ: [cache] обязан быть создан ЭТИМ же экземпляром
+     * оператора. Проверка выполняется ОДИН раз на входе (сравнение ссылок, вне
+     * любого цикла; стоимость ничтожна на фоне `nodesPerSub * n` вызовов `kernel.k`)
+     * и ничего не вычисляет, поэтому на числа не влияет. Без неё чужой кэш дал бы
+     * МОЛЧА НЕВЕРНЫЕ ЧИСЛА: значения `u` брались бы в узлах СВОЕЙ сетки, а ядро
+     * вычислялось бы в узлах сетки ЭТОГО оператора (или вовсе
+     * `IndexOutOfBoundsException` при более грубой сетке владельца).
+     *
+     * @throws IllegalArgumentException если [cache] создан другим экземпляром оператора.
+     */
+    fun apply(t: Double, cache: IntegrandCache): Double {
+        require(cache.owner === this) {
+            "Кэш узловых значений передан ДРУГОМУ экземпляру VolterraOperator, чем тот, " +
+                "который его создал. Кэш хранит значения u(s) в гауссовых узлах сетки СВОЕГО " +
+                "владельца, а ядро здесь вычислялось бы в узлах сетки этого оператора: " +
+                "узлы сеток в общем случае НЕ СОВПАДАЮТ, и результат был бы молча неверным " +
+                "(либо возникло бы IndexOutOfBoundsException при более грубой сетке владельца). " +
+                "Кэш создавайте тем же оператором, на котором его применяете: " +
+                "op.apply(t, op.integrandCache(u))."
+        }
+        if (t <= a) return 0.0
+        val bp = grid.breakpoints
+        // Число ведущих узлов сетки, попавших в разбиение (см. subBreakpoints).
+        var included = 0
+        while (included < bp.size && bp[included] < t - BREAKPOINT_INCLUSION_EPS) included++
+        var sum = 0.0
+        // Полные ячейки [bp[c], bp[c+1]] — узлы и значения u берутся из кэша.
+        for (c in 0 until included - 1) {
+            val lo = bp[c]
+            val hi = bp[c + 1]
+            if (hi <= lo) continue
+            val half = 0.5 * (hi - lo)
+            val nodes = cellNodes[c]
+            val values = cache.values(c)
+            for (q in refNodes.indices) {
+                sum += half * refWeights[q] * (kernel.k(t, nodes[q]) * values[q])
+            }
+        }
+        // Усечённая ячейка [x_k, t] (или [a, t], если узлов сетки левее t нет).
+        val lo = if (included == 0) a else bp[included - 1]
+        // Условие записано как ОТРИЦАНИЕ `hi <= lo` из [GaussLegendre.integrate] дословно,
+        // а не как `t > lo`: для конечных `t` это тождественно, но при `t = NaN`
+        // оба сравнения ложны, так что `t > lo` дало бы ровно 0.0, а некэшированный
+        // путь (где `hi <= lo` тоже ложно и счёт продолжается) — NaN. Вариант с
+        // `require(!t.isNaN())` отвергнут: он потребовал бы правки СТАРОГО `apply(t, u)`,
+        // то есть смены поведения публичного API вне скоупа (его зовут также решатель
+        // Урысона, `problems` и тесты). На конечных `t` числа не меняются: ветвь та же.
+        if (!(t <= lo)) {
+            val half = 0.5 * (t - lo)
+            val mid = 0.5 * (t + lo)
+            for (q in refNodes.indices) {
+                val s = mid + half * refNodes[q]
+                sum += half * refWeights[q] * (kernel.k(t, s) * cache.u(s))
+            }
+        }
+        return sum
     }
 
     /**
@@ -179,8 +344,18 @@ class SecondKindSolver(
     // [a,t] зависит от t, поэтому предвычисление на фиксированных узлах невозможно.
     // Все применения L = c_L \mathcal V выражаются через замыкания op.apply / op.applyDeriv.
 
-    /** L g(t) = c_L (\mathcal V g)(t) и её производная (Лейбниц). */
-    private fun applyL(g: (Double) -> Double): (Double) -> Double = { t -> cL * op.apply(t, g) }
+    /**
+     * L g(t) = c_L (\mathcal V g)(t) и её производная (Лейбниц).
+     *
+     * Возвращаемое замыкание владеет СВОИМ кэшем узловых значений `g` на полных ячейках
+     * (см. [VolterraOperator.IntegrandCache]): время жизни кэша совпадает со временем
+     * жизни замыкания, а привязка к `g` фиксируется при создании, поэтому отдать значения
+     * одной функции другой невозможно. Арифметика не меняется (см. [VolterraOperator.apply]).
+     */
+    private fun applyL(g: (Double) -> Double): (Double) -> Double {
+        val cache = op.integrandCache(g)
+        return { t -> cL * op.apply(t, cache) }
+    }
     private fun applyLDeriv(g: (Double) -> Double): (Double) -> Double = { t -> cL * op.applyDeriv(t, g) }
 
     /**
