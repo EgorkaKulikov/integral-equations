@@ -7,6 +7,7 @@ import numerics.MinimalSplineBasis
 import numerics.SolutionFunc
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.math.ln
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -22,6 +23,7 @@ import problems.fredholm.FredholmProblem
  * n, где вмешивается обусловленность), а ПРАКТИЧЕСКИ ПРОВЕРЯЕМОЕ следствие:
  * комбинированный оператор существенно точнее классического на одной и той же сетке.
  */
+@Tag("fast")
 class CombinedNystromTest {
 
     private fun solverFor(problem: FredholmProblem, n: Int): Pair<SecondKindSolver, Grid> {

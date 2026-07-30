@@ -4,6 +4,7 @@ import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
 import numerics.MinimalSplineBasis
+import org.junit.jupiter.api.Tag
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import problems.fredholm.FredholmProblem
@@ -13,6 +14,7 @@ import problems.fredholm.FredholmProblem
  * с центральной конечной разностью. Точки берутся
  * ВНУТРИ гладких кусков сплайна (не в узлах), т.к. omega_i'' разрывна в узлах.
  */
+@Tag("fast")
 class FredholmDeriv2FDTest {
     private val quad = GaussLegendre(8)
 

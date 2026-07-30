@@ -9,6 +9,7 @@ import numerics.functionals.DeBoorFixFunctionals
 import numerics.functionals.FunctionalFamily
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -35,6 +36,7 @@ import kotlin.test.fail
  * пересnimать осознанно, зафиксировав старое и новое значения в отчёте, а не
  * «подгонять» допуск.
  */
+@Tag("slow")
 class EhCharacterizationTest {
 
     private companion object {

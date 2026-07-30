@@ -6,6 +6,7 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import problems.uryson.UrysonProblem
 import problems.uryson.secondKindSolver
 import kotlin.math.abs
@@ -19,6 +20,7 @@ import kotlin.test.assertTrue
  * зафиксированы с текущей реализации: совпадение подтверждает, что код воспроизводит
  * численный эксперимент источника (см. `docs/REFERENCES.md`).
  */
+@Tag("fast")
 class UrysonGoldenTest {
 
     private companion object {

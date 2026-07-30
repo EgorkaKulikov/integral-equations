@@ -1,5 +1,7 @@
 package verification
 
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Tag
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
@@ -17,7 +19,8 @@ import kotlin.test.fail
  *
  * Почему это тесты, а не разовый скрипт. Разовая сверка защищает от ошибки лишь в
  * момент запуска: любая последующая правка численного ядра могла бы разойтись со
- * SciPy незаметно. Включение в обычный `test` делает сверку постоянной гарантией.
+ * SciPy незаметно. Постоянной гарантией сверку делает отдельный набор `scipyVerify`,
+ * который в CI выполняется на каждой ветке.
  *
  * Устройство. Тест самодостаточен: сам выгружает артефакты через
  * [VerificationArtifacts] (не полагаясь на то, что перед ним запускалась задача
@@ -33,9 +36,24 @@ import kotlin.test.fail
  *     L4/L5 образы операторов, правые части<- scipy.integrate.quad (QUADPACK)
  *     L6  итоговые решения                 <- независимый Nystrom на leggauss
  *
- * Окружение Python готовит задача Gradle `setupScipyVerification`, от которой
- * зависит `test`; путь к интерпретатору передаётся свойством `scipy.python`.
+ * Запуск. Штатный способ — `./gradlew scipyVerify`: эта задача готовит окружение
+ * Python (`setupScipyVerification`), выгружает артефакты (`dumpVerificationArtifacts`)
+ * и передаёт путь к интерпретатору свойством `scipy.python`.
+ *
+ * Поведение без окружения Python зависит от СТРОГОГО РЕЖИМА (`scipy.required`):
+ *
+ *  - `scipy.required=false` или свойство не задано (так работает обычный `test`) —
+ *    ПРОПУСК (`Assumptions`). Отсутствие venv — состояние машины, а не
+ *    расхождение с SciPy, и трактовать его как провал было бы ложным сигналом;
+ *  - `scipy.required=true` (так работает `scipyVerify`) — ПАДЕНИЕ. Здесь сверка
+ *    запрошена явно и подготовлена зависимыми задачами, поэтому пропуск означал бы
+ *    незамеченную поломку подготовки и ЗЕЛЁНУЮ сборку без единой сверки —
+ *    ровно то, чего эта проверка обязана не допускать.
+ *
+ * Разделение сделано потому, что один и тот же пропуск имеет разный смысл: в
+ * повседневном прогоне он ожидаем, в целевом — это дефект.
  */
+@Tag("scipy")
 class ScipyCrossVerificationTest {
 
     private companion object {
@@ -53,10 +71,38 @@ class ScipyCrossVerificationTest {
         val REQUIRED_LAYERS = listOf("L1", "L2", "L3", "L4/L5", "L6")
 
         /**
+         * Строгий режим: сверка запрошена явно, окружение обязано быть готово.
+         * Выставляется задачей `scipyVerify`; в остальных прогонах отсутствует.
+         */
+        val STRICT: Boolean = System.getProperty("scipy.required")?.toBoolean() ?: false
+
+        /**
          * Результат сверки в машиночитаемом виде. Разбирается без внешних библиотек
          * разбора JSON: в проекте их нет, а формат отчёта фиксирован и прост.
          */
         var cachedReport: ScipyReport? = null
+    }
+
+    /**
+     * Требование к ОКРУЖЕНИЮ (не к числам): в строгом режиме нарушение — падение,
+     * иначе — пропуск. Сообщение одно и то же: причина и способ исправления нужны
+     * в обоих случаях, меняется только статус теста.
+     *
+     * ПРИМЕЧАНИЕ: к ЧИСЛЕННЫМ расхождениям этот метод не применяется никогда:
+     * они всегда дают падение через `assertTrue`, в любом режиме.
+     */
+    private fun requireEnvironment(condition: Boolean, message: String) {
+        if (condition) return
+        if (STRICT) {
+            fail(
+                "$message\n\nЗадача `scipyVerify` требует работоспособного окружения (scipy.required=true): " +
+                    "внешняя сверка — единственное доказательство, не замкнутое на код проекта, и тихо " +
+                    "пропустить её значит получить зелёную сборку без единой выполненной проверки. " +
+                    "Способ исправить: `./gradlew setupScipyVerification` — задача создаст .venv-verify " +
+                    "и установит версии из tools/requirements-verify.txt, после чего повторить сверку.",
+            )
+        }
+        assumeTrue(false, message)
     }
 
     /** Одна проверка из отчёта скрипта. */
@@ -91,18 +137,20 @@ class ScipyCrossVerificationTest {
         val artifactDir = VerificationArtifacts.DEFAULT_DIR
         VerificationArtifacts.dumpAll(artifactDir)
 
-        val python = System.getProperty("scipy.python")
-            ?: fail(
-                "Не задано свойство scipy.python. Тест рассчитан на запуск через Gradle: " +
-                    "задача `test` зависит от `setupScipyVerification` и передаёт путь к " +
-                    "интерпретатору. Для ручного запуска укажите -Dscipy.python=<путь>.",
-            )
-        if (!File(python).exists()) {
-            fail(
-                "Интерпретатор Python не найден: $python. Выполните ./gradlew setupScipyVerification " +
-                    "— задача создаст окружение и установит SciPy/NumPy.",
-            )
-        }
+        val configuredPython: String? = System.getProperty("scipy.python")
+        requireEnvironment(
+            configuredPython != null,
+            "Окружение сверки со SciPy недоступно: не задано свойство scipy.python. Штатный " +
+                "запуск — ./gradlew scipyVerify (задача сама готовит окружение и передаёт путь). " +
+                "Для ручного запуска укажите -Dscipy.python=<путь к интерпретатору>.",
+        )
+        val python = configuredPython!!
+        requireEnvironment(
+            File(python).exists(),
+            "Окружение сверки со SciPy недоступно: интерпретатор Python не найден ($python). " +
+                "Выполните ./gradlew setupScipyVerification — задача создаст окружение " +
+                "и установит SciPy/NumPy версий из tools/requirements-verify.txt.",
+        )
         val script = File(SCRIPT_PATH)
         if (!script.exists()) fail("Не найден скрипт сверки ${script.absolutePath}")
 
@@ -121,14 +169,15 @@ class ScipyCrossVerificationTest {
             fail("Сверка со SciPy не завершилась за $TIMEOUT_SECONDS с. Вывод:\n$consoleOutput")
         }
         val exitCode = process.exitValue()
-        // Код 2 означает недоступность SciPy/NumPy. Это ошибка окружения, а не
-        // расхождение, поэтому сообщение указывает способ исправления.
-        if (exitCode == 2) {
-            fail(
-                "SciPy/NumPy недоступны в $python. Выполните ./gradlew setupScipyVerification. " +
-                    "Вывод скрипта:\n$consoleOutput",
-            )
-        }
+        // Код 2 означает недоступность SciPy/NumPy в найденном интерпретаторе — случай
+        // «venv есть, пакетов нет». Это состояние окружения, а не расхождение чисел,
+        // поэтому реакция зависит от строгого режима (см. [requireEnvironment]).
+        requireEnvironment(
+            exitCode != 2,
+            "Окружение сверки со SciPy неработоспособно: SciPy/NumPy недоступны в $python " +
+                "(интерпретатор есть, пакетов нет). Выполните ./gradlew setupScipyVerification. " +
+                "Вывод скрипта:\n$consoleOutput",
+        )
         if (!jsonFile.exists()) {
             fail(
                 "Скрипт сверки не создал машиночитаемый отчёт ${jsonFile.absolutePath} " +

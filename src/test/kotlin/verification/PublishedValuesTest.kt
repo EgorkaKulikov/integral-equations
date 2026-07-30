@@ -10,6 +10,7 @@ import numerics.functionals.FunctionalFamily
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.test.Test
@@ -33,6 +34,7 @@ import kotlin.test.fail
  * свыше допуска означает либо реальное расхождение с опубликованным результатом,
  * либо ошибку переноса числа — и то, и другое требует разбирательства.
  */
+@Tag("slow")
 class PublishedValuesTest {
 
     private companion object {

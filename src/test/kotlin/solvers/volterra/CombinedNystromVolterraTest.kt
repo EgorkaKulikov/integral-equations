@@ -1,5 +1,6 @@
 package solvers.volterra
 
+import org.junit.jupiter.api.Tag
 import problems.volterra.VolterraProblem
 import problems.volterra.firstKindSolver
 import problems.volterra.secondKindSolver
@@ -34,6 +35,7 @@ import kotlin.test.assertTrue
  * согласованность итерированного варианта). Утверждать здесь суперсходимость было бы
  * подгонкой выводов под теорию, полученную для другого класса уравнений.
  */
+@Tag("fast")
 class CombinedNystromVolterraTest {
 
     private fun solverFor(problem: VolterraProblem, n: Int): Pair<SecondKindSolver, Grid> {

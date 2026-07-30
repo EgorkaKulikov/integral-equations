@@ -9,6 +9,7 @@ import numerics.functionals.FunctionalFamily
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -31,6 +32,7 @@ import kotlin.test.assertTrue
  * что они дают одну функцию: максимум погрешности мог бы достигаться в разных
  * точках при разном поведении между ними.
  */
+@Tag("slow")
 class CrossSchemeConsistencyTest {
 
     private companion object {

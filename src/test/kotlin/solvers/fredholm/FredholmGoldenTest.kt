@@ -5,6 +5,7 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import problems.fredholm.FredholmProblem
@@ -14,6 +15,7 @@ import problems.fredholm.FredholmProblem
  * against numbers from a real baseline run (FredholmSolver main(), table T1[F2], basis B).
  * Does NOT compare full stdout.
  */
+@Tag("fast")
 class FredholmGoldenTest {
     private fun ehBase(p: FredholmProblem, n: Int): Double {
         val grid = Grid.uniform(n)

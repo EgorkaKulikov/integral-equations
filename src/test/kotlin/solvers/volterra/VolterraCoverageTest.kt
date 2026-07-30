@@ -1,5 +1,6 @@
 package solvers.volterra
 
+import org.junit.jupiter.api.Tag
 import problems.volterra.VolterraProblem
 import problems.volterra.firstKindSolver
 import problems.volterra.secondKindSolver
@@ -25,6 +26,7 @@ import kotlin.test.assertTrue
  * by running the CURRENT implementation once and serve only as a regression net for
  * the upcoming HPC refactor. Tolerances are generous and documented per test.
  */
+@Tag("fast")
 class VolterraCoverageTest {
     private val quad = GaussLegendre(8)
     private fun finite(x: Double) = !x.isNaN() && !x.isInfinite()

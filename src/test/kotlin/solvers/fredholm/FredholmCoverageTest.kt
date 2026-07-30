@@ -10,6 +10,7 @@ import numerics.functionals.DeBoorFixFunctionals
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -26,6 +27,7 @@ import problems.fredholm.firstKindSolver
  * refactor). Tolerances are intentionally generous (relative, ~2%..order-of-magnitude
  * ceilings) and documented per test.
  */
+@Tag("fast")
 class FredholmCoverageTest {
     private val quad = GaussLegendre(8)
 

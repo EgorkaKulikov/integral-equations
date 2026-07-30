@@ -1,5 +1,6 @@
 package solvers.volterra
 
+import org.junit.jupiter.api.Tag
 import problems.volterra.VolterraProblem
 import problems.volterra.firstKindSolver
 import problems.volterra.secondKindSolver
@@ -12,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /** Light golden test (n=8,16) for Volterra V2, basis B, base scheme. Numbers from baseline T1[V2]. */
+@Tag("fast")
 class VolterraGoldenTest {
     private fun ehBase(p: VolterraProblem, n: Int): Double {
         val grid = Grid.uniform(n)

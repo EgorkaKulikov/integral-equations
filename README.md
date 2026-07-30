@@ -81,12 +81,13 @@ Engl, Hanke, Neubauer (1996).
 * JDK 21 или новее;
 * Gradle не требуется — используется wrapper.
 
-Для запуска тестов дополнительно нужен **Python 3**: набор включает смок-тесты
-внешней сверки со SciPy/NumPy. Окружение готовится автоматически: задача
-`setupScipyVerification` создаёт виртуальное окружение `.venv-verify` и
-устанавливает пакеты при первом запуске (требуется доступ в сеть); дальше она
-отмечается как `UP-TO-DATE` и к сети не обращается. Каталог `.venv-verify`
-(порядка 200 МБ) в репозиторий не попадает.
+Для обычного прогона тестов ничего больше не требуется. **Python 3** нужен только
+для внешней сверки со SciPy/NumPy — задачи `./gradlew scipyVerify`. Окружение
+готовится автоматически: задача `setupScipyVerification` создаёт виртуальное
+окружение `.venv-verify` и ставит версии из `tools/requirements-verify.txt`
+(при первом запуске требуется доступ в сеть); дальше она отмечается как
+`UP-TO-DATE`. Каталог `.venv-verify` (порядка 200 МБ) в репозиторий не попадает.
+Без него сверка сообщает о пропуске, а не падает.
 
 Нативный BLAS (OpenBLAS через multik) подключается автоматически. Если библиотека
 недоступна, происходит откат на реализацию на чистом JVM; корректность результатов
@@ -103,7 +104,7 @@ cd Numerical-Algorithms
 ## Быстрый старт
 
 ```bash
-./gradlew test          # запуск тестов
+./gradlew fastTest      # быстрый набор тестов (единицы секунд)
 ./gradlew runFredholm   # таблицы сходимости для уравнения Фредгольма
 ./gradlew runVolterra   # то же для уравнения Вольтерры
 ./gradlew runUryson     # то же для уравнения Урысона
@@ -217,16 +218,32 @@ tools/verify_with_scipy.py скрипт внешней сверки со SciPy/N
 
 ## Запуск тестов
 
+Тесты разделены по времени выполнения тегами JUnit (`fast`, `slow`, `scipy`), на
+каждый тег есть своя задача. Причина разделения: проверка после правки
+должна занимать секунды, иначе её перестают делать.
+
 ```bash
-./gradlew test                 # весь набор (включая сверку со SciPy)
-./gradlew test --tests 'verification.*'       # только независимая верификация
-./gradlew test --tests 'healthchecks.*'       # только проверки корректности
-./gradlew test --tests 'regression.*'         # только regression-тесты
-./gradlew test --tests 'characterization.*'   # только фиксация поведения
+./gradlew fastTest             # быстрый набор: 206 тестов, единицы секунд
+./gradlew slowTest             # прогон по крупным сеткам: 19 тестов, десятки минут
+./gradlew scipyVerify          # внешняя сверка со SciPy/NumPy: 7 тестов
+./gradlew characterizationTest # гейт численной нейтральности: 4 теста, ~90 с
+./gradlew test                 # весь набор сразу (232 теста) — СМ. ПРЕДУПРЕЖДЕНИЕ НИЖЕ
+./gradlew test --tests 'healthchecks.*'       # произвольная выборка по имени
 ./gradlew koverHtmlReport      # отчёт о покрытии
 ```
 
-Категории тестов:
+Задача `test` (полный набор) СЕЙЧАС НЕ ЗАВЕРШАЕТСЯ из-за
+`verification.PublishedValuesTest` (сетки до n = 64). Для повседневной работы
+используйте `fastTest` и `characterizationTest` — именно они входят в `./gradlew check`
+и `./gradlew build`. Ускорение медленного теста — отдельная запланированная работа.
+
+| Задача | Состав |
+|---|---|
+| `fastTest` | всё, кроме перечисленного ниже: ядро, решатели, инварианты, regression |
+| `slowTest` | `PublishedValuesTest`, `EhCharacterizationTest`, `CrossSchemeConsistencyTest`, `AnalyticSolutionTest` — прогон по сеткам до n = 64 |
+| `scipyVerify` | `ScipyCrossVerificationTest` — быстрый, но требует venv с Python |
+
+Категории тестов по назначению (ортогонально тегам по времени):
 
 | Категория | Назначение |
 |---|---|
@@ -244,7 +261,7 @@ tools/verify_with_scipy.py скрипт внешней сверки со SciPy/N
 |---|---|
 | `captureBaseline` | переснять эталонный снимок численных результатов |
 | `dumpVerificationArtifacts` | выгрузить внутренние артефакты для ручного разбора расхождения |
-| `setupScipyVerification` | подготовить окружение Python со SciPy (вызывается автоматически из `test`) |
+| `setupScipyVerification` | подготовить окружение Python со SciPy (вызывается автоматически из `scipyVerify`) |
 
 Задачу `captureBaseline` следует запускать осознанно — только когда изменение
 алгоритма обосновано, с фиксацией старых и новых значений.

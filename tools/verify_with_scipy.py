@@ -34,7 +34,7 @@
 ---------------
 Штатный способ — в составе проверок проекта (см. `ScipyCrossVerificationTest`):
 
-    ./gradlew test                             # сверка входит в обычный набор тестов
+    ./gradlew scipyVerify                      # готовит venv, выгружает артефакты, сверяет
 
 Ручной запуск для разбора расхождения:
 
@@ -61,6 +61,7 @@ import collections
 import json
 import math
 import os
+import platform
 import sys
 
 try:
@@ -71,7 +72,11 @@ try:
     from scipy.linalg import solve as scipy_solve
 except ImportError as exc:  # pragma: no cover
     print(f"ОШИБКА: не найдены SciPy/NumPy ({exc}).")
-    print("Установите: python3 -m venv .venv-verify && .venv-verify/bin/pip install scipy numpy")
+    # Версии закреплены в файле требований: сверка обязана быть воспроизводимой,
+    # иначе расхождение не отличить от смены поведения самой SciPy.
+    print("Установите: python3 -m venv .venv-verify && "
+          ".venv-verify/bin/pip install -r tools/requirements-verify.txt")
+    print("Либо просто: ./gradlew setupScipyVerification")
     sys.exit(2)
 
 # Каталог артефактов; переопределяется аргументом --artifacts.
@@ -380,6 +385,7 @@ def main() -> int:
     print(f"NumPy {np.__version__}")
     import scipy
     print(f"SciPy {scipy.__version__}")
+    print(f"Python {platform.python_version()}")
     print(f"Каталог артефактов: {os.path.abspath(ARTIFACT_DIR)}")
 
     verify_quadrature()
@@ -409,6 +415,16 @@ def main() -> int:
         summary = {
             "numpy": np.__version__,
             "scipy": scipy.__version__,
+            # Окружение целиком — чтобы расхождение можно было соотнести с версиями
+            # библиотек по одному отчёту, не восстанавливая обстановку прогона.
+            # Порядок полей важен: скалярные "numpy"/"scipy" выше читает Kotlin-тест
+            # построчным разбором, и они обязаны встречаться в тексте первыми.
+            "environment": {
+                "numpy": np.__version__,
+                "scipy": scipy.__version__,
+                "python": platform.python_version(),
+                "platform": platform.platform(),
+            },
             "artifactDir": os.path.abspath(ARTIFACT_DIR),
             "exitCode": exit_code,
             "checks": checks,

@@ -1,5 +1,6 @@
 package solvers.volterra
 
+import org.junit.jupiter.api.Tag
 import problems.volterra.VolterraProblem
 import problems.volterra.firstKindSolver
 import problems.volterra.secondKindSolver
@@ -17,6 +18,7 @@ import kotlin.test.assertTrue
  * Числа зафиксированы из реального прогона main() (таблица T3[V2], базис B, theta).
  * Проверяется также, что xi (де Бура--Фикса) кидает понятное исключение.
  */
+@Tag("fast")
 class VolterraNystromGoldenTest {
     private fun solver(p: VolterraProblem, n: Int): Pair<SecondKindSolver, Grid> {
         val grid = Grid.uniform(n)

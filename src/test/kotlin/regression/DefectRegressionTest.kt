@@ -8,6 +8,7 @@ import numerics.ReferenceLinearAlgebra
 import numerics.functionals.DeBoorFixFunctionals
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -20,6 +21,7 @@ import kotlin.test.assertTrue
  * не проявлялась в существующих тестах и что именно проверяется теперь. Все эти
  * тесты ПАДАЮТ на коде до исправления.
  */
+@Tag("fast")
 class DefectRegressionTest {
 
     /**

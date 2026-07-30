@@ -6,6 +6,7 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import problems.fredholm.FredholmProblem
 import problems.fredholm.secondKindSolver
 import solvers.fredholm.FredholmOperator
@@ -24,6 +25,7 @@ import kotlin.test.assertTrue
  * оператора и построенных на нём схем: согласованность правой части, сходимость
  * базовой схемы и точность квадратурной схемы Nyström.
  */
+@Tag("fast")
 class FredholmHealthCheckTest {
 
     private companion object {

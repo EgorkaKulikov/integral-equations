@@ -7,6 +7,7 @@ import numerics.MinimalSplineBasis
 import numerics.SolutionFunc
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import problems.uryson.UrysonProblem
 import problems.uryson.firstKindSolver
 import problems.uryson.noisyRightHandSide
@@ -25,6 +26,7 @@ import kotlin.test.assertTrue
  * от регрессий: они ловят появление NaN, расходимость и «взрыв» решения, но не
  * подтверждают теоретические порядки сходимости.
  */
+@Tag("fast")
 class UrysonCoverageTest {
 
     private val quad = GaussLegendre(8)

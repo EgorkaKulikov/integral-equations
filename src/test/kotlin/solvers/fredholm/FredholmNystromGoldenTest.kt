@@ -5,6 +5,7 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -15,6 +16,7 @@ import problems.fredholm.FredholmProblem
  * Числа зафиксированы из реального прогона main() (таблица T3[F2], базис B, theta).
  * Проверяется также, что xi (де Бура--Фикса) кидает понятное исключение.
  */
+@Tag("fast")
 class FredholmNystromGoldenTest {
     private fun solver(p: FredholmProblem, n: Int): Pair<SecondKindSolver, Grid> {
         val grid = Grid.uniform(n)

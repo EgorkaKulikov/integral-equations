@@ -7,6 +7,7 @@ import numerics.LinearAlgebra
 import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import problems.uryson.UrysonProblem
 import problems.uryson.firstKindSolver
 import problems.uryson.noisyThetaCoefficients
@@ -31,6 +32,7 @@ import kotlin.test.assertTrue
  * условия величина искусственно приравнивалась единице, чтобы превысить порог.
  * Здесь такие проверки записаны явными утверждениями.
  */
+@Tag("fast")
 class UrysonHealthCheckTest {
 
     private companion object {

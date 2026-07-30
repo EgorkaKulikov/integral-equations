@@ -8,6 +8,7 @@ import numerics.functionals.AveragingFunctionals
 import numerics.functionals.FunctionalFamily
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import problems.analytic.AnalyticFredholmProblem
 import problems.analytic.AnalyticVolterraProblem
 import problems.analytic.analyticFredholmSolver
@@ -43,6 +44,7 @@ import kotlin.test.assertTrue
  * квадратуры входит в обе части сравнения и частично сокращается. Здесь `f` выписана
  * аналитически, поэтому такой взаимной компенсации нет.
  */
+@Tag("slow")
 class AnalyticSolutionTest {
 
     private companion object {

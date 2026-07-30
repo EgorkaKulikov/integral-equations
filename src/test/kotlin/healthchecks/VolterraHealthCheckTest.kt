@@ -6,6 +6,7 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
+import org.junit.jupiter.api.Tag
 import problems.volterra.VolterraProblem
 import problems.volterra.secondKindSolver
 import solvers.volterra.KernelV
@@ -25,6 +26,7 @@ import kotlin.test.assertTrue
  * Здесь остаются только те свойства, которые касаются самого оператора Вольтерры
  * с переменным верхним пределом и построенных на нём схем.
  */
+@Tag("fast")
 class VolterraHealthCheckTest {
 
     private companion object {

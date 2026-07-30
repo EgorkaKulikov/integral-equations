@@ -6,6 +6,7 @@ import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.functionals.AveragingFunctionals
 import numerics.functionals.ProjFunctionals
+import org.junit.jupiter.api.Tag
 import problems.fredholm.FredholmProblem
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.KernelF
@@ -34,6 +35,7 @@ import kotlin.test.assertTrue
  * расходится при любом числе шагов. Это свойство самой задачи, а не следствие
  * малого предела итераций.
  */
+@Tag("fast")
 class DivergenceContractTest {
 
     private companion object {

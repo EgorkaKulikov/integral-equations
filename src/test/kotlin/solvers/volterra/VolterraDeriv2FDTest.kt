@@ -1,5 +1,6 @@
 package solvers.volterra
 
+import org.junit.jupiter.api.Tag
 import problems.volterra.VolterraProblem
 import problems.volterra.firstKindSolver
 import problems.volterra.secondKindSolver
@@ -19,6 +20,7 @@ import kotlin.test.assertTrue
  * КРИТИЧНО: включены V2-ядра с K(t,t)!=0 (V2: K=1/(1+t+s), V2exp: e^{-(t-s)^2}),
  * где проявляется член K(t,t) u'(t): без него FD-сверка провалится.
  */
+@Tag("fast")
 class VolterraDeriv2FDTest {
     private val quad = GaussLegendre(8)
 

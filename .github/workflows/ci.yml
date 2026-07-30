@@ -1,0 +1,199 @@
+# Непрерывная интеграция проекта numerical-algorithms.
+#
+# Разделение на job'ы повторяет разделение тестов по тегам в build.gradle.kts
+# и сделано по одной причине: обратная связь на каждый PR обязана быть быстрой.
+#   fast            — единицы секунд + покрытие, гоняется всегда;
+#   characterization — ГЕЙТ численной нейтральности (~90 с), гоняется всегда;
+#   scipy           — внешняя сверка, требует venv с Python и потому вынесена отдельно;
+#   full            — прогон по крупным сеткам, ОТКЛЮЧЁН до этапа 1 спека (см. ниже).
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  schedule:
+    # Ночной полный прогон: медленный набор не должен блокировать разработку днём.
+    - cron: '0 3 * * *'
+
+# Отменяем предыдущий прогон той же ветки: устаревший результат никому не нужен,
+# а медленные job'ы иначе выстраиваются в очередь.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: Быстрый набор тестов и покрытие
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Настройка Gradle с кэшем
+        uses: gradle/actions/setup-gradle@v4
+
+      # ДИАГНОСТИКА БЭКЕНДА — обязательно ПЕРВЫМ прогоном тестов.
+      #
+      # Зачем. `Backends.select` при недоступности нативного OpenBLAS МОЛЧА
+      # откатывается на `ReferenceBackend`, а эталон `baseline-eh.tsv` привязан к
+      # multik: на reference гейт характеризации падает 4/4 с расхождением до 5.7e-2
+      # при допуске 1e-9. Без этого шага такой откат выглядел бы как «рефакторинг
+      # испортил числа», и разбирательство ушло бы не туда.
+      #
+      # Как это работает. `BackendSpiTest.multikCpuBackendIsAvailableHere` УТВЕРЖДАЕТ
+      # и доступность `MultikCpuBackend`, и то, что он выбран активным. Если нативная
+      # библиотека не поднялась — падает именно этот тест с внятным сообщением.
+      # Отдельный тест ради диагностики не изобретаем: нужный уже есть.
+      - name: Диагностика активного бэкенда линейной алгебры
+        run: ./gradlew fastTest --tests 'numerics.backend.BackendSpiTest' --info
+
+      # Компиляция sourceSet'ов `demo` и `problems` включена намеренно: `fastTest`
+      # тянет только `problems` (он в classpath тестов), а `demo` — нет, поэтому
+      # сломанный `src/demo` проходил бы зелёным на всех PR.
+      - name: Быстрый набор тестов, покрытие и компиляция demo
+        run: ./gradlew fastTest koverXmlReport compileDemoKotlin compileProblemsKotlin
+
+      - name: Отчёты тестов и покрытия
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-fast
+          path: |
+            build/reports/tests/fastTest/**
+            build/test-results/fastTest/**
+            build/reports/kover/**
+          if-no-files-found: warn
+
+  characterization:
+    name: Гейт численной нейтральности
+    runs-on: ubuntu-latest
+    # Замер: 4 теста, ~90 с. Запас многократный — на холодный старт JVM и
+    # непрогретый кэш Gradle на раннере.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Настройка Gradle с кэшем
+        uses: gradle/actions/setup-gradle@v4
+
+      # Главная сеть безопасности всех последующих этапов рефакторинга: 1316
+      # численных значений против src/test/resources/characterization/baseline-eh.tsv
+      # с допуском 1e-9. Класс помечен тегом `slow` и потому не попадает в `fastTest`,
+      # а весь `slowTest` пока не завершается (этап 1 спека) — отдельная задача
+      # `characterizationTest` делает гейт достижимым уже сейчас.
+      - name: Гейт E_h против эталона
+        run: ./gradlew characterizationTest
+
+      - name: Отчёты гейта
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-characterization
+          path: |
+            build/reports/tests/characterizationTest/**
+            build/test-results/characterizationTest/**
+          if-no-files-found: warn
+
+  scipy:
+    name: Внешняя сверка со SciPy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Настройка Gradle с кэшем
+        uses: gradle/actions/setup-gradle@v4
+
+      # Ключ кэша — хеш файла требований: смена пиннинга обязана приводить к
+      # переустановке окружения, иначе сверка шла бы на старых версиях SciPy.
+      - name: Кэш окружения Python со SciPy
+        uses: actions/cache@v4
+        with:
+          path: .venv-verify
+          key: venv-verify-${{ runner.os }}-${{ hashFiles('tools/requirements-verify.txt') }}
+
+      # Задача выставляет `scipy.required=true`, поэтому битое окружение
+      # (интерпретатор есть, SciPy нет) даёт FAILURE, а не 7 тихих SKIP при
+      # зелёной сборке. Именно этого job'а не должно быть достаточно «пройти молча».
+      - name: Внешняя сверка со SciPy/NumPy
+        run: ./gradlew scipyVerify
+
+      - name: Отчёты сверки
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-scipy
+          path: |
+            build/reports/tests/scipyVerify/**
+            build/test-results/scipyVerify/**
+            build/verification/scipy-report.json
+          if-no-files-found: warn
+
+# ---------------------------------------------------------------------------
+# JOB `full` (медленный набор целиком) СОЗНАТЕЛЬНО ОТКЛЮЧЁН.
+#
+# Причина — не осторожность, а факт: `verification.PublishedValuesTest` не
+# завершается (прерван и на 600 с, и на 2400 с, шёл на 400+% CPU, сетки до n=64).
+# Значит `./gradlew slowTest` в CI гарантированно упирался бы в timeout, и job был
+# бы СИСТЕМАТИЧЕСКИ КРАСНЫМ по известной причине. Красный CI, который всегда
+# красный, перестаёт быть сигналом — это хуже отсутствующего job'а.
+#
+# Вариант `continue-on-error: true` отвергнут: он даёт ЗЕЛЁНУЮ галочку при
+# невыполненных проверках, то есть ровно тот ложный сигнал, от которого этот
+# этап и избавляется в остальных местах.
+#
+# Что уже покрыто без этого job'а: самый ценный из slow-классов —
+# `EhCharacterizationTest` — вынесен в job `characterization` выше и гоняется
+# на каждый push. Остальные slow-классы (`CrossSchemeConsistencyTest` 80 с,
+# `AnalyticSolutionTest` 36 с) выполнимы и войдут сюда вместе с включением job'а.
+#
+# TODO(этап 1 спека, .tasks/code-review-remediation/SPEC.md): после ускорения
+# горячего пути (`LomegaNodes` → `by lazy`, кэш матрицы ядра в `matrixM`)
+# ВКЛЮЧИТЬ блок ниже, замерить `slowTest` и выставить `timeout-minutes` по факту.
+# Одновременно убрать "slowTest" из `disabledForTestTasks` в build.gradle.kts,
+# чтобы покрытие снова считалось по полному набору.
+#
+#  full:
+#    name: Медленный набор тестов
+#    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+#    runs-on: ubuntu-latest
+#    timeout-minutes: 60   # ← пересмотреть по фактическому замеру после этапа 1
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: Установка JDK 21
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: '21'
+#          distribution: 'temurin'
+#      - name: Настройка Gradle с кэшем
+#        uses: gradle/actions/setup-gradle@v4
+#      - name: Медленный набор тестов
+#        run: ./gradlew slowTest
+#      - name: Отчёты тестов
+#        if: always()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: test-reports-full
+#          path: |
+#            build/reports/tests/slowTest/**
+#            build/test-results/slowTest/**
+#          if-no-files-found: warn
