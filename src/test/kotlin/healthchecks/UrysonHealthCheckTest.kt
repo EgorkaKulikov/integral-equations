@@ -171,10 +171,12 @@ class UrysonHealthCheckTest {
             val xi = core.xiVector(coefficients)
             val thetaF = firstKindSolver(basis, funcs, space, op)
                 .thetaOf { t -> UrysonProblem.C.rhsExact(t, op) }
+            // Геттер отдаёт КОПИЮ массива — берём её один раз ДО цикла, а не на итерацию.
+            val weights = space.weights
             var sum = 0.0
             for (j in 0 until grid.n + 2) {
                 val d = xi[j] - thetaF[j]
-                sum += space.weights[j] * d * d
+                sum += weights[j] * d * d
             }
             return Math.sqrt(sum)
         }
@@ -233,12 +235,15 @@ class UrysonHealthCheckTest {
             noisyThetaCoefficients(UrysonProblem.C, solver, op, grid, quad, 1e-2, 999L)
         val core = CollocationCore(basis, funcs, op)
 
+        // Геттер отдаёт КОПИЮ массива — берём её один раз, а не на каждой итерации цикла.
+        val weights = space.weights
+
         fun tikhonovFunctional(c: DoubleArray): Double {
             val xi = core.xiVector(c)
             var sum = 0.0
             for (j in 0 until grid.n + 2) {
                 val d = xi[j] - thetaFDelta[j]
-                sum += space.weights[j] * d * d
+                sum += weights[j] * d * d
             }
             return sum + PROBE_ALPHA * space.omegaReg(c)
         }

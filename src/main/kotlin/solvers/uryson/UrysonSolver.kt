@@ -49,18 +49,49 @@ class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
     val dim = n + 2
 
     /**
+     * Допуск отбрасывания узлов, совпавших с концами подынтервала.
+     *
+     * Значение берётся из ЕДИНОГО ИСТОЧНИКА [Grid.breakpointInclusionEps] (там же —
+     * обоснование относительности и оговорка про мелкие отрезки), а не вычисляется
+     * здесь повторно: раньше та же формула дублировалась в `VolterraOperator`, причём
+     * была записана иначе (`coerceAtLeast` против `maxOf`).
+     *
+     * ОБЪЯВЛЕНО ДО [gramRInternal] НЕ СЛУЧАЙНО: инициализаторы свойств в Kotlin
+     * выполняются в порядке объявления, а `buildGram()` вызывает [subBreakpoints],
+     * читающий этот порог. При объявлении ПОСЛЕ порог был бы ещё `0.0`, и матрица
+     * Грама считалась бы с ДРУГИМ разбиением — тихое изменение чисел без ошибки.
+     */
+    private val breakpointEps: Double = grid.breakpointInclusionEps
+
+    /**
      * Веса дискретной нормы `w_j = (x_{j+3} - x_j)/3`, `j = -2..n-1` (индекс массива `j+2`).
      *
      * Пропорциональны длине носителя сплайна `omega_j`; их сумма равна длине отрезка,
      * что делает дискретную норму согласованной с `L^2`.
      */
-    val weights: DoubleArray = DoubleArray(dim) { (grid.x(it - 2 + 3) - grid.x(it - 2)) / 3.0 }
+    private val weightsInternal: DoubleArray = DoubleArray(dim) { (grid.x(it - 2 + 3) - grid.x(it - 2)) / 3.0 }
+
+    /**
+     * Веса дискретной нормы (КОПИЯ: мутация результата не затрагивает пространство).
+     *
+     * Поле ХОЛОДНОЕ: все вызывающие читают его один раз и сохраняют в своё поле
+     * (см. `TikhonovSolver`), поэтому копия не попадает в горячий цикл.
+     */
+    val weights: DoubleArray get() = weightsInternal.copyOf()
 
     /** Веса метода Nyström `W_j = \int_a^b omega_j(s) ds`. */
-    val wInt: DoubleArray = DoubleArray(dim) { k ->
+    private val wIntInternal: DoubleArray = DoubleArray(dim) { k ->
         val j = k - 2
         quad.integrate(grid.breakpoints) { t -> basis.omega(j, t) }
     }
+
+    /**
+     * Веса метода Nyström (КОПИЯ, см. обоснование у [weights]).
+     *
+     * Единственный боевой читатель — `SecondKindSolver.nystrom`, где значение берётся
+     * в локальную переменную ДО цикла Ньютона.
+     */
+    val wInt: DoubleArray get() = wIntInternal.copyOf()
 
     /**
      * Матрица Грама стабилизатора: `[R]_{i,j} = \int (omega_i omega_j + omega_i' omega_j') ds`.
@@ -70,7 +101,16 @@ class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
      * Матрица симметрична, положительно определена и полосная: `|i-j| <= 2`, поскольку
      * носители сплайнов, отстоящих дальше, не пересекаются.
      */
-    val gramR: Array<DoubleArray> = buildGram()
+    private val gramRInternal: Array<DoubleArray> = buildGram()
+
+    /**
+     * Матрица Грама стабилизатора (ГЛУБОКАЯ КОПИЯ, см. обоснование у [weights]).
+     *
+     * Копируются именно строки, а не только внешний массив: `copyOf()` на
+     * `Array<DoubleArray>` даёт ПОВЕРХНОСТНУЮ копию, через которую содержимое
+     * по-прежнему правилось бы насквозь — то есть защита была бы мнимой.
+     */
+    val gramR: Array<DoubleArray> get() = Array(gramRInternal.size) { gramRInternal[it].copyOf() }
 
     private fun buildGram(): Array<DoubleArray> {
         val r = LinearAlgebra.zeros(dim, dim)
@@ -100,30 +140,24 @@ class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
         pts.add(lo)
         for (k in 0..n) {
             val xk = grid.x(k)
-            if (xk > lo + BREAKPOINT_ABS_EPS && xk < hi - BREAKPOINT_ABS_EPS) pts.add(xk)
+            if (xk > lo + breakpointEps && xk < hi - breakpointEps) pts.add(xk)
         }
         pts.add(hi)
         return pts.toDoubleArray()
     }
 
     /** Сумма весов `sum_j w_j`; по построению должна равняться длине отрезка `b - a`. */
-    fun weightsSum(): Double = weights.sum()
+    fun weightsSum(): Double = weightsInternal.sum()
 
     /** Квадратичная форма стабилизатора `Omega(x_h) = c^T R_h c`. */
     fun omegaReg(c: DoubleArray): Double {
-        val rc = LinearAlgebra.matVec(gramR, c)
+        // Внутри класса читаем бэкинг-поле напрямую: копия здесь была бы лишней.
+        val rc = LinearAlgebra.matVec(gramRInternal, c)
         var s = 0.0
         for (i in c.indices) s += c[i] * rc[i]
         return s
     }
 
-    private companion object {
-        /**
-         * Абсолютный допуск для отбрасывания внутренних узлов сетки, совпадающих
-         * (с точностью до машинного эпсилона) с концами подынтервала.
-         */
-        const val BREAKPOINT_ABS_EPS = 1e-15
-    }
 }
 
 /**
@@ -169,10 +203,14 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
      *
      * Предвычисление позволяет в схемах Кулкарни и Nyström не пересобирать разбиение
      * при каждом вычислении вложенных интегралов.
+     *
+     * READ-ONLY ПО СОГЛАШЕНИЮ: содержимое НЕЛЬЗЯ изменять. ГОРЯЧЕЕ поле — копия не
+     * возвращается сознательно: массив читается в цикле [applyNodes] и на каждой
+     * итерации квази-Ньютона. Записей в проекте нет.
      */
     val gNode: DoubleArray
 
-    /** Веса квадратуры, соответствующие узлам [gNode]. */
+    /** Веса квадратуры, соответствующие узлам [gNode]. READ-ONLY по соглашению (горячее). */
     val gW: DoubleArray
 
     init {
@@ -241,11 +279,27 @@ class CollocationCore(
     private val quad = op.quad
     private val kernel = op.kernel
 
+    /**
+     * Эталонные узлы и веса квадратуры на [-1,1], полученные ОДИН РАЗ.
+     *
+     * [GaussLegendre.refNodesWeights] возвращает КОПИИ массивов, а [bMatrix] вызывается
+     * НА КАЖДОЙ итерации Ньютона (`SecondKindSolver.newtonStep`) и Гаусса–Ньютона
+     * (`TikhonovSolver.solveFixedAlpha`). Получение узлов внутри [bMatrix] давало бы две
+     * аллокации на итерацию на ровном месте; здесь копия делается однократно.
+     *
+     * Значения и порядок арифметики те же: массивы неизменны и читаются только на чтение.
+     */
+    private val refNodes: DoubleArray
+    private val refWeights: DoubleArray
+
     /** Различные опорные точки всех функционалов `theta_j` (узлы и середины интервалов). */
     val supportPts: DoubleArray
     private val ptIdx: HashMap<Double, Int> = HashMap()
 
     init {
+        val (rn, rw) = quad.refNodesWeights()
+        refNodes = rn
+        refWeights = rw
         val set = LinkedHashSet<Double>()
         for (j in -2..n - 1) for (p in funcs.valueFunctional(j).nodes) set.add(p)
         supportPts = set.toDoubleArray()
@@ -282,7 +336,10 @@ class CollocationCore(
     fun bMatrix(c: DoubleArray): Array<DoubleArray> {
         val np = supportPts.size
         val g = LinearAlgebra.zeros(np, n + 2)
-        val (nodes, weights) = quad.refNodesWeights()
+        // Узлы/веса получены однократно в init: [refNodesWeights] отдаёт копии, а этот
+        // метод вызывается на каждой итерации Ньютона / Гаусса–Ньютона.
+        val nodes = refNodes
+        val weights = refWeights
         for (m in 0 until n) {
             val lo = grid.x(m)
             val hi = grid.x(m + 1)
@@ -457,6 +514,25 @@ class SecondKindSolver(
         return LinearAlgebra.solve(jacobian, negativeResidual)
     }
 
+    /**
+     * Реконструкция правой части схемы Кулкарни по коэффициентам `c` сплайна `y_h`.
+     *
+     * Возвращает тройку:
+     *  - `yhNodes` — значения `y_h` в узлах квадратуры [UrysohnOperator.gNode];
+     *  - `gAtSupport` — функция `g(t) = f(t) + lambda (U y_h)(t)` (вычисляется в любой
+     *    точке, в частности в опорных точках функционалов);
+     *  - `gCoeffs` — коэффициенты проекции `P_theta g`.
+     *
+     * Блок нужен дважды: на каждой итерации квази-Ньютона (внутри `G_K`) и после
+     * выхода из цикла — при восстановлении `x_h^K = y_h + (I - P_theta) g`.
+     */
+    private fun projectedRhs(c: DoubleArray): Triple<DoubleArray, (Double) -> Double, DoubleArray> {
+        val yhNodes = DoubleArray(op.gNode.size) { basis.evalSpline(c, op.gNode[it]) }
+        val gAtSupport = { t: Double -> rhs(t) + lambda * op.applyNodes(t, yhNodes) }
+        val gCoeffs = funcs.projectorCoeffs(gAtSupport)
+        return Triple(yhNodes, gAtSupport, gCoeffs)
+    }
+
     /** Базовое приближение `x_h` как сплайн. */
     fun base(): SolutionFunc {
         val newton = solveBase()
@@ -499,11 +575,9 @@ class SecondKindSolver(
 
         /** Правая часть системы Кулкарни `G_K(c)`. */
         fun gK(c: DoubleArray): DoubleArray {
-            val yhNodes = DoubleArray(op.gNode.size) { basis.evalSpline(c, op.gNode[it]) }
+            val (yhNodes, _, gCoeffs) = projectedRhs(c)
             val uyhNodes = DoubleArray(op.gNode.size) { op.applyNodes(op.gNode[it], yhNodes) }
             val gNodes = DoubleArray(op.gNode.size) { fNodes[it] + lambda * uyhNodes[it] }
-            val gAtSupport = { t: Double -> rhs(t) + lambda * op.applyNodes(t, yhNodes) }
-            val gCoeffs = funcs.projectorCoeffs(gAtSupport)
             // Остаток проектора в узлах квадратуры: arg = y_h + (I - P_theta) g.
             val argNodes = DoubleArray(op.gNode.size) {
                 yhNodes[it] + gNodes[it] - basis.evalSpline(gCoeffs, op.gNode[it])
@@ -542,9 +616,7 @@ class SecondKindSolver(
             residual = lastResidual,
             tolerance = newtonTol,
         )
-        val yhNodes = DoubleArray(op.gNode.size) { basis.evalSpline(c, op.gNode[it]) }
-        val gAtSupport = { t: Double -> rhs(t) + lambda * op.applyNodes(t, yhNodes) }
-        val gCoeffs = funcs.projectorCoeffs(gAtSupport)
+        val (_, gAtSupport, gCoeffs) = projectedRhs(c)
         val eval = { t: Double -> basis.evalSpline(c, t) + (gAtSupport(t) - basis.evalSpline(gCoeffs, t)) }
         return SolutionFunc(
             eval = eval,

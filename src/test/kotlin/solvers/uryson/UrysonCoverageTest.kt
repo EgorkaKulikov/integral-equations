@@ -93,9 +93,12 @@ class UrysonCoverageTest {
         val space = SplineSpace(basis, quad)
         assertTrue(abs(space.weightsSum() - 1.0) < 1e-12)
         assertTrue(space.weights.sum() > 0 && space.wInt.all { finite(it) })
+        // Геттер отдаёт ГЛУБОКУЮ копию — берём её один раз ДО циклов, иначе каждая
+        // итерация копировала бы всю матрицу целиком (дважды).
+        val gram = space.gramR
         for (i in 0 until space.dim) {
             for (j in 0 until space.dim) {
-                assertTrue(abs(space.gramR[i][j] - space.gramR[j][i]) < 1e-12)
+                assertTrue(abs(gram[i][j] - gram[j][i]) < 1e-12)
             }
         }
         assertTrue(abs(space.omegaReg(DoubleArray(space.dim))) < 1e-15)

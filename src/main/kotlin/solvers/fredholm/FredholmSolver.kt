@@ -38,7 +38,17 @@ class KernelF(
  * @param quad квадратурная формула Гаусса–Лежандра на ячейке.
  */
 class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegendre) {
+    /**
+     * Глобальные узлы составной квадратуры.
+     *
+     * READ-ONLY ПО СОГЛАШЕНИЮ: содержимое НЕЛЬЗЯ изменять. ГОРЯЧЕЕ поле — копия не
+     * возвращается сознательно: массив читается во внутренних циклах [applyNodes],
+     * [applyDerivNodes], [applyDeriv2Nodes] и при сборке матриц — копирование на каждом
+     * обращении дало бы квадратичный рост аллокаций. Записей в проекте нет.
+     */
     val gNode: DoubleArray
+
+    /** Веса квадратуры при узлах [gNode]. READ-ONLY по соглашению (горячее, см. [gNode]). */
     val gW: DoubleArray
 
     init {
@@ -326,7 +336,7 @@ class SecondKindSolver(
             if (diff < KULKARNI_QUASI_TOLERANCE) { converged = true; break }
         }
         // Ранее несошедшийся итерант возвращался МОЛЧА: отличить его от верного
-        // результата было невозможно. Теперы действует единый контракт [reportConvergence].
+        // результата было невозможно. Теперь действует единый контракт [reportConvergence].
         reportConvergence(
             converged = converged,
             throwOnDivergence = throwOnDivergence,

@@ -25,8 +25,14 @@ import kotlin.test.fail
  * characterization-эталон (1316 значений E_h, допуск 1e-9) совпал бит-в-бит. Но эталон
  * покрывает КОНКРЕТНЫЙ набор конфигураций; кэш мог бы разойтись с оригиналом на других
  * входах, прежде всего на границах, где отбор «полных» ячеек зависит от сравнения с
- * порогом [VolterraOperator.BREAKPOINT_INCLUSION_EPS] = 1e-15. Этот тест закрывает дыру
+ * порогом [VolterraOperator.breakpointInclusionEps]. Этот тест закрывает дыру
  * прямой проверкой на матрице граничных случаев.
+ *
+ * О МАСШТАБЕ ОТРЕЗКА: порог включения ОТНОСИТЕЛЕН (пропорционален `b-a`), поэтому
+ * сетки берутся не только на дефолтном `[0,1]`, но и на отрезках БОЛЬШОГО масштаба
+ * (`[0,1000]`, `[-500,500]`), где абсолютный порог 1e-15 ушёл бы под ulp узлов. Без них
+ * новое поведение порога не проверялось бы вовсе (характеризационный эталон тоже снят
+ * только на `[0,1]`).
  *
  * Почему сравнение ПОБИТОВОЕ, а не с допуском. Требование к этапам 1-7 рефакторинга —
  * поведенческая нейтральность: эталон не перегенерируется ни на одну строку. Умножение
@@ -73,6 +79,12 @@ class VolterraIntegrandCacheEquivalenceTest {
         GridCase("uniform n=16", Grid.uniform(16)),
         GridCase("geometric n=8 R=2", Grid.geometric(8, R = 2.0)),
         GridCase("graded n=8 ratio=2", Grid.graded(8, ratio = 2.0)),
+        // Отрезки БОЛЬШОГО масштаба: здесь порог включения уже НЕ равен 1e-15
+        // (он относительный), и именно они покрывают новое поведение: на них
+        // абсолютные 1e-15 лежат ниже ulp узлов (ulp(1e3) ~ 2.3e-13).
+        GridCase("uniform n=8 на [0,1000] (большой масштаб)", Grid.uniform(8, 0.0, 1000.0)),
+        GridCase("uniform n=8 на [-500,500] (большой масштаб, знакопеременный)", Grid.uniform(8, -500.0, 500.0)),
+        GridCase("graded n=8 ratio=2 на [0,1000]", Grid.graded(8, 0.0, 1000.0, ratio = 2.0)),
     )
 
     /** Ядра — из модельных задач проекта (фикстуры), а не выдуманные. */
@@ -156,13 +168,119 @@ class VolterraIntegrandCacheEquivalenceTest {
     }
 
     /**
-     * Узлы сетки и окрестность порога [VolterraOperator.BREAKPOINT_INCLUSION_EPS].
+     * Узлы сетки и окрестность порога [VolterraOperator.breakpointInclusionEps].
      * Именно здесь кэшированный путь (счётчик `included` в цикле `while`) мог бы отобрать
      * иное число полных ячеек, чем `subBreakpoints` (цикл `for` с `break`).
      */
     @Test fun gridNodesAndThresholdNeighborhood_cachedMatchesUncachedBitwise() {
-        val stats = compareAll("узлы сетки и окрестность порога 1e-15") { grid -> nodeThresholdTs(grid) }
+        val stats = compareAll("узлы сетки и окрестность порога включения") { grid -> nodeThresholdTs(grid) }
         assertNonDegenerate(stats)
+    }
+
+    /**
+     * ОКРЕСТНОСТЬ САМОГО ПОРОГА, вычисленного по масштабу конкретной сетки.
+     *
+     * [nodeThresholdTs] сдвигает `t` на ФИКСИРОВАННЫЕ 1e-16/1e-15/1e-14 — это было
+     * окрестностью порога, пока порог был абсолютным. Теперь порог зависит от
+     * масштаба отрезка, и на `[0,1000]` те сдвиги на три порядка МЕНЬШЕ порога
+     * (и вообще ниже ulp узлов), то есть саму точку переключения решения больше не
+     * задевают. Здесь сдвиги берутся ОТ ФАКТИЧЕСКОГО порога оператора, поэтому
+     * граница «включать / не включать узел» проверяется на ЛЮБОМ масштабе.
+     */
+    @Test fun scaledThresholdNeighborhood_cachedMatchesUncachedBitwise() {
+        var comparisons = 0
+        var crossings = 0
+        for (g in gridCases()) {
+            val eps = VolterraOperator(kernelCases[0].kernel, g.grid, quad).breakpointInclusionEps
+            val ts = ArrayList<TCase>()
+            for (j in 1 until g.grid.n) {
+                val x = g.grid.x(j)
+                // Ровно на пороге, чуть ниже и чуть выше — в единицах САМОГО порога.
+                for (mult in listOf(0.5, 1.0, 2.0, 10.0)) {
+                    ts.add(TCase(x + mult * eps, "t=x_$j+$mult*eps (eps=$eps, x_$j=$x)"))
+                    ts.add(TCase(x - mult * eps, "t=x_$j-$mult*eps (eps=$eps, x_$j=$x)"))
+                }
+                ts.add(TCase(Math.nextAfter(x + eps, Double.NEGATIVE_INFINITY), "t=nextDown(x_$j+eps)"))
+                ts.add(TCase(Math.nextAfter(x + eps, Double.POSITIVE_INFINITY), "t=nextUp(x_$j+eps)"))
+            }
+            for (k in kernelCases) {
+                val op = VolterraOperator(k.kernel, g.grid, quad)
+                for (integrand in integrands(g.grid)) {
+                    val cache = op.integrandCache(integrand.u)
+                    for (tc in ts) {
+                        val expected = op.apply(tc.t, integrand.u)
+                        val actual = op.apply(tc.t, cache)
+                        comparisons++
+                        assertBitwise(expected, actual) {
+                            report("окрестность ОТНОСИТЕЛЬНОГО порога eps=$eps", g, k, integrand, tc, expected, actual, op, cache)
+                        }
+                    }
+                }
+            }
+            // Набор не вырожден: среди точек есть и такие, где число полных ячеек РАЗНОЕ
+            // по разные стороны порога, иначе проверка не задевала бы точку переключения.
+            for (j in 1 until g.grid.n) {
+                val x = g.grid.x(j)
+                if (fullCellCount(g.grid, x - 0.5 * eps) != fullCellCount(g.grid, x + 2.0 * eps)) crossings++
+            }
+        }
+        assertTrue(comparisons > 0, "Вырожденный тест: ни одной сверки у относительного порога")
+        assertTrue(
+            crossings > 0,
+            "Вырожденный набор: ни на одной сетке переход через порог не меняет числа полных ячеек, "
+                + "то есть точка переключения не проверяется",
+        )
+    }
+
+    /**
+     * НА ОТРЕЗКАХ МАСШТАБА <= 1 ПОРОГ СОВПАДАЕТ С ПРЕЖНИМ 1e-15 ПОБИТОВО.
+     *
+     * Это и есть доказательство нейтральности миграции на относительный порог: характеризационный
+     * эталон снят на `[0,1]`, и если порог там тот же до бита, то числа не могли поехать.
+     * Сравниваются RAW-биты, а не значения.
+     */
+    @Test fun thresholdIsBitwiseUnchangedOnUnitScaleSegments() {
+        val unitScale = listOf(
+            "[0,1] (дефолт, на нём снят эталон)" to Grid.uniform(8),
+            "[0,1] n=16" to Grid.uniform(16),
+            "[0,0.5] (масштаб МЕНЬШЕ 1)" to Grid.uniform(8, 0.0, 0.5),
+            "geometric [0,1]" to Grid.geometric(8, R = 2.0),
+            "graded [0,1]" to Grid.graded(8, ratio = 2.0),
+        )
+        for ((name, grid) in unitScale) {
+            val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
+            assertBitwise(1e-15, op.breakpointInclusionEps) {
+                "На отрезке масштаба <= 1 порог обязан побитово совпадать с прежним абсолютным 1e-15 " +
+                    "(иначе миграция не нейтральна и эталон поехал бы): сетка $name, " +
+                    "ожидалось " + fmt(1e-15) + ", получено " + fmt(op.breakpointInclusionEps)
+            }
+        }
+    }
+
+    /**
+     * На отрезке БОЛЬШОГО масштаба порог ДЕЙСТВИТЕЛЬНО масштабируется и остаётся
+     * рабочим допуском — то есть вычитание `t - eps` реально меняет `t`.
+     *
+     * Именно это было сломано до правки: при абсолютном 1e-15 на `[0,1000]` выражение
+     * `t - 1e-15` возвращало РОВНО `t` (сдвиг ниже ulp), и допуск вырождался в строгое `<`.
+     */
+    @Test fun thresholdActuallyScalesOnLargeSegments() {
+        val grid = Grid.uniform(8, 0.0, 1000.0)
+        val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
+        val eps = op.breakpointInclusionEps
+        assertTrue(eps > 1e-15, "На [0,1000] порог обязан быть больше абсолютного 1e-15, получено $eps")
+        val x = grid.x(4)
+        // Старый абсолютный порог здесь вырожден: вычитание не меняет число ни на бит.
+        assertBitwise(x, x - 1e-15) {
+            "Ожидалось, что на [0,1000] СТАРЫЙ абсолютный порог вырожден (x-1e-15 == x); " +
+                "если это не так, мотивировка правки неверна: x=" + fmt(x)
+        }
+        // А новый относительный — работает.
+        assertTrue(
+            x - eps < x,
+            "Относительный порог обязан реально сдвигать точку: x=" + fmt(x) + ", eps=" + eps +
+                ", x-eps=" + fmt(x - eps),
+        )
     }
 
     /**
@@ -574,12 +692,19 @@ class VolterraIntegrandCacheEquivalenceTest {
 
     private fun fmt(x: Double): String = "$x [${bits(x)}]"
 
-    /** Число ПОЛНЫХ ячеек сетки в разбиении [a,t] (повторяет отбор из обоих путей). */
+    /**
+     * Число ПОЛНЫХ ячеек сетки в разбиении [a,t] (повторяет отбор из обоих путей).
+     *
+     * Порог берётся из САМОГО оператора (он относительный и зависит от масштаба
+     * отрезка), а не зашивается константой: иначе диагностика и проверки
+     * невырожденности врали бы на сетках большого масштаба.
+     */
     private fun fullCellCount(grid: Grid, t: Double): Int {
         if (t <= grid.a) return 0
         val bp = grid.breakpoints
+        val eps = VolterraOperator(kernelCases[0].kernel, grid, quad).breakpointInclusionEps
         var included = 0
-        while (included < bp.size && bp[included] < t - VolterraOperator.BREAKPOINT_INCLUSION_EPS) included++
+        while (included < bp.size && bp[included] < t - eps) included++
         return maxOf(0, included - 1)
     }
 

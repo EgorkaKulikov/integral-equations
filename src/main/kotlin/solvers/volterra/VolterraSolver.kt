@@ -46,16 +46,25 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
     /** Левый конец отрезка — нижний предел интегрирования во всех формулах. */
     val a = grid.a
 
-    companion object {
-        /** Абсолютный допуск: узел сетки считается строго внутри (a, t), если x < t - EPS. */
-        const val BREAKPOINT_INCLUSION_EPS = 1e-15
-    }
+    /**
+     * Допуск включения узла: узел сетки считается строго внутри (a, t), если `x < t - eps`.
+     *
+     * Значение берётся из ЕДИНОГО ИСТОЧНИКА [Grid.breakpointInclusionEps] (там же —
+     * обоснование относительности и оговорка про мелкие отрезки), а не вычисляется
+     * здесь повторно: раньше та же формула дублировалась в `SplineSpace`.
+     *
+     * Читается всеми тремя местами отбора ([subBreakpoints], кэшированный [apply],
+     * [integrateRange]) — это не стиль, а ТРЕБОВАНИЕ КОРРЕКТНОСТИ: кэшированный и
+     * некэшированный пути обязаны отбирать ОДИНАКОВОЕ число полных ячеек, иначе
+     * ломается инвариант [IntegrandCache].
+     */
+    val breakpointInclusionEps: Double = grid.breakpointInclusionEps
 
     /** Составное разбиение [a, t]: внутренние узлы сетки < t, затем сам t. */
     private fun subBreakpoints(t: Double): DoubleArray {
         val bp = grid.breakpoints
         val list = ArrayList<Double>()
-        for (x in bp) { if (x < t - BREAKPOINT_INCLUSION_EPS) list.add(x) else break }
+        for (x in bp) { if (x < t - breakpointInclusionEps) list.add(x) else break }
         if (list.isEmpty()) list.add(a)
         list.add(t)
         return list.toDoubleArray()
@@ -80,10 +89,14 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      * ИНВАРИАНТ (важно): это СНИМОК, материализуемый один раз, тогда как
      * некэшированный путь [apply] читает `grid.breakpoints` при каждом вызове.
      * Поэтому два пути эквивалентны ПРИ УСЛОВИИ неизменности содержимого
-     * `grid.breakpoints` после первого обращения к `cellNodes`. [Grid.breakpoints] —
-     * публичный `DoubleArray` с изменяемым содержимым, так что формально это
-     * ничем не защищено; фактически в проекте записей в массив нет, а
-     * инкапсуляция таких массивов — отдельный пункт плана рефакторинга (3.4).
+     * `grid.breakpoints` после первого обращения к `cellNodes`.
+     *
+     * Статус защиты этого условия: [Grid.breakpoints] — ГОРЯЧЕЕ поле, поэтому оно
+     * СОЗНАТЕЛЬНО не возвращает копию (копирование на каждом из десятков тысяч
+     * обращений свело бы на нет сам смысл кэша). Вместо этого действует явно
+     * задокументированное соглашение «read-only» (см. KDoc [Grid.breakpoints]), и в проекте
+     * нет ни одной записи в этот массив. Холодные же массивы соседних API
+     * (`GaussLegendre.refNodesWeights`, `SplineSpace.weights/wInt/gramR`) отдаются копиями.
      *
      * О ПОРЯДКЕ ИНИЦИАЛИЗАЦИИ: выражение использует [refNodes], объявлённый НИЖЕ;
      * корректность обеспечена ИМЕННО ленивостью (к моменту первого обращения
@@ -197,7 +210,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
         val bp = grid.breakpoints
         // Число ведущих узлов сетки, попавших в разбиение (см. subBreakpoints).
         var included = 0
-        while (included < bp.size && bp[included] < t - BREAKPOINT_INCLUSION_EPS) included++
+        while (included < bp.size && bp[included] < t - breakpointInclusionEps) included++
         var sum = 0.0
         // Полные ячейки [bp[c], bp[c+1]] — узлы и значения u берутся из кэша.
         for (c in 0 until included - 1) {
@@ -240,7 +253,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
         if (hi <= lo) return 0.0
         val list = ArrayList<Double>()
         list.add(lo)
-        for (x in grid.breakpoints) if (x > lo + BREAKPOINT_INCLUSION_EPS && x < hi - BREAKPOINT_INCLUSION_EPS) list.add(x)
+        for (x in grid.breakpoints) if (x > lo + breakpointInclusionEps && x < hi - breakpointInclusionEps) list.add(x)
         list.add(hi)
         return quad.integrate(list.toDoubleArray(), g)
     }
