@@ -46,8 +46,8 @@
 
 | Элемент | Реализация | Источник | Статус |
 |---|---|---|---|
-| Базовая коллокация `(I - M)c = g` | `SecondKindSolver.base` (Фредгольм, Вольтерра) | [Dagnino, Remogna, Sablonnière 2014] | Подтверждено |
-| Итерация Слоана | `SecondKindSolver.sloan` | [Sloan 1976] | Подтверждено |
+| Базовая коллокация `(I - M)c = g` | `SecondKindSolverCore.base` (Фредгольм, Вольтерра) | [Dagnino, Remogna, Sablonnière 2014] | Подтверждено |
+| Итерация Слоана | `SecondKindSolverCore.sloan` | [Sloan 1976] | Подтверждено |
 | Схема Кулкарни (проекторы) `(I - M - M2 + M^2)c = (I - M)g + d` | `kulkarniProjector` | [Kulkarni 2003] | Подтверждено |
 | Восстановление `u^K = y_h + (I - P)[f + L y_h]` | `kulkarniProjector` | [Kulkarni 2003] | Подтверждено |
 | Итерированный Кулкарни | `iteratedKulkarni` | [Kulkarni 2003] | Подтверждено |
@@ -77,9 +77,9 @@
 
 | Элемент | Реализация | Источник | Статус |
 |---|---|---|---|
-| Регуляризация Фредгольма `(alpha I + K)u = f` | `solvers/fredholm`, `FirstKindSolver` | [Wazwaz 2011a] | Подтверждено |
-| Значение `alpha = 1e-10` | `FirstKindSolver` | [Kulikov, Makarov 2023] | Экспериментальный выбор авторов, не рекомендация [Wazwaz 2011a] |
-| Сведение Вольтерры I → II рода дифференцированием | `solvers/volterra`, `FirstKindSolver` | [Wazwaz 2011b], [Brunner 2004] | Подтверждено для случая `m = 1`; требует `K(t,t) != 0` во всех точках деления, проверяется `safeDiagonal` |
+| Регуляризация Фредгольма `(alpha I + K)u = f` | `solvers/fredholm`, `FredholmFirstKindSolver` | [Wazwaz 2011a] | Подтверждено |
+| Значение `alpha = 1e-10` | `FredholmFirstKindSolver` | [Kulikov, Makarov 2023] | Экспериментальный выбор авторов, не рекомендация [Wazwaz 2011a] |
+| Сведение Вольтерры I → II рода дифференцированием | `solvers/volterra`, `VolterraFirstKindSolver` | [Wazwaz 2011b], [Brunner 2004] | Подтверждено для случая `m = 1`; требует `K(t,t) != 0` во всех точках деления, проверяется `safeDiagonal` |
 | Формулы `(Vu)'` и `(Vu)''` (правило Лейбница) | `VolterraOperator.applyDeriv`, `applyDeriv2` | [Makarov, Kulikov 2026] | `(Vu)'` подтверждено; `(Vu)''` — вывод проверен вручную, отдельной публикации нет; численно сверено с `scipy.integrate.quad` (раздел 6, слой L4) |
 
 ## 5. Нелинейное уравнение Урысона
@@ -88,11 +88,11 @@
 |---|---|---|---|
 | Оператор Урысона и производная Фреше | `UrysohnOperator` | [Krasnoselskii 1964], [Zeidler 1986] | Подтверждено |
 | Ньютон с аналитическим якобианом `B(c)_{j,i} = theta_j(U'(x_h) omega_i)` | `CollocationCore.bMatrix` | [Atkinson 1997] | Подтверждено |
-| Схема Кулкарни (квази-Ньютон с предобуславливателем) | `SecondKindSolver.kulkarni` | [Kulkarni 2003], [Dagnino, Dallefrate, Remogna 2019] | Подтверждено |
-| Сплайн-Nyström для Урысона | `SecondKindSolver.nystrom` | [Remogna, Sbibih, Tahrichi 2023] | Подтверждено |
+| Схема Кулкарни (квази-Ньютон с предобуславливателем) | `UrysonSecondKindSolver.kulkarni` | [Kulkarni 2003], [Dagnino, Dallefrate, Remogna 2019] | Подтверждено |
+| Сплайн-Nyström для Урысона | `UrysonSecondKindSolver.nystrom` | [Remogna, Sbibih, Tahrichi 2023] | Подтверждено |
 | Регуляризация Тихонова, стабилизатор `R_h` в норме `W^{1,2}` | `SplineSpace.gramR` | [Тихонов, Арсенин 1977], [Engl, Hanke, Neubauer 1996] | Подтверждено |
-| Гаусс–Ньютон для регуляризованной задачи | `FirstKindSolver.solveFixedAlpha` | [Engl, Hanke, Neubauer 1996] | Подтверждено (знак в знак) |
-| Принцип невязки Морозова | `FirstKindSolver.solveMorozov` | [Engl, Hanke, Neubauer 1996], разд. 4.3 | Подтверждено |
+| Гаусс–Ньютон для регуляризованной задачи | `UrysonFirstKindSolver.solveFixedAlpha` | [Engl, Hanke, Neubauer 1996] | Подтверждено (знак в знак) |
+| Принцип невязки Морозова | `UrysonFirstKindSolver.solveMorozov` | [Engl, Hanke, Neubauer 1996], разд. 4.3 | Подтверждено |
 | Гомотопия по убывающему `alpha` с тёплым стартом | `solveMorozov` | — | Деталь реализации |
 | Модель шума (кусочно-линейный профиль) | `noisyThetaF` | — | Деталь реализации; детерминированность и масштабирование в `L^2` соответствуют постановке |
 

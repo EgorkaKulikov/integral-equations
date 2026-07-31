@@ -9,6 +9,8 @@ import numerics.functionals.DeBoorFixFunctionals
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import org.junit.jupiter.api.Tag
+import solvers.fredholm.FredholmSecondKindSolver
+import solvers.volterra.VolterraSecondKindSolver
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -46,7 +48,7 @@ class DefectRegressionTest {
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
             val funcs = DeBoorFixFunctionals(basis, 0)
             val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-            val solver = solvers.fredholm.SecondKindSolver(
+            val solver = FredholmSecondKindSolver(
                 basis, funcs, op, 1.0,
                 { t -> problem.rhsExact(t, op) },
                 { t -> problem.rhsExactDeriv(t, op) },
@@ -70,7 +72,7 @@ class DefectRegressionTest {
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
             val funcs = DeBoorFixFunctionals(basis, 0)
             val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(8))
-            val solver = solvers.volterra.SecondKindSolver(
+            val solver = VolterraSecondKindSolver(
                 basis, funcs, op, 1.0,
                 { t -> problem.rhsExact(t, op) },
                 { t -> problem.rhsExactDeriv(t, op) },
@@ -138,7 +140,7 @@ class DefectRegressionTest {
     }
 
     /**
-     * ДЕФЕКТ 2. `FirstKindSolver` (Фредгольм) не передавал вторую производную
+     * ДЕФЕКТ 2. `FredholmFirstKindSolver` (Фредгольм) не передавал вторую производную
      * правой части во внутренний решатель II рода, из-за чего семейство xi^<0>
      * молча получало f'' = 0.
      *
@@ -184,7 +186,7 @@ class DefectRegressionTest {
     }
 
     /**
-     * ДЕФЕКТ 3. `FirstKindSolver` (Фредгольм) не проверял положительность параметра
+     * ДЕФЕКТ 3. `FredholmFirstKindSolver` (Фредгольм) не проверял положительность параметра
      * регуляризации: при alpha = 0 множитель c_L = -1/alpha обращался в бесконечность,
      * при alpha < 0 менялся смысл регуляризации — в обоих случаях без диагностики.
      */

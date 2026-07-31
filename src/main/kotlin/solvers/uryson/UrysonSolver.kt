@@ -88,7 +88,7 @@ class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
     /**
      * Веса метода Nyström (КОПИЯ, см. обоснование у [weights]).
      *
-     * Единственный боевой читатель — `SecondKindSolver.nystrom`, где значение берётся
+     * Единственный боевой читатель — `UrysonSecondKindSolver.nystrom`, где значение берётся
      * в локальную переменную ДО цикла Ньютона.
      */
     val wInt: DoubleArray get() = wIntInternal.copyOf()
@@ -246,7 +246,7 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
 /**
  * Результат итераций Ньютона в пространстве коэффициентов.
  *
- * Ранее [SecondKindSolver.solveBase] возвращал `Pair<DoubleArray, Int>`, из которого
+ * Ранее [UrysonSecondKindSolver.solveBase] возвращал `Pair<DoubleArray, Int>`, из которого
  * было невозможно узнать, сошлась ли итерация: число итераций, равное пределу,
  * одинаково возникает и при сходимости на последнем шаге, и при расходимости.
  *
@@ -283,7 +283,7 @@ class CollocationCore(
      * Эталонные узлы и веса квадратуры на [-1,1], полученные ОДИН РАЗ.
      *
      * [GaussLegendre.refNodesWeights] возвращает КОПИИ массивов, а [bMatrix] вызывается
-     * НА КАЖДОЙ итерации Ньютона (`SecondKindSolver.newtonStep`) и Гаусса–Ньютона
+     * НА КАЖДОЙ итерации Ньютона (`UrysonSecondKindSolver.newtonStep`) и Гаусса–Ньютона
      * (`TikhonovSolver.solveFixedAlpha`). Получение узлов внутри [bMatrix] давало бы две
      * аллокации на итерацию на ровном месте; здесь копия делается однократно.
      *
@@ -402,7 +402,7 @@ class CollocationCore(
  *        в лог и возвращали результат: при программном использовании библиотеки
  *        такое предупреждение оставалось незамеченным.
  */
-class SecondKindSolver(
+class UrysonSecondKindSolver(
     val basis: MinimalSplineBasis,
     val funcs: ProjFunctionals,
     val space: SplineSpace,
@@ -760,7 +760,7 @@ class FirstKindSolution(
  *        а не ошибка: итоговое решение выбирается по принципу невязки Морозова.
  *        Предупреждение в лог пишется в любом случае.
  */
-class FirstKindSolver(
+class UrysonFirstKindSolver(
     val basis: MinimalSplineBasis,
     val funcs: ProjFunctionals,
     val space: SplineSpace,

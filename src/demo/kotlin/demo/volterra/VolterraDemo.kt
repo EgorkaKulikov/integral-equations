@@ -15,8 +15,8 @@ import numerics.functionals.orders
 import problems.volterra.VolterraProblem
 import problems.volterra.firstKindSolver
 import problems.volterra.secondKindSolver
-import solvers.volterra.SecondKindSolver
 import solvers.volterra.VolterraOperator
+import solvers.volterra.VolterraSecondKindSolver
 
 /**
  * Демонстрационная печать таблиц сходимости для линейных уравнений Вольтерры.
@@ -50,7 +50,7 @@ object Tables {
         system: GeneratingSystem,
         familyName: String,
         n: Int,
-    ): Pair<SecondKindSolver, Grid> {
+    ): Pair<VolterraSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(system, grid)
         val funcs = family(familyName, basis)

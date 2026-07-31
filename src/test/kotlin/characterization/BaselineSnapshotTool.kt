@@ -10,6 +10,8 @@ import numerics.functionals.DiscreteDeBoorFixFunctionals
 import numerics.functionals.FunctionalFamily
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
+import solvers.fredholm.FredholmSecondKindSolver
+import solvers.volterra.VolterraSecondKindSolver
 import java.io.File
 import kotlin.test.Test
 
@@ -78,7 +80,7 @@ class BaselineSnapshotTool {
                         val basis = MinimalSplineBasis(system, grid)
                         val funcs = family(familyName, basis)
                         val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-                        val solver = solvers.fredholm.SecondKindSolver(
+                        val solver = FredholmSecondKindSolver(
                             basis, funcs, op, 1.0,
                             { t -> problem.rhsExact(t, op) },
                             { t -> problem.rhsExactDeriv(t, op) },
@@ -119,7 +121,7 @@ class BaselineSnapshotTool {
                         val basis = MinimalSplineBasis(system, grid)
                         val funcs = family(familyName, basis)
                         val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(8))
-                        val solver = solvers.volterra.SecondKindSolver(
+                        val solver = VolterraSecondKindSolver(
                             basis, funcs, op, 1.0,
                             { t -> problem.rhsExact(t, op) },
                             { t -> problem.rhsExactDeriv(t, op) },

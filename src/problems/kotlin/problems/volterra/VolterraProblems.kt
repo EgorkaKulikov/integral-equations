@@ -2,10 +2,10 @@ package problems.volterra
 
 import numerics.MinimalSplineBasis
 import numerics.functionals.FunctionalFamily
-import solvers.volterra.FirstKindSolver
 import solvers.volterra.KernelV
-import solvers.volterra.SecondKindSolver
+import solvers.volterra.VolterraFirstKindSolver
 import solvers.volterra.VolterraOperator
+import solvers.volterra.VolterraSecondKindSolver
 
 /**
  * Модельная задача для линейного уравнения Вольтерры: ядро, точное решение и род
@@ -198,7 +198,7 @@ fun secondKindSolver(
     basis: MinimalSplineBasis,
     funcs: FunctionalFamily,
     op: VolterraOperator,
-): SecondKindSolver = SecondKindSolver(
+): VolterraSecondKindSolver = VolterraSecondKindSolver(
     basis, funcs, op, cL = 1.0,
     fEff = { t -> problem.rhsExact(t, op) },
     fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
@@ -213,7 +213,7 @@ fun secondKindSolver(
  * решателю передаются диагональ ядра `K(t,t)`, производная ядра `K_t(t,s)`, а также
  * правая часть `f'(t)` и точное решение с производной — последние нужны, чтобы
  * численно дифференцировать только малый остаток, а не всю правую часть
- * (подробности в KDoc [FirstKindSolver]).
+ * (подробности в KDoc [VolterraFirstKindSolver]).
  *
  * @throws IllegalArgumentException если `K(t,t)` обращается в ноль либо выбрано
  *         семейство функционалов, требующее второй производной.
@@ -223,7 +223,7 @@ fun firstKindSolver(
     basis: MinimalSplineBasis,
     funcs: FunctionalFamily,
     op: VolterraOperator,
-): FirstKindSolver = FirstKindSolver(
+): VolterraFirstKindSolver = VolterraFirstKindSolver(
     basis, funcs,
     kernel = problem.kernel,
     rhsDeriv = { t -> problem.rhsExactDeriv(t, op) },

@@ -4,11 +4,11 @@ import numerics.GaussLegendre
 import numerics.Grid
 import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
-import solvers.uryson.FirstKindSolver
 import solvers.uryson.Kernel
-import solvers.uryson.SecondKindSolver
 import solvers.uryson.SplineSpace
 import solvers.uryson.UrysohnOperator
+import solvers.uryson.UrysonFirstKindSolver
+import solvers.uryson.UrysonSecondKindSolver
 
 /**
  * Модельная задача для нелинейного уравнения Урысона: ядро, множитель и точное решение.
@@ -115,7 +115,7 @@ fun secondKindSolver(
     funcs: ProjFunctionals,
     space: SplineSpace,
     op: UrysohnOperator,
-): SecondKindSolver = SecondKindSolver(
+): UrysonSecondKindSolver = UrysonSecondKindSolver(
     basis = basis,
     funcs = funcs,
     space = space,
@@ -130,7 +130,7 @@ fun firstKindSolver(
     funcs: ProjFunctionals,
     space: SplineSpace,
     op: UrysohnOperator,
-): FirstKindSolver = FirstKindSolver(basis, funcs, space, op)
+): UrysonFirstKindSolver = UrysonFirstKindSolver(basis, funcs, space, op)
 
 /**
  * Число контрольных узлов профиля шума на один интервал сетки.
@@ -183,14 +183,14 @@ fun noisyRightHandSide(
 
 /**
  * Возвращает вектор `theta_j(f^delta)` зашумлённых данных для задачи первого рода —
- * входные данные метода [FirstKindSolver.solveMorozov].
+ * входные данные метода [UrysonFirstKindSolver.solveMorozov].
  *
  * @param delta уровень шума в норме `L^2`.
  * @param seed зерно генератора; фиксируется явно ради воспроизводимости.
  */
 fun noisyThetaCoefficients(
     problem: UrysonProblem,
-    solver: FirstKindSolver,
+    solver: UrysonFirstKindSolver,
     op: UrysohnOperator,
     grid: Grid,
     quad: GaussLegendre,

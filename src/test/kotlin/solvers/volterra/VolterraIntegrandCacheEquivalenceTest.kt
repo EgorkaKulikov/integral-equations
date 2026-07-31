@@ -50,7 +50,7 @@ import kotlin.test.fail
  * градуированная (существенно неравномерные); ядра трёх модельных задач проекта
  * (`V2`: 1/(1+t+s), `V2exp`: exp(-(t-s)^2), `V2win`: t-s); подынтегральные функции —
  * гладкая, полиномиальная и ДВЕ сплайновых того же вида, что реально приходят в
- * `SecondKindSolver.applyL` (значение сплайна по коэффициентам и базисный `omega_j`).
+ * `VolterraSecondKindSolver.applyL` (значение сплайна по коэффициентам и базисный `omega_j`).
  */
 @Tag("fast")
 class VolterraIntegrandCacheEquivalenceTest {
@@ -301,7 +301,7 @@ class VolterraIntegrandCacheEquivalenceTest {
 
     /**
      * Независимость от ПОРЯДКА обращений. Кэш переиспользуется одним замыканием при всех
-     * `t` (см. `SecondKindSolver.applyL`), а порядок этих `t` определяется вызывающим
+     * `t` (см. `VolterraSecondKindSolver.applyL`), а порядок этих `t` определяется вызывающим
      * кодом: сборкой матрицы, итерациями Кулкарни, вычислением невязки. Значения ячеек от
      * `t` не зависят по построению, но именно это и проверяется: прогон в обратном и в
      * перемешанном (с фиксированным зерном) порядке обязан дать те же биты, что и
@@ -414,7 +414,7 @@ class VolterraIntegrandCacheEquivalenceTest {
      * тогда как в `subBreakpoints` цикл завершается естественным концом `for`. Это
      * единственное место, где два пути останавливаются по РАЗНЫМ причинам, поэтому
      * тождество результатов требует прямой проверки. Точки `t > b` достижимы
-     * на практике: шаблон конечной разности в `FirstKindSolver.deriv4` берёт `t + k*h`.
+     * на практике: шаблон конечной разности в `VolterraFirstKindSolver.deriv4` берёт `t + k*h`.
      */
     private fun beyondUpperBoundTs(grid: Grid): List<TCase> {
         val res = ArrayList<TCase>()
@@ -628,7 +628,7 @@ class VolterraIntegrandCacheEquivalenceTest {
     /**
      * Прогоняет все сочетания (сетка × ядро × подынтегральная функция × t) и сверяет
      * побитово. Кэш создаётся ОДИН на сочетание (сетка, ядро, функция) и обслуживает все
-     * `t` — ровно так он живёт в `SecondKindSolver.applyL`.
+     * `t` — ровно так он живёт в `VolterraSecondKindSolver.applyL`.
      */
     private fun compareAll(scenario: String, tsOf: (Grid) -> List<TCase>): Stats {
         val stats = Stats()

@@ -13,9 +13,9 @@ import problems.uryson.firstKindSolver
 import problems.uryson.noisyThetaCoefficients
 import problems.uryson.secondKindSolver
 import solvers.uryson.FirstKindSolution
-import solvers.uryson.SecondKindSolver
 import solvers.uryson.SplineSpace
 import solvers.uryson.UrysohnOperator
+import solvers.uryson.UrysonSecondKindSolver
 import kotlin.math.abs
 
 /**
@@ -48,7 +48,7 @@ object Tables {
         problem: UrysonProblem,
         system: GeneratingSystem,
         n: Int,
-    ): SecondKindSolver {
+    ): UrysonSecondKindSolver {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(system, grid)
         val funcs = ProjFunctionals(basis)

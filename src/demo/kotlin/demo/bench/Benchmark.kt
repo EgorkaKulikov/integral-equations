@@ -12,7 +12,7 @@ import numerics.backend.ReferenceBackend
 import numerics.functionals.ProjFunctionals
 import problems.fredholm.FredholmProblem
 import solvers.fredholm.FredholmOperator
-import solvers.fredholm.SecondKindSolver
+import solvers.fredholm.FredholmSecondKindSolver
 import java.io.File
 import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.TimeUnit
@@ -85,12 +85,12 @@ private fun summarize(samplesNanos: LongArray): Measurement {
 private var blackHole: Double = 0.0
 
 /** Строит представительный решатель уравнения Фредгольма (задача F2) размера dim = n+2. */
-private fun buildSolver(n: Int): SecondKindSolver {
+private fun buildSolver(n: Int): FredholmSecondKindSolver {
     val grid = Grid.uniform(n)
     val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
     val funcs = ProjFunctionals(basis)
     val op = FredholmOperator(FredholmProblem.F2.kernel, grid, GaussLegendre(8))
-    return SecondKindSolver(
+    return FredholmSecondKindSolver(
         basis, funcs, op, 1.0,
         { t -> FredholmProblem.F2.rhsExact(t, op) },
         { t -> FredholmProblem.F2.rhsExactDeriv(t, op) },
@@ -114,7 +114,7 @@ private fun timeFullSolve(n: Int): Long {
 }
 
 /** Измеряет время только сборки матрицы (без предвычислений и решения СЛАУ). */
-private fun timeMatrixAssembly(solver: SecondKindSolver): Long {
+private fun timeMatrixAssembly(solver: FredholmSecondKindSolver): Long {
     val start = System.nanoTime()
     val matrix = solver.matrixM()
     blackHole += matrix[0][0]

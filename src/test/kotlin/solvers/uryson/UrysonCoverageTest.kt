@@ -37,7 +37,7 @@ class UrysonCoverageTest {
         problem: UrysonProblem,
         system: GeneratingSystem,
         n: Int,
-    ): SecondKindSolver {
+    ): UrysonSecondKindSolver {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(system, grid)
         val funcs = ProjFunctionals(basis)

@@ -15,7 +15,7 @@ import numerics.functionals.orders
 import problems.fredholm.FredholmProblem
 import problems.fredholm.firstKindSolver
 import solvers.fredholm.FredholmOperator
-import solvers.fredholm.SecondKindSolver
+import solvers.fredholm.FredholmSecondKindSolver
 
 /**
  * Демонстрационная печать таблиц сходимости для линейных уравнений Фредгольма.
@@ -36,12 +36,12 @@ object Tables {
         system: GeneratingSystem,
         familyName: String,
         n: Int,
-    ): Pair<SecondKindSolver, Grid> {
+    ): Pair<FredholmSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(system, grid)
         val funcs = family(familyName, basis)
         val op = FredholmOperator(problem.kernel, grid, quad)
-        val solver = SecondKindSolver(
+        val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
             { t -> problem.rhsExact(t, op) },
             { t -> problem.rhsExactDeriv(t, op) },

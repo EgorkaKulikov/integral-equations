@@ -38,12 +38,12 @@ import kotlin.test.assertTrue
 @Tag("fast")
 class CombinedNystromVolterraTest {
 
-    private fun solverFor(problem: VolterraProblem, n: Int): Pair<SecondKindSolver, Grid> {
+    private fun solverFor(problem: VolterraProblem, n: Int): Pair<VolterraSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = VolterraOperator(problem.kernel, grid, GaussLegendre(8))
-        val solver = SecondKindSolver(
+        val solver = VolterraSecondKindSolver(
             basis, funcs, op, 1.0,
             { t -> problem.rhsExact(t, op) },
             { t -> problem.rhsExactDeriv(t, op) },

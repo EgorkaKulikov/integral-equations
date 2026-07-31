@@ -9,8 +9,8 @@ import numerics.functionals.ProjFunctionals
 import org.junit.jupiter.api.Tag
 import problems.fredholm.FredholmProblem
 import solvers.fredholm.FredholmOperator
+import solvers.fredholm.FredholmSecondKindSolver
 import solvers.fredholm.KernelF
-import solvers.fredholm.SecondKindSolver
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -47,14 +47,14 @@ class DivergenceContractTest {
     private fun divergentSolver(
         throwOnDivergence: Boolean,
         useQuasiInterpolant: Boolean,
-    ): SecondKindSolver {
+    ): FredholmSecondKindSolver {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         // mu — квазиинтерполянт: kulkarni() уходит в итерационную ветвь kulkarniQuasi.
         // theta — проектор: kulkarni() решает СЛАУ, итераций нет.
         val funcs = if (useQuasiInterpolant) AveragingFunctionals(basis) else ProjFunctionals(basis)
         val op = FredholmOperator(DIVERGENT_KERNEL, grid, GaussLegendre(8))
-        return SecondKindSolver(
+        return FredholmSecondKindSolver(
             basis, funcs, op, cL = 1.0,
             fEff = { t -> t },
             fEffDeriv = { 1.0 },
@@ -147,7 +147,7 @@ class DivergenceContractTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-        val solver = SecondKindSolver(
+        val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
             { t -> problem.rhsExact(t, op) },
             { t -> problem.rhsExactDeriv(t, op) },

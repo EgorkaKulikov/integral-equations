@@ -31,7 +31,7 @@ class VolterraCoverageTest {
     private val quad = GaussLegendre(8)
     private fun finite(x: Double) = !x.isNaN() && !x.isInfinite()
 
-    private fun build(p: VolterraProblem, sys: GeneratingSystem, n: Int): SecondKindSolver {
+    private fun build(p: VolterraProblem, sys: GeneratingSystem, n: Int): VolterraSecondKindSolver {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(sys, grid)
         val funcs = ProjFunctionals(basis)
@@ -79,7 +79,7 @@ class VolterraCoverageTest {
         val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
         val funcs = DeBoorFixFunctionals(basis)
         val op = VolterraOperator(VolterraProblem.V2win.kernel, grid, quad)
-        val solver = SecondKindSolver(basis, funcs, op, 1.0,
+        val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
             { t -> VolterraProblem.V2win.rhsExact(t, op) }, { t -> VolterraProblem.V2win.rhsExactDeriv(t, op) })
         val e = errorEh({ t -> VolterraProblem.V2win.exact(t) }, solver.kulkarni().eval, grid)
         assertTrue(finite(e) && e < 1e-2, "xi kulkarni E_h=$e")
@@ -96,7 +96,7 @@ class VolterraCoverageTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
         for (funcs in listOf(AveragingFunctionals(basis), ThreePointFunctionals(basis))) {
-            val solver = SecondKindSolver(basis, funcs, op, 1.0,
+            val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
                 { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
             val e = errorEh({ t -> VolterraProblem.V2.exact(t) }, solver.kulkarni().eval, grid)
             val eIt = errorEh({ t -> VolterraProblem.V2.exact(t) }, solver.iteratedKulkarni().eval, grid)
@@ -117,7 +117,7 @@ class VolterraCoverageTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
         val funcs = AveragingFunctionals(basis)
-        val solver = SecondKindSolver(basis, funcs, op, 1.0,
+        val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
             { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
         val first = solver.kulkarni()
         val second = solver.kulkarni()
@@ -160,7 +160,7 @@ class VolterraCoverageTest {
     }
 
     /**
-     * Covers FirstKindSolver (reduction-by-differentiation, r3) on V1 with K(t,t)=1!=0.
+     * Covers VolterraFirstKindSolver (reduction-by-differentiation, r3) on V1 with K(t,t)=1!=0.
      * Schemes base/sloan/kulkarni/iteratedKulkarni run end-to-end. Reference fixed from
      * current run: E_h finite and < 1e-1 on basis B, n=8.
      */
@@ -179,7 +179,7 @@ class VolterraCoverageTest {
 
     /**
      * Regression guard for the 4th-order finite-difference reduction (fix #2): the V1
-     * FirstKindSolver base scheme (ProjFunctionals) must stay finite and accurate after
+     * VolterraFirstKindSolver base scheme (ProjFunctionals) must stay finite and accurate after
      * switching kernelW.kT / gEffDeriv to a 5-point 4th-order stencil (hFD=1e-3).
      * Threshold fixed from the current run with margin.
      */
@@ -205,7 +205,7 @@ class VolterraCoverageTest {
     }
 
     /**
-     * Covers the V1 FirstKindSolver xi-functional path (DeBoorFixFunctionals), which
+     * Covers the V1 VolterraFirstKindSolver xi-functional path (DeBoorFixFunctionals), which
      * triggers the reduced-kernel derivative closure kernelW.kT and gEffDeriv
      * (finite differences) inside applyDeriv.
      *

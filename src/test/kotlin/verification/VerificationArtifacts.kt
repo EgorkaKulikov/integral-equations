@@ -8,7 +8,7 @@ import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import problems.fredholm.FredholmProblem
 import solvers.fredholm.FredholmOperator
-import solvers.fredholm.SecondKindSolver
+import solvers.fredholm.FredholmSecondKindSolver
 import java.io.File
 
 /**
@@ -139,7 +139,7 @@ object VerificationArtifacts {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-        val solver = SecondKindSolver(
+        val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
             { t -> problem.rhsExact(t, op) },
             { t -> problem.rhsExactDeriv(t, op) },
@@ -221,7 +221,7 @@ object VerificationArtifacts {
                         val basis = MinimalSplineBasis(system, grid)
                         val funcs = ProjFunctionals(basis)
                         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-                        val solver = SecondKindSolver(
+                        val solver = FredholmSecondKindSolver(
                             basis, funcs, op, 1.0,
                             { t -> problem.rhsExact(t, op) },
                             { t -> problem.rhsExactDeriv(t, op) },

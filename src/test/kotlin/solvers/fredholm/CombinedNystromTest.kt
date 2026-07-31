@@ -18,7 +18,7 @@ import problems.fredholm.FredholmProblem
  *
  * Именно к этому оператору относятся опубликованные оценки суперсходимости
  * O(h^7) / O(h^8) (см. docs/REFERENCES.md), тогда как «голая» квадратура
- * [SecondKindSolver.nystrom] такого порядка не даёт. Тесты проверяют не сами
+ * [FredholmSecondKindSolver.nystrom] такого порядка не даёт. Тесты проверяют не сами
  * теоретические константы (для их достижения нужны очень гладкие данные и большие
  * n, где вмешивается обусловленность), а ПРАКТИЧЕСКИ ПРОВЕРЯЕМОЕ следствие:
  * комбинированный оператор существенно точнее классического на одной и той же сетке.
@@ -26,12 +26,12 @@ import problems.fredholm.FredholmProblem
 @Tag("fast")
 class CombinedNystromTest {
 
-    private fun solverFor(problem: FredholmProblem, n: Int): Pair<SecondKindSolver, Grid> {
+    private fun solverFor(problem: FredholmProblem, n: Int): Pair<FredholmSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-        val solver = SecondKindSolver(
+        val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
             { t -> problem.rhsExact(t, op) },
             { t -> problem.rhsExactDeriv(t, op) },
@@ -69,7 +69,7 @@ class CombinedNystromTest {
         val problem = FredholmProblem.F2
         val exact = { t: Double -> problem.exact(t) }
 
-        fun errorsFor(scheme: (SecondKindSolver) -> SolutionFunc): List<Double> =
+        fun errorsFor(scheme: (FredholmSecondKindSolver) -> SolutionFunc): List<Double> =
             listOf(8, 16, 32).map { n ->
                 val (solver, grid) = solverFor(problem, n)
                 errorEh(exact, scheme(solver).eval, grid)
@@ -139,7 +139,7 @@ class CombinedNystromTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = numerics.functionals.DeBoorFixFunctionals(basis, 1)
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-        val solver = SecondKindSolver(
+        val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
             { t -> problem.rhsExact(t, op) },
             { t -> problem.rhsExactDeriv(t, op) },

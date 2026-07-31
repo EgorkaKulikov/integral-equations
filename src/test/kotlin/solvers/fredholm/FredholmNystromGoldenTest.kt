@@ -18,12 +18,12 @@ import problems.fredholm.FredholmProblem
  */
 @Tag("fast")
 class FredholmNystromGoldenTest {
-    private fun solver(p: FredholmProblem, n: Int): Pair<SecondKindSolver, Grid> {
+    private fun solver(p: FredholmProblem, n: Int): Pair<FredholmSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = FredholmOperator(p.kernel, grid, numerics.GaussLegendre(8))
-        return SecondKindSolver(basis, funcs, op, 1.0,
+        return FredholmSecondKindSolver(basis, funcs, op, 1.0,
             { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
     }
 
@@ -55,17 +55,17 @@ class FredholmNystromGoldenTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = numerics.functionals.DeBoorFixFunctionals(basis)
         val op = FredholmOperator(FredholmProblem.F2.kernel, grid, numerics.GaussLegendre(8))
-        val s = SecondKindSolver(basis, funcs, op, 1.0,
+        val s = FredholmSecondKindSolver(basis, funcs, op, 1.0,
             { t -> FredholmProblem.F2.rhsExact(t, op) }, { t -> FredholmProblem.F2.rhsExactDeriv(t, op) })
         assertFailsWith<IllegalArgumentException> { s.nystrom() }
     }
 
-    private fun xiTildeSolver(p: FredholmProblem, n: Int, r: Int): Pair<SecondKindSolver, Grid> {
+    private fun xiTildeSolver(p: FredholmProblem, n: Int, r: Int): Pair<FredholmSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = numerics.functionals.DiscreteDeBoorFixFunctionals(basis, r)
         val op = FredholmOperator(p.kernel, grid, numerics.GaussLegendre(8))
-        return SecondKindSolver(basis, funcs, op, 1.0,
+        return FredholmSecondKindSolver(basis, funcs, op, 1.0,
             { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
     }
 

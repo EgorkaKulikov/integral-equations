@@ -124,7 +124,7 @@ import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import problems.fredholm.FredholmProblem
 import solvers.fredholm.FredholmOperator
-import solvers.fredholm.SecondKindSolver
+import solvers.fredholm.FredholmSecondKindSolver
 
 fun main() {
     val problem = FredholmProblem.F2          // K(t,s) = 1/(1+t+s), u*(t) = 1/(t+1)
@@ -133,7 +133,7 @@ fun main() {
     val funcs = ProjFunctionals(basis)
     val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
 
-    val solver = SecondKindSolver(
+    val solver = FredholmSecondKindSolver(
         basis, funcs, op, cL = 1.0,
         fEff = { t -> problem.rhsExact(t, op) },
         fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
@@ -184,7 +184,7 @@ fun main() {
 результату — параметр решателя `throwOnDivergence = false`:
 
 ```kotlin
-val solver = SecondKindSolver(/* ... */, throwOnDivergence = false)
+val solver = FredholmSecondKindSolver(/* ... */, throwOnDivergence = false)
 val solution = solver.kulkarni()
 if (!solution.converged) {
     println("не сошлось за ${solution.iterations} итераций, невязка ${solution.residual}")

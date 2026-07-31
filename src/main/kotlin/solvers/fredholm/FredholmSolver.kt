@@ -3,6 +3,10 @@ package solvers.fredholm
 import kotlin.math.abs
 import numerics.*
 import numerics.functionals.*
+import solvers.core.ImageTriple
+import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_MAX_ITERATIONS
+import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
+import solvers.core.SecondKindSolverCore
 
 /**
  * Ядро K(t,s) линейного уравнения Фредгольма вместе с аналитическими частными
@@ -118,41 +122,25 @@ class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegen
  *        а не каждого метода: это политика обработки ошибок, а не свойство
  *        отдельной схемы.
  */
-class SecondKindSolver(
-    val basis: MinimalSplineBasis,
-    val funcs: FunctionalFamily,
+class FredholmSecondKindSolver(
+    basis: MinimalSplineBasis,
+    funcs: FunctionalFamily,
     val op: FredholmOperator,
-    val cL: Double,
-    val fEff: (Double) -> Double,
-    val fEffDeriv: (Double) -> Double,
-    val fEffDeriv2: (Double) -> Double = { 0.0 },
-    val throwOnDivergence: Boolean = true,
+    cL: Double,
+    fEff: (Double) -> Double,
+    fEffDeriv: (Double) -> Double,
+    fEffDeriv2: (Double) -> Double = { 0.0 },
+    throwOnDivergence: Boolean = true,
+) : SecondKindSolverCore<DoubleArray>(
+    basis, funcs, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence,
 ) {
-    private companion object {
-        /**
-         * Предел числа итераций для комбинированного оператора Nyström.
-         * Выбор реализации: на модельных задачах сходимость достигается за единицы шагов;
-         * запас нужен для задач с нормой оператора, близкой к единице.
-         */
-        const val COMBINED_NYSTROM_MAX_ITERATIONS = 200
-
-        /** Критерий останова итерации комбинированного Nyström (равномерная норма в узлах). */
-        const val COMBINED_NYSTROM_TOLERANCE = 1e-13
-
-        /**
-         * Предел числа итераций в схеме Кулкарни для квазиинтерполянтов (mu, lambda).
-         * Теоретической гарантии сходимости нет (нет свойства P^2 = P), поэтому
-         * предел обязателен; на модельных задачах достаточно единиц шагов.
-         */
-        const val KULKARNI_QUASI_MAX_ITERATIONS = 200
-
-        /** Критерий останова итерации Кулкарни для квазиинтерполянтов. */
-        const val KULKARNI_QUASI_TOLERANCE = 1e-13
-    }
-
-    val grid = basis.grid
-    val n = grid.n
-    val dim = n + 2
+    // Числовые параметры итерационных схем (COMBINED_NYSTROM_*, KULKARNI_QUASI_*)
+    // живут в [solvers.core.SecondKindDefaults]: у Фредгольма и Вольтерры они
+    // совпадают, и расхождение при подборе нового значения было бы молчаливым.
+    //
+    // Поля `grid`, `n`, `dim` объявлены в [SecondKindSolverCore] и инициализируются РАНЬШЕ
+    // полей этого класса — именно тот порядок, который нужен [omegaNodes] (он
+    // эагерный и читает `dim`). Обратный порядок дал бы `dim = 2` МОЛЧА.
 
     private val ng = op.gNode.size
 
@@ -199,180 +187,69 @@ class SecondKindSolver(
         DoubleArray(ng) { k -> basis.omega(i, op.gNode[k]) }
     }
 
-    /** chi_j(g) по значениям g, g' и g'' (обёртка). */
-    private fun chiOf(
-        g: (Double) -> Double,
-        gD: (Double) -> Double,
-        gDD: (Double) -> Double = { 0.0 },
-    ): DoubleArray = DoubleArray(dim) { funcs.chi(it - 2).apply(g, gD, gDD) }
+    // --- Реализация точек расширения [SecondKindSolverCore] --------------------
+    //
+    // Подготовленный операнд у Фредгольма — массив значений функции в глобальных
+    // гауссовых узлах: пределы интегрирования постоянны, поэтому одни и те же узлы
+    // обслуживают любое `t`, и повторное применение L сводится к свёртке с ядром.
 
-    /** Матрица M_{j,i} = chi_j(L omega_i). Для xi учитывается (L omega_i)', для xi^<0> и (L omega_i)''. */
-    fun matrixM(): Array<DoubleArray> {
-        // Столбцы M независимы по i; cols[i] = столбец i.
-        val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
-            val on = omegaNodes[i]
-            val Lom = { t: Double -> cL * op.applyNodes(t, on) }
-            val LomD = { t: Double -> cL * op.applyDerivNodes(t, on) }
-            val LomDD = { t: Double -> cL * op.applyDeriv2Nodes(t, on) }
-            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(Lom, LomD, LomDD) }
-        }
-        val m = LinearAlgebra.zeros(dim, dim)
-        for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
-        return m
-    }
+    override val equationName: String get() = "Фредгольм"
 
-    /** Матрица M2_{j,i} = chi_j(L(L omega_i)) (двойное применение L). */
-    fun matrixM2(): Array<DoubleArray> {
-        val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
-            val ln = LomegaNodes[i] // (L omega_i) в узлах
-            val LLom = { t: Double -> cL * op.applyNodes(t, ln) }
-            val LLomD = { t: Double -> cL * op.applyDerivNodes(t, ln) }
-            val LLomDD = { t: Double -> cL * op.applyDeriv2Nodes(t, ln) }
-            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(LLom, LLomD, LLomDD) }
-        }
-        val m = LinearAlgebra.zeros(dim, dim)
-        for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
-        return m
-    }
-
-    /** g_j = chi_j(f). */
-    fun vectorG(): DoubleArray = chiOf(fEff, fEffDeriv, fEffDeriv2)
-
-    /** d_j = chi_j(L f). */
-    fun vectorD(): DoubleArray {
-        val Lf = { t: Double -> cL * op.apply(t) { s -> fEff(s) } }
-        val LfD = { t: Double -> cL * op.applyDeriv(t) { s -> fEff(s) } }
-        val LfDD = { t: Double -> cL * op.applyDeriv2(t) { s -> fEff(s) } }
-        return chiOf(Lf, LfD, LfDD)
-    }
-
-    /** Базовая схема: (I - M) c = g. */
-    fun solveBaseCoeffs(): DoubleArray {
-        val m = matrixM()
-        val a = LinearAlgebra.zeros(dim, dim)
-        for (r in 0 until dim) { for (c in 0 until dim) a[r][c] = -m[r][c]; a[r][r] += 1.0 }
-        return LinearAlgebra.solve(a, vectorG())
-    }
-
-    fun base(): SolutionFunc {
-        val c = solveBaseCoeffs()
-        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) })
-    }
-
-    /** Слоан: ~u_h(t) = f(t) + (L u_h)(t). */
-    fun sloan(): SolutionFunc {
-        val c = solveBaseCoeffs()
-        val uNodes = DoubleArray(ng) { basis.evalSpline(c, op.gNode[it]) }
-        return SolutionFunc(eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) })
-    }
+    override val kulkarniQuasiHint: String
+        get() = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
+            "редукция Кулкарни неприменима и используется простая итерация, требующая " +
+            "сжатия (спектральный радиус оператора меньше единицы)"
 
     /**
-     * Кулкарни для проекторов (theta, xi): (I - M - M2 + M^2) c = (I - M) g + d;
-     * u_h^K = y_h + (I - P_chi)[f + L y_h]. Для квазиинтерполянтов (mu, lambda) без
-     * редукции — прямая итерация конечноранговым U^K_h [численное наблюдение].
+     * Критерий останова мерится в гауссовых узлах оператора — тех же, по которым
+     * идёт сама итерация. Синтетическая выборка, как у Вольтерры, здесь не нужна
+     * и дала бы другое число итераций.
      */
-    fun kulkarni(): SolutionFunc {
-        return if (funcs.isProjector) kulkarniProjector() else kulkarniQuasi()
-    }
+    override val checkPoints: DoubleArray get() = op.gNode
 
-    private fun kulkarniProjector(): SolutionFunc {
-        val m = matrixM(); val m2 = matrixM2(); val g = vectorG(); val d = vectorD()
-        val mm = LinearAlgebra.matMat(m, m)
-        // A = I - M - M2 + M^2
-        val a = LinearAlgebra.zeros(dim, dim)
-        for (r in 0 until dim) {
-            for (c in 0 until dim) a[r][c] = -m[r][c] - m2[r][c] + mm[r][c]
-            a[r][r] += 1.0
-        }
-        // rhs = (I - M) g + d
-        val mg = LinearAlgebra.matVec(m, g)
-        val rhs = DoubleArray(dim) { g[it] - mg[it] + d[it] }
-        val c = LinearAlgebra.solve(a, rhs) // коэффициенты y_h
-        // u_h^K = y_h + (I - P_chi)[f + L y_h]; (I - P_chi)w = w - P_chi w.
-        val yNodes = DoubleArray(ng) { basis.evalSpline(c, op.gNode[it]) }
-        val wFun = { t: Double -> fEff(t) + cL * op.applyNodes(t, yNodes) }
-        val wDFun = { t: Double -> fEffDeriv(t) + cL * op.applyDerivNodes(t, yNodes) }
-        val wDDFun = { t: Double -> fEffDeriv2(t) + cL * op.applyDeriv2Nodes(t, yNodes) }
-        val pwCoeffs = funcs.projectorCoeffs(wFun, wDFun, wDDFun)
-        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) + (wFun(t) - basis.evalSpline(pwCoeffs, t)) })
-    }
+    override fun prepare(u: (Double) -> Double): DoubleArray =
+        DoubleArray(ng) { u(op.gNode[it]) }
+
+    override fun image(o: DoubleArray): (Double) -> Double = { t -> cL * op.applyNodes(t, o) }
+
+    override fun imageDeriv(o: DoubleArray): (Double) -> Double = { t -> cL * op.applyDerivNodes(t, o) }
+
+    /** Пределы интегрирования постоянны, члена Лейбница нет, поэтому `uD` не читается. */
+    @Suppress("UNUSED_PARAMETER")
+    override fun imageDeriv2(o: DoubleArray, uD: (Double) -> Double): (Double) -> Double =
+        { t -> cL * op.applyDeriv2Nodes(t, o) }
 
     /**
-     * Кулкарни для mu, lambda: итерация u^{(m+1)} = f + U^K_h u^{(m)},
-     * U^K_h u = P_chi(L u) + L(P_chi u) - P_chi(L(P_chi u)). Работа в узлах квадратуры.
-     * [численное наблюдение]: разрешимость/сходимость не гарантированы (нет P^2=P).
+     * Контрольные точки СОВПАДАЮТ с узлами подготовки операнда, поэтому значения
+     * уже вычислены — второй проход по `u` был бы чистым удвоением работы
+     * на каждой итерации (`u` там — результат применения оператора, а не таблица).
      */
-    private fun kulkarniQuasi(): SolutionFunc {
-        // Итерант хранится как НЕПРЕРЫВНАЯ функция u^{(m)}(t): реконструкция того же
-        // порядка, что и базис (через basis.evalSpline и точную квадратуру op.applyNodes),
-        // без понижающей кусочно-линейной интерполяции узловых значений.
-        var uFun: (Double) -> Double = { t -> fEff(t) }
-        var uNodes = DoubleArray(ng) { fEff(op.gNode[it]) }
-        var converged = false
-        var performedIterations = 0
-        var lastDiff = Double.NaN
-        for (iter in 0 until KULKARNI_QUASI_MAX_ITERATIONS) {
-            val curFun = uFun
-            val curNodes = uNodes
-            // P_chi u: коэффициенты chi_j(u) по непрерывной u^{(m)} (сохраняет порядок).
-            val pc = funcs.projectorCoeffs(curFun)
-            val pcNodes = DoubleArray(ng) { basis.evalSpline(pc, op.gNode[it]) }
-            // L u в узлах (точная квадратура по узловым значениям текущего итеранта).
-            val luFun = { t: Double -> cL * op.applyNodes(t, curNodes) }
-            val pLu = funcs.projectorCoeffs(luFun) // P_chi(L u) коэффициенты
-            val lpu = { t: Double -> cL * op.applyNodes(t, pcNodes) } // L(P_chi u)
-            val pLPu = funcs.projectorCoeffs(lpu) // P_chi(L(P_chi u))
-            // Непрерывная реконструкция следующего итеранта u^{(m+1)}(t).
-            val nextFun = { t: Double ->
-                fEff(t) + basis.evalSpline(pLu, t) + lpu(t) - basis.evalSpline(pLPu, t)
-            }
-            val nextNodes = DoubleArray(ng) { nextFun(op.gNode[it]) }
-            var diff = 0.0
-            for (k in 0 until ng) diff = maxOf(diff, abs(nextNodes[k] - curNodes[k]))
-            uFun = nextFun
-            uNodes = nextNodes
-            performedIterations = iter + 1
-            lastDiff = diff
-            if (diff < KULKARNI_QUASI_TOLERANCE) { converged = true; break }
-        }
-        // Ранее несошедшийся итерант возвращался МОЛЧА: отличить его от верного
-        // результата было невозможно. Теперь действует единый контракт [reportConvergence].
-        reportConvergence(
-            converged = converged,
-            throwOnDivergence = throwOnDivergence,
-            methodName = "Схема Кулкарни для квазиинтерполянта '${funcs.name}' (Фредгольм)",
-            iterations = performedIterations,
-            maxIterations = KULKARNI_QUASI_MAX_ITERATIONS,
-            residual = lastDiff,
-            tolerance = KULKARNI_QUASI_TOLERANCE,
-            hint = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
-                "редукция Кулкарни неприменима и используется простая итерация, требующая " +
-                "сжатия (спектральный радиус оператора меньше единицы)",
-        )
-        val finalFun = uFun
-        return SolutionFunc(
-            eval = { t -> finalFun(t) },
-            converged = converged,
-            iterations = performedIterations,
-            residual = lastDiff,
+    override fun checkValues(u: (Double) -> Double, o: DoubleArray): DoubleArray = o
+
+    override fun applyOperator(t: Double, u: (Double) -> Double): Double = op.apply(t, u)
+
+    override fun applyOperatorDeriv(t: Double, u: (Double) -> Double): Double = op.applyDeriv(t, u)
+
+    /** У Фредгольма вторая производная образа не содержит `u'`: пределы постоянны. */
+    @Suppress("UNUSED_PARAMETER")
+    override fun applyOperatorDeriv2(t: Double, u: (Double) -> Double, uD: (Double) -> Double): Double =
+        op.applyDeriv2(t, u)
+
+    override fun omegaImages(i: Int): ImageTriple {
+        val on = omegaNodes[i]
+        return ImageTriple(
+            { t -> cL * op.applyNodes(t, on) },
+            { t -> cL * op.applyDerivNodes(t, on) },
+            { t -> cL * op.applyDeriv2Nodes(t, on) },
         )
     }
 
-    /**
-     * Итерированный Кулкарни: ^u_h^K = f + L u_h^K.
-     *
-     * Признак сходимости НАСЛЕДУЕТСЯ от [kulkarni]: сама итерация Слоана — одно
-     * интегрирование без итераций, но её результат осмыслен лишь тогда, когда
-     * осмыслено исходное приближение.
-     */
-    fun iteratedKulkarni(): SolutionFunc {
-        val uK = kulkarni()
-        val uNodes = DoubleArray(ng) { uK.eval(op.gNode[it]) }
-        return SolutionFunc(
-            eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) },
-            converged = uK.converged,
-            iterations = uK.iterations,
-            residual = uK.residual,
+    override fun doubleOmegaImages(i: Int): ImageTriple {
+        val ln = LomegaNodes[i] // (L omega_i) в узлах
+        return ImageTriple(
+            { t -> cL * op.applyNodes(t, ln) },
+            { t -> cL * op.applyDerivNodes(t, ln) },
+            { t -> cL * op.applyDeriv2Nodes(t, ln) },
         )
     }
 
@@ -588,10 +465,10 @@ class SecondKindSolver(
  * @param rhsDeriv2 вторая производная `f''(t)`; нужна семейству `xi^<0>`.
  * @param alpha параметр регуляризации; должен быть строго положителен.
  * @param throwOnDivergence политика обработки недостижения сходимости итерационными
- *        схемами внутреннего решателя; см. [SecondKindSolver.throwOnDivergence].
+ *        схемами внутреннего решателя; см. [FredholmSecondKindSolver.throwOnDivergence].
  * @throws IllegalArgumentException если `alpha <= 0`.
  */
-class FirstKindSolver(
+class FredholmFirstKindSolver(
     val basis: MinimalSplineBasis,
     val funcs: FunctionalFamily,
     val op: FredholmOperator,
@@ -614,7 +491,7 @@ class FirstKindSolver(
 
     init {
         require(alpha > 0.0) {
-            "FirstKindSolver: параметр регуляризации alpha должен быть положительным, получено alpha=$alpha"
+            "FredholmFirstKindSolver: параметр регуляризации alpha должен быть положительным, получено alpha=$alpha"
         }
     }
 
@@ -626,7 +503,7 @@ class FirstKindSolver(
     // истинного значения и строило неверную систему без какой-либо диагностики.
     private val fEffDeriv2 = { t: Double -> rhsDeriv2(t) / alpha }
     private val inner =
-        SecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence)
+        FredholmSecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence)
 
     /** Базовая коллокационная схема для регуляризованного уравнения. */
     fun base(): SolutionFunc = inner.base()

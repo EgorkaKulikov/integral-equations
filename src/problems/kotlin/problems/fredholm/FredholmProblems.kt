@@ -2,10 +2,10 @@ package problems.fredholm
 
 import numerics.MinimalSplineBasis
 import numerics.functionals.FunctionalFamily
-import solvers.fredholm.FirstKindSolver
+import solvers.fredholm.FredholmFirstKindSolver
 import solvers.fredholm.FredholmOperator
+import solvers.fredholm.FredholmSecondKindSolver
 import solvers.fredholm.KernelF
-import solvers.fredholm.SecondKindSolver
 
 /**
  * Модельная задача для линейного уравнения Фредгольма: ядро, точное решение и род
@@ -129,7 +129,7 @@ class FredholmProblem(
 
         /**
          * Некорректная задача ПЕРВОГО рода: `K = e^{-(t-s)^2}`, `u* = e^t`.
-         * Решается методом регуляризации (см. `solvers.fredholm.FirstKindSolver`).
+         * Решается методом регуляризации (см. [FredholmFirstKindSolver]).
          *
          * Производные ядра и решения выписаны полностью: `K_s = 2(t-s)K`,
          * `K_tt = (4(t-s)^2 - 2)K`, `u*'' = e^t`.
@@ -160,7 +160,7 @@ fun secondKindSolver(
     basis: MinimalSplineBasis,
     funcs: FunctionalFamily,
     op: FredholmOperator,
-): SecondKindSolver = SecondKindSolver(
+): FredholmSecondKindSolver = FredholmSecondKindSolver(
     basis, funcs, op, cL = 1.0,
     fEff = { t -> problem.rhsExact(t, op) },
     fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
@@ -170,15 +170,15 @@ fun secondKindSolver(
 /**
  * Создаёт решатель уравнения ПЕРВОГО рода для модельной задачи.
  *
- * @param alpha параметр регуляризации (см. [FirstKindSolver.DEFAULT_REGULARIZATION]).
+ * @param alpha параметр регуляризации (см. [FredholmFirstKindSolver.DEFAULT_REGULARIZATION]).
  */
 fun firstKindSolver(
     problem: FredholmProblem,
     basis: MinimalSplineBasis,
     funcs: FunctionalFamily,
     op: FredholmOperator,
-    alpha: Double = FirstKindSolver.DEFAULT_REGULARIZATION,
-): FirstKindSolver = FirstKindSolver(
+    alpha: Double = FredholmFirstKindSolver.DEFAULT_REGULARIZATION,
+): FredholmFirstKindSolver = FredholmFirstKindSolver(
     basis, funcs, op,
     rhs = { t -> problem.rhsExact(t, op) },
     rhsDeriv = { t -> problem.rhsExactDeriv(t, op) },

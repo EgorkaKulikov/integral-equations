@@ -10,6 +10,8 @@ import numerics.functionals.ProjFunctionals
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
 import org.junit.jupiter.api.Tag
+import solvers.fredholm.FredholmSecondKindSolver
+import solvers.volterra.VolterraSecondKindSolver
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -161,7 +163,7 @@ class CrossSchemeConsistencyTest {
                 val op = solvers.fredholm.FredholmOperator(
                     problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER),
                 )
-                val solver = solvers.fredholm.SecondKindSolver(
+                val solver = FredholmSecondKindSolver(
                     basis, funcs, op, 1.0,
                     { t -> problem.rhsExact(t, op) },
                     { t -> problem.rhsExactDeriv(t, op) },
@@ -208,7 +210,7 @@ class CrossSchemeConsistencyTest {
                 val op = solvers.volterra.VolterraOperator(
                     problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER),
                 )
-                val solver = solvers.volterra.SecondKindSolver(
+                val solver = VolterraSecondKindSolver(
                     basis, funcs, op, 1.0,
                     { t -> problem.rhsExact(t, op) },
                     { t -> problem.rhsExactDeriv(t, op) },
@@ -254,7 +256,7 @@ class CrossSchemeConsistencyTest {
         val op = solvers.fredholm.FredholmOperator(
             problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER),
         )
-        val solver = solvers.fredholm.SecondKindSolver(
+        val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
             { t -> problem.rhsExact(t, op) },
             { t -> problem.rhsExactDeriv(t, op) },
@@ -262,7 +264,7 @@ class CrossSchemeConsistencyTest {
         )
         // Схема nystrom исключена намеренно: её приближение лежит ВНЕ сплайнового
         // пространства, поэтому на span-задаче она не обязана давать машинную
-        // точность (см. KDoc SecondKindSolver.nystrom) и её погрешность ~5e-5
+        // точность (см. KDoc FredholmSecondKindSolver.nystrom) и её погрешность ~5e-5
         // определяет порог сравнения, обесценивая проверку.
         val solutions = listOf(
             "base" to solver.base(),

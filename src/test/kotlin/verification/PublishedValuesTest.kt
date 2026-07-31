@@ -11,6 +11,8 @@ import numerics.functionals.ProjFunctionals
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
 import org.junit.jupiter.api.Tag
+import solvers.fredholm.FredholmSecondKindSolver
+import solvers.volterra.VolterraSecondKindSolver
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.test.Test
@@ -241,7 +243,7 @@ class PublishedValuesTest {
                         val op = solvers.fredholm.FredholmOperator(
                             problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER),
                         )
-                        val solver = solvers.fredholm.SecondKindSolver(
+                        val solver = FredholmSecondKindSolver(
                             basis, funcs, op, 1.0,
                             { t -> problem.rhsExact(t, op) },
                             { t -> problem.rhsExactDeriv(t, op) },
@@ -333,7 +335,7 @@ class PublishedValuesTest {
                         val op = solvers.volterra.VolterraOperator(
                             problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER),
                         )
-                        val solver = solvers.volterra.SecondKindSolver(
+                        val solver = VolterraSecondKindSolver(
                             basis, funcs, op, 1.0,
                             { t -> problem.rhsExact(t, op) },
                             { t -> problem.rhsExactDeriv(t, op) },

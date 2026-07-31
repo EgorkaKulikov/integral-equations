@@ -3,9 +3,11 @@ package problems.analytic
 import numerics.MinimalSplineBasis
 import numerics.functionals.FunctionalFamily
 import solvers.fredholm.FredholmOperator
+import solvers.fredholm.FredholmSecondKindSolver
 import solvers.fredholm.KernelF
 import solvers.volterra.KernelV
 import solvers.volterra.VolterraOperator
+import solvers.volterra.VolterraSecondKindSolver
 
 // ============================================================================
 // АНАЛИТИЧЕСКИ ТОЧНЫЕ ЗАДАЧИ (сильнейший эталон верификации)
@@ -561,7 +563,7 @@ fun analyticFredholmSolver(
     funcs: FunctionalFamily,
     op: FredholmOperator,
     throwOnDivergence: Boolean = true,
-): solvers.fredholm.SecondKindSolver = solvers.fredholm.SecondKindSolver(
+): FredholmSecondKindSolver = FredholmSecondKindSolver(
     basis, funcs, op, cL = 1.0,
     fEff = problem.rhs,
     fEffDeriv = problem.rhsDeriv,
@@ -579,7 +581,7 @@ fun analyticVolterraSolver(
     basis: MinimalSplineBasis,
     funcs: FunctionalFamily,
     op: VolterraOperator,
-): solvers.volterra.SecondKindSolver = solvers.volterra.SecondKindSolver(
+): VolterraSecondKindSolver = VolterraSecondKindSolver(
     basis, funcs, op, cL = 1.0,
     fEff = problem.rhs,
     fEffDeriv = problem.rhsDeriv,

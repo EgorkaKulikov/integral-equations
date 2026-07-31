@@ -4,6 +4,10 @@ import java.util.concurrent.atomic.AtomicReferenceArray
 import kotlin.math.abs
 import numerics.*
 import numerics.functionals.*
+import solvers.core.ImageTriple
+import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_MAX_ITERATIONS
+import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
+import solvers.core.SecondKindSolverCore
 
 /**
  * Ядро `K(t,s)` линейного уравнения Вольтерры вместе с аналитическими частными
@@ -136,7 +140,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      * компилируется без ошибок и без проверки дало бы молча неверные числа.
      *
      * Кэшировать допустимо только ЧИСТУЮ `u` (детерминированную, без побочных эффектов).
-     * Фактические потребители — ВСЕ вызовы [SecondKindSolver.applyL] (базисные `omega_i`
+     * Фактические потребители — ВСЕ вызовы [VolterraSecondKindSolver.applyL] (базисные `omega_i`
      * и их образы в `matrixM`/`matrixM2`, сплайны `evalSpline` в `sloan`/`kulkarni*`,
      * итеранты `kulkarniQuasi`/`combinedNystrom`, образы Nyström), все они чистые.
      * ВНИМАНИЕ: `vectorD` кэш НЕ использует — он идёт через старую перегрузку
@@ -302,7 +306,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
  * Линейный решатель уравнения Вольтерры II рода u - L u = f, L = c_L * \mathcal V,
  * где (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds (ПЕРЕМЕННЫЙ верхний предел).
  *
- * c_L = 1 для уравнения II рода; при редукции I->II рода (см. [FirstKindSolver])
+ * c_L = 1 для уравнения II рода; при редукции I->II рода (см. [VolterraFirstKindSolver])
  * тоже c_L = 1, но с другим (редуцированным) ядром и правой частью.
  * Правая часть f и её производные задаются явно (fEff/fEffDeriv/fEffDeriv2),
  * чтобы решатель переиспользовался и для задач I рода.
@@ -317,45 +321,28 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
  *        `converged = false` и достигнутой невязкой в [numerics.SolutionFunc.residual].
  *        На прямые схемы не влияет.
  */
-class SecondKindSolver(
-    val basis: MinimalSplineBasis,
-    val funcs: FunctionalFamily,
+class VolterraSecondKindSolver(
+    basis: MinimalSplineBasis,
+    funcs: FunctionalFamily,
     val op: VolterraOperator,
-    val cL: Double,
-    val fEff: (Double) -> Double,
-    val fEffDeriv: (Double) -> Double,
-    val fEffDeriv2: (Double) -> Double = { 0.0 },
-    val throwOnDivergence: Boolean = true,
+    cL: Double,
+    fEff: (Double) -> Double,
+    fEffDeriv: (Double) -> Double,
+    fEffDeriv2: (Double) -> Double = { 0.0 },
+    throwOnDivergence: Boolean = true,
+) : SecondKindSolverCore<(Double) -> Double>(
+    basis, funcs, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence,
 ) {
-    private companion object {
-        /**
-         * Предел числа итераций в схеме Кулкарни для квазиинтерполянтов (mu, lambda).
-         * Выбор реализации: теоретической гарантии сходимости нет (нет свойства P^2=P),
-         * поэтому нужен жёсткий предел; на модельных задачах сходимость наступает за единицы итераций.
-         */
-        const val KULKARNI_QUASI_MAX_ITERATIONS = 200
-
-        /**
-         * Критерий останова итерации Кулкарни для квазиинтерполянтов: равномерная норма
-         * разности соседних итерантов на контрольных точках. Значение вблизи машинной
-         * точности: дальнейшее уточнение не имеет смысла из-за шума квадратуры.
-         */
-        const val KULKARNI_QUASI_TOLERANCE = 1e-13
-
-        /** Предел числа итераций для комбинированного оператора Nyström. */
-        const val COMBINED_NYSTROM_MAX_ITERATIONS = 200
-
-        /** Критерий останова итерации комбинированного Nyström. */
-        const val COMBINED_NYSTROM_TOLERANCE = 1e-13
-    }
-
-    val grid = basis.grid
-    val n = grid.n
-    val dim = n + 2
-
+    // Числовые параметры итерационных схем (KULKARNI_QUASI_*, COMBINED_NYSTROM_*)
+    // живут в [solvers.core.SecondKindDefaults]: у Фредгольма и Вольтерры они
+    // совпадают, и расхождение при подборе нового значения было бы молчаливым.
+    // Общая часть схем (`base`, `sloan`, `kulkarni`, сборка M/M2/g/d) — в
+    // [SecondKindSolverCore]; здесь остаётся специфика Вольтерры.
+    //
     // ВНИМАНИЕ (отличие от Фредгольма): у оператора Вольтерра область интегрирования
     // [a,t] зависит от t, поэтому предвычисление на фиксированных узлах невозможно.
-    // Все применения L = c_L \mathcal V выражаются через замыкания op.apply / op.applyDeriv.
+    // Все применения L = c_L \mathcal V выражаются через замыкания op.apply / op.applyDeriv,
+    // а «подготовленный операнд» — это сама функция, а не таблица её значений.
 
     /**
      * L g(t) = c_L (\mathcal V g)(t) и её производная (Лейбниц).
@@ -364,6 +351,10 @@ class SecondKindSolver(
      * (см. [VolterraOperator.IntegrandCache]): время жизни кэша совпадает со временем
      * жизни замыкания, а привязка к `g` фиксируется при создании, поэтому отдать значения
      * одной функции другой невозможно. Арифметика не меняется (см. [VolterraOperator.apply]).
+     *
+     * Метод СОЗНАТЕЛЬНО не переехал в общее ядро: кэш привязан к конкретному
+     * [VolterraOperator] проверкой `require(cache.owner === this)`, и обобщённый тип
+     * кэша ослабил бы эту проверку до runtime-каста.
      */
     private fun applyL(g: (Double) -> Double): (Double) -> Double {
         val cache = op.integrandCache(g)
@@ -378,195 +369,73 @@ class SecondKindSolver(
     private fun applyLDeriv2(g: (Double) -> Double, gD: (Double) -> Double): (Double) -> Double =
         { t -> cL * op.applyDeriv2(t, g, gD) }
 
-    /** chi_j(g) по значениям g, g' и g'' (обёртка). */
-    private fun chiOf(
-        g: (Double) -> Double,
-        gD: (Double) -> Double,
-        gDD: (Double) -> Double = { 0.0 },
-    ): DoubleArray = DoubleArray(dim) { funcs.chi(it - 2).apply(g, gD, gDD) }
+    // --- Реализация точек расширения [SecondKindSolverCore] --------------------
 
-    /** Матрица M_{j,i} = chi_j(L omega_i). Для xi — (L omega_i)', для xi^<0> — и (L omega_i)''. */
-    fun matrixM(): Array<DoubleArray> {
-        // Столбцы M независимы по i; cols[i] = столбец i.
-        val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
-            val idx = i - 2
-            val omega = { s: Double -> basis.omega(idx, s) }
-            val omegaD = { s: Double -> basis.omegaDeriv(idx, s) }
-            val image = applyL(omega)
-            val imageDeriv = applyLDeriv(omega)
-            // Вторая производная образа требует и omega_i, и omega_i' (член K(t,t) omega_i').
-            val imageDeriv2 = applyLDeriv2(omega, omegaD)
-            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(image, imageDeriv, imageDeriv2) }
-        }
-        val m = LinearAlgebra.zeros(dim, dim)
-        for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
-        return m
+    override val equationName: String get() = "Вольтерра"
+
+    override val kulkarniQuasiHint: String
+        get() = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
+            "редукция Кулкарни неприменима и используется простая итерация"
+
+    /**
+     * Контрольные точки критерия останова: `4n+1` равноотстоящих точек отрезка.
+     *
+     * Глобальных узлов у оператора Вольтерра нет (они зависят от `t`), поэтому
+     * нужна отдельная выборка. Она участвует ТОЛЬКО в критерии останова,
+     * в самой итерации не используется.
+     *
+     * Поле ленивое, а не эагерное, по двум причинам. Во-первых, выборка нужна
+     * только двум итерационным схемам из восьми. Во-вторых и главное: она читает
+     * `n` и `grid` из базового класса через переопределённое свойство, а такое свойство
+     * в принципе может быть прочитано до завершения конструктора наследника;
+     * `by lazy` гарантирует, что вычисление произойдёт при ПЕРВОМ ОБРАЩЕНИИ из
+     * метода, то есть гарантированно после того, как `n` уже инициализирован.
+     * Эагерное поле здесь было бы корректным только случайно.
+     */
+    override val checkPoints: DoubleArray by lazy {
+        DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
     }
 
-    /** Матрица M2_{j,i} = chi_j(L(L omega_i)) (двойное применение L). */
-    fun matrixM2(): Array<DoubleArray> {
-        val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
-            val idx = i - 2
-            val omega = { s: Double -> basis.omega(idx, s) }
-            val image = applyL(omega)
-            val imageDeriv = applyLDeriv(omega)
-            val doubleImage = applyL(image)
-            val doubleImageDeriv = applyLDeriv(image)
-            // Вторая производная требует сам образ L omega_i и его производную.
-            val doubleImageDeriv2 = applyLDeriv2(image, imageDeriv)
-            DoubleArray(dim) { j -> funcs.chi(j - 2).apply(doubleImage, doubleImageDeriv, doubleImageDeriv2) }
-        }
-        val m = LinearAlgebra.zeros(dim, dim)
-        for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
-        return m
-    }
+    /** Предвычисление невозможно: операнд — сама функция. */
+    override fun prepare(u: (Double) -> Double): (Double) -> Double = u
 
-    /** g_j = chi_j(f). */
-    fun vectorG(): DoubleArray = chiOf(fEff, fEffDeriv, fEffDeriv2)
+    override fun image(o: (Double) -> Double): (Double) -> Double = applyL(o)
 
-    /** d_j = chi_j(L f). */
-    fun vectorD(): DoubleArray {
-        val rhsImage = { t: Double -> cL * op.apply(t) { s -> fEff(s) } }
-        val rhsImageDeriv = { t: Double -> cL * op.applyDeriv(t) { s -> fEff(s) } }
-        // Вторая производная образа правой части требует и f, и f'.
-        val rhsImageDeriv2 = applyLDeriv2(fEff, fEffDeriv)
-        return chiOf(rhsImage, rhsImageDeriv, rhsImageDeriv2)
-    }
+    override fun imageDeriv(o: (Double) -> Double): (Double) -> Double = applyLDeriv(o)
 
-    /** Базовая схема: (I - M) c = g. */
-    fun solveBaseCoeffs(): DoubleArray {
-        val m = matrixM()
-        val a = LinearAlgebra.zeros(dim, dim)
-        for (r in 0 until dim) { for (c in 0 until dim) a[r][c] = -m[r][c]; a[r][r] += 1.0 }
-        return LinearAlgebra.solve(a, vectorG())
-    }
+    /** Член Лейбница `K(t,t) u'(t)` делает `uD` ОБЯЗАТЕЛЬНЫМ аргументом. */
+    override fun imageDeriv2(o: (Double) -> Double, uD: (Double) -> Double): (Double) -> Double =
+        applyLDeriv2(o, uD)
 
-    fun base(): SolutionFunc {
-        val c = solveBaseCoeffs()
-        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) })
-    }
+    override fun applyOperator(t: Double, u: (Double) -> Double): Double = op.apply(t, u)
 
-    /** Слоан: ~u_h(t) = f(t) + (L u_h)(t). u_h — сплайн, L применяется замыканием. */
-    fun sloan(): SolutionFunc {
-        val c = solveBaseCoeffs()
-        val splineImage = applyL { s -> basis.evalSpline(c, s) }
-        return SolutionFunc(eval = { t -> fEff(t) + splineImage(t) })
+    override fun applyOperatorDeriv(t: Double, u: (Double) -> Double): Double = op.applyDeriv(t, u)
+
+    override fun applyOperatorDeriv2(t: Double, u: (Double) -> Double, uD: (Double) -> Double): Double =
+        op.applyDeriv2(t, u, uD)
+
+    override fun omegaImages(i: Int): ImageTriple {
+        val idx = i - 2
+        val omega = { s: Double -> basis.omega(idx, s) }
+        val omegaD = { s: Double -> basis.omegaDeriv(idx, s) }
+        // Вторая производная образа требует и omega_i, и omega_i' (член K(t,t) omega_i').
+        return ImageTriple(applyL(omega), applyLDeriv(omega), applyLDeriv2(omega, omegaD))
     }
 
     /**
-     * Кулкарни для проекторов (theta, xi): (I - M - M2 + M^2) c = (I - M) g + d;
-     * u_h^K = y_h + (I - P_chi)[f + L y_h]. Для квазиинтерполянтов (mu, lambda) без
-     * редукции — прямая итерация конечноранговым U^K_h [численное наблюдение].
-     */
-    fun kulkarni(): SolutionFunc {
-        return if (funcs.isProjector) kulkarniProjector() else kulkarniQuasi()
-    }
-
-    private fun kulkarniProjector(): SolutionFunc {
-        val m = matrixM(); val m2 = matrixM2(); val g = vectorG(); val d = vectorD()
-        val mm = LinearAlgebra.matMat(m, m)
-        // A = I - M - M2 + M^2
-        val a = LinearAlgebra.zeros(dim, dim)
-        for (r in 0 until dim) {
-            for (c in 0 until dim) a[r][c] = -m[r][c] - m2[r][c] + mm[r][c]
-            a[r][r] += 1.0
-        }
-        // rhs = (I - M) g + d
-        val mg = LinearAlgebra.matVec(m, g)
-        val rhs = DoubleArray(dim) { g[it] - mg[it] + d[it] }
-        val c = LinearAlgebra.solve(a, rhs) // коэффициенты y_h
-        // u_h^K = y_h + (I - P_chi)[f + L y_h]; (I - P_chi)w = w - P_chi w.
-        val yh = { s: Double -> basis.evalSpline(c, s) }
-        val yhD = { s: Double -> basis.evalSplineDeriv(c, s) }
-        val yhImage = applyL(yh)
-        val yhImageDeriv = applyLDeriv(yh)
-        val yhImageDeriv2 = applyLDeriv2(yh, yhD)
-        val wFun = { t: Double -> fEff(t) + yhImage(t) }
-        val wDFun = { t: Double -> fEffDeriv(t) + yhImageDeriv(t) }
-        val wDDFun = { t: Double -> fEffDeriv2(t) + yhImageDeriv2(t) }
-        val pwCoeffs = funcs.projectorCoeffs(wFun, wDFun, wDDFun)
-        return SolutionFunc(eval = { t -> basis.evalSpline(c, t) + (wFun(t) - basis.evalSpline(pwCoeffs, t)) })
-    }
-
-    /**
-     * Кулкарни для mu, lambda: итерация u^{(m+1)} = f + U^K_h u^{(m)},
-     * U^K_h u = P_chi(L u) + L(P_chi u) - P_chi(L(P_chi u)).
-     * [численное наблюдение]: разрешимость/сходимость не гарантированы (нет P^2=P).
+     * Образ `L omega_i` строится ЗАНОВО, без переиспользования столбца из [matrixM].
      *
-     * Итерант хранится как НЕПРЕРЫВНАЯ функция: реконструкция того же порядка,
-     * что и базис (через basis.evalSpline и точную квадратуру op.apply), без понижающей
-     * кусочно-линейной интерполяции узловых значений.
-     *
-     * Ранее здесь использовалось хранение итеранта в виде значений на равномерной
-     * выборке с кусочно-линейным восстановлением, что ограничивало точность величиной
-     * O(h_sample^2) НЕЗАВИСИМО от порядка базиса. В решателе Фредгольма это было
-     * исправлено ранее; здесь применён тот же подход для согласованности двух решателей.
+     * Это не избыточность, а сознательное решение: каждое замыкание [applyL] несёт
+     * СВОЙ кэш подынтегральной функции, и передача готового образа извне изменила бы
+     * число обращений к ядру и, возможно, младшие биты результата.
      */
-    private fun kulkarniQuasi(): SolutionFunc {
-        var uFun: (Double) -> Double = { t -> fEff(t) }
-        // Контрольные точки только для критерия останова (в самой итерации не участвуют).
-        val checkPoints = DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
-        var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
-        var converged = false
-        var performedIterations = 0
-        var lastDiff = Double.NaN
-        for (iter in 0 until KULKARNI_QUASI_MAX_ITERATIONS) {
-            val curFun = uFun
-            val pc = funcs.projectorCoeffs(curFun)
-            val pcFun = { s: Double -> basis.evalSpline(pc, s) }
-            val luFun = applyL(curFun)                    // L u
-            val pLu = funcs.projectorCoeffs(luFun)        // P_chi(L u)
-            val lpu = applyL(pcFun)                       // L(P_chi u)
-            val pLPu = funcs.projectorCoeffs(lpu)         // P_chi(L(P_chi u))
-            val nextFun = { t: Double ->
-                fEff(t) + basis.evalSpline(pLu, t) + lpu(t) - basis.evalSpline(pLPu, t)
-            }
-            val nextAtCheck = DoubleArray(checkPoints.size) { nextFun(checkPoints[it]) }
-            var diff = 0.0
-            for (k in nextAtCheck.indices) diff = maxOf(diff, abs(nextAtCheck[k] - uAtCheck[k]))
-            uFun = nextFun
-            uAtCheck = nextAtCheck
-            performedIterations = iter + 1
-            lastDiff = diff
-            if (diff < KULKARNI_QUASI_TOLERANCE) { converged = true; break }
-        }
-        // Ранее несошедшийся итерант возвращался МОЛЧА (как и в решателе Фредгольма);
-        // теперь действует единый контракт [reportConvergence].
-        reportConvergence(
-            converged = converged,
-            throwOnDivergence = throwOnDivergence,
-            methodName = "Схема Кулкарни для квазиинтерполянта '${funcs.name}' (Вольтерра)",
-            iterations = performedIterations,
-            maxIterations = KULKARNI_QUASI_MAX_ITERATIONS,
-            residual = lastDiff,
-            tolerance = KULKARNI_QUASI_TOLERANCE,
-            hint = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
-                "редукция Кулкарни неприменима и используется простая итерация",
-        )
-        val finalFun = uFun
-        return SolutionFunc(
-            eval = { t -> finalFun(t) },
-            converged = converged,
-            iterations = performedIterations,
-            residual = lastDiff,
-        )
-    }
-
-    /**
-     * Итерированный Кулкарни: ^u_h^K = f + L u_h^K.
-     *
-     * Признак сходимости наследуется от [kulkarni]: сама итерация Слоана итераций
-     * не выполняет, но её результат осмыслен лишь при осмысленном исходном приближении.
-     */
-    fun iteratedKulkarni(): SolutionFunc {
-        val kulkarniSolution = kulkarni()
-        val kulkarniImage = applyL { s -> kulkarniSolution.eval(s) }
-        return SolutionFunc(
-            eval = { t -> fEff(t) + kulkarniImage(t) },
-            converged = kulkarniSolution.converged,
-            iterations = kulkarniSolution.iterations,
-            residual = kulkarniSolution.residual,
-        )
+    override fun doubleOmegaImages(i: Int): ImageTriple {
+        val idx = i - 2
+        val omega = { s: Double -> basis.omega(idx, s) }
+        val image = applyL(omega)
+        val imageDeriv = applyLDeriv(omega)
+        // Вторая производная требует сам образ L omega_i и его производную.
+        return ImageTriple(applyL(image), applyLDeriv(image), applyLDeriv2(image, imageDeriv))
     }
 
     // --- Nyström: сплайн-квадратура с зависящими от t весами --------------------
@@ -684,7 +553,7 @@ class SecondKindSolver(
      * t-зависимыми весами. Отличие от [nystrom]: там решается u = f + L^N_h u.
      *
      * СТАТУС ИСТОЧНИКА: конструкция L_n взята из теории для уравнения Фредгольма
-     * (см. [solvers.fredholm.SecondKindSolver.combinedNystrom]); для уравнения Вольтерры это
+     * (см. [solvers.fredholm.FredholmSecondKindSolver.combinedNystrom]); для уравнения Вольтерры это
      * АДАПТАЦИЯ: доказательства суперсходимости в известной литературе НЕТ. Поведение
      * следует трактовать как численное наблюдение.
      *
@@ -693,7 +562,10 @@ class SecondKindSolver(
     fun combinedNystrom(): SolutionFunc {
         val sup = nystromSupport()
         var uFun: (Double) -> Double = { t -> fEff(t) }
-        val checkPoints = DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
+        // Критерий останова мерится на ТОМ ЖЕ множестве [checkPoints], что и в `kulkarniQuasi`.
+        // Локальный пересчёт той же формулой был бы вторым критерием в одном классе:
+        // при правке одного из них две схемы молча разъехались бы.
+        val checkPoints = this.checkPoints
         var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
         var converged = false
         var performedIterations = 0
@@ -806,14 +678,14 @@ class SecondKindSolver(
  *        разности она выносится, чтобы не усиливать шум (см. пояснение к [gEffDeriv]).
  * @param smoothPartDeriv производная гладкой части.
  * @param throwOnDivergence политика обработки недостижения сходимости итерационными
- *        схемами внутреннего решателя; см. [SecondKindSolver.throwOnDivergence].
+ *        схемами внутреннего решателя; см. [VolterraSecondKindSolver.throwOnDivergence].
  * @throws IllegalArgumentException если `K(t,t)` близко к нулю в контрольных точках;
  *         если длина отрезка недостаточна для шаблона конечной разности; либо если
  *         выбрано семейство функционалов, требующее второй производной.
  * @throws IllegalStateException если `K(t,t)` обращается в ноль в точке деления,
  *         обнаруженной уже во время счёта (см. [safeDiagonal]).
  */
-class FirstKindSolver(
+class VolterraFirstKindSolver(
     val basis: MinimalSplineBasis,
     val funcs: FunctionalFamily,
     kernel: KernelV,
@@ -1045,7 +917,7 @@ class FirstKindSolver(
     private val gEffResidual = { t: Double -> gEff(t) - smoothPart(t) }
     private val gEffDeriv = { t: Double -> smoothPartDeriv(t) + deriv4(t, gEffResidual) }
 
-    private val inner = SecondKindSolver(
+    private val inner = VolterraSecondKindSolver(
         basis, funcs, reducedOperator, cL = 1.0, fEff = gEff, fEffDeriv = gEffDeriv,
         throwOnDivergence = throwOnDivergence,
     )

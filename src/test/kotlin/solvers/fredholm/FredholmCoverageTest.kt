@@ -33,7 +33,7 @@ class FredholmCoverageTest {
 
     private fun finite(x: Double) = !x.isNaN() && !x.isInfinite()
 
-    private fun build(p: FredholmProblem, sys: GeneratingSystem, n: Int): SecondKindSolver {
+    private fun build(p: FredholmProblem, sys: GeneratingSystem, n: Int): FredholmSecondKindSolver {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(sys, grid)
         val funcs = ProjFunctionals(basis)
@@ -60,7 +60,7 @@ class FredholmCoverageTest {
     }
 
     /**
-     * Covers SecondKindSolver.sloan / kulkarni (projector branch via theta) /
+     * Covers FredholmSecondKindSolver.sloan / kulkarni (projector branch via theta) /
      * iteratedKulkarni on F2, basis B, n=8. Reference: all four E_h finite, < 1e-2,
      * fixed from the current run; checks that the post-processing schemes run end-to-end.
      */
@@ -83,7 +83,7 @@ class FredholmCoverageTest {
         val basis = MinimalSplineBasis(GeneratingSystem.H, grid)
         val funcs = DeBoorFixFunctionals(basis)
         val op = FredholmOperator(FredholmProblem.F2exp.kernel, grid, quad)
-        val solver = SecondKindSolver(basis, funcs, op, 1.0,
+        val solver = FredholmSecondKindSolver(basis, funcs, op, 1.0,
             { t -> FredholmProblem.F2exp.rhsExact(t, op) }, { t -> FredholmProblem.F2exp.rhsExactDeriv(t, op) })
         val e = errorEh({ t -> FredholmProblem.F2exp.exact(t) }, solver.kulkarni().eval, grid)
         assertTrue(finite(e) && e < 1e-2, "xi kulkarni E_h=$e")
@@ -101,7 +101,7 @@ class FredholmCoverageTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = FredholmOperator(FredholmProblem.F2.kernel, grid, quad)
         for (funcs in listOf(AveragingFunctionals(basis), ThreePointFunctionals(basis))) {
-            val solver = SecondKindSolver(basis, funcs, op, 1.0,
+            val solver = FredholmSecondKindSolver(basis, funcs, op, 1.0,
                 { t -> FredholmProblem.F2.rhsExact(t, op) }, { t -> FredholmProblem.F2.rhsExactDeriv(t, op) })
             val e = errorEh({ t -> FredholmProblem.F2.exact(t) }, solver.kulkarni().eval, grid)
             val eIt = errorEh({ t -> FredholmProblem.F2.exact(t) }, solver.iteratedKulkarni().eval, grid)
@@ -121,7 +121,7 @@ class FredholmCoverageTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = FredholmOperator(FredholmProblem.F2.kernel, grid, quad)
         val funcs = AveragingFunctionals(basis)
-        val solver = SecondKindSolver(basis, funcs, op, 1.0,
+        val solver = FredholmSecondKindSolver(basis, funcs, op, 1.0,
             { t -> FredholmProblem.F2.rhsExact(t, op) }, { t -> FredholmProblem.F2.rhsExactDeriv(t, op) })
         val first = solver.kulkarni()
         val second = solver.kulkarni()
@@ -166,7 +166,7 @@ class FredholmCoverageTest {
     }
 
     /**
-     * Covers FirstKindSolver (Wazwaz alpha-regularization) end-to-end: base/sloan/
+     * Covers FredholmFirstKindSolver (Wazwaz alpha-regularization) end-to-end: base/sloan/
      * kulkarni/iteratedKulkarni on F1, basis H, n=8.
      *
      * Reference fixed from current run:

@@ -20,12 +20,12 @@ import kotlin.test.assertTrue
  */
 @Tag("fast")
 class VolterraNystromGoldenTest {
-    private fun solver(p: VolterraProblem, n: Int): Pair<SecondKindSolver, Grid> {
+    private fun solver(p: VolterraProblem, n: Int): Pair<VolterraSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = VolterraOperator(p.kernel, grid, numerics.GaussLegendre(8))
-        return SecondKindSolver(basis, funcs, op, 1.0,
+        return VolterraSecondKindSolver(basis, funcs, op, 1.0,
             { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
     }
 
@@ -57,17 +57,17 @@ class VolterraNystromGoldenTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = numerics.functionals.DeBoorFixFunctionals(basis)
         val op = VolterraOperator(VolterraProblem.V2.kernel, grid, numerics.GaussLegendre(8))
-        val s = SecondKindSolver(basis, funcs, op, 1.0,
+        val s = VolterraSecondKindSolver(basis, funcs, op, 1.0,
             { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
         assertFailsWith<IllegalArgumentException> { s.nystrom() }
     }
 
-    private fun xiTildeSolver(p: VolterraProblem, n: Int, r: Int): Pair<SecondKindSolver, Grid> {
+    private fun xiTildeSolver(p: VolterraProblem, n: Int, r: Int): Pair<VolterraSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = numerics.functionals.DiscreteDeBoorFixFunctionals(basis, r)
         val op = VolterraOperator(p.kernel, grid, numerics.GaussLegendre(8))
-        return SecondKindSolver(basis, funcs, op, 1.0,
+        return VolterraSecondKindSolver(basis, funcs, op, 1.0,
             { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
     }
 

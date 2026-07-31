@@ -44,7 +44,7 @@ health-check базовой схемы. Для остальных сочетан
 тест, проверяющий эмпирический порядок `p = log2(E_n / E_2n)` на последовательности
 сеток n = 8, 16, 32, 64.
 
-Матрица покрытия (схемы перечислены в `SecondKindSolver` обоих линейных решателей):
+Матрица покрытия (схемы перечислены в `FredholmSecondKindSolver` и `VolterraSecondKindSolver`):
 
 | Измерение | Значения |
 |---|---|
@@ -183,7 +183,7 @@ runs. Do not alter numbers»: `table-t1-f2.tex`, `table-t1-v2.tex`,
 
 ### Проблема
 
-`FirstKindSolver` в `src/main/kotlin/solvers/volterra/VolterraSolver.kt` проверяет
+`VolterraFirstKindSolver` в `src/main/kotlin/solvers/volterra/VolterraSolver.kt` проверяет
 условие `K(t,t) ≠ 0` только в узлах сетки и серединах интервалов
 (`KERNEL_DIAGONAL_TOLERANCE`, строка ~561). Фактически деление на `K(t,t)`
 происходит:

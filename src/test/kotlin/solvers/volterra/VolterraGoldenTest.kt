@@ -20,7 +20,7 @@ class VolterraGoldenTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
         val op = VolterraOperator(p.kernel, grid, numerics.GaussLegendre(8))
-        val solver = SecondKindSolver(basis, funcs, op, 1.0,
+        val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
             { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })
         return errorEh({ t -> p.exact(t) }, solver.base().eval, grid)
     }

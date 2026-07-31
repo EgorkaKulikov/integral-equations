@@ -264,6 +264,7 @@ tasks.test {
     useJUnitPlatform()
     filter {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
+        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
     }
     // Путь к интерпретатору передаётся тесту явно: искать его самостоятельно тест
@@ -308,7 +309,12 @@ tasks.named("check") {
             resolved is JvmTestSuite && resolved.name == "test"
         },
     )
-    dependsOn("fastTest", "characterizationTest")
+    // `extraCharacterizationTest` входит в `check` ОБЯЗАТЕЛЬНО: это единственный числовой
+    // гейт схем `combinedNystrom`/`iteratedCombinedNystrom` и неравномерных сеток.
+    // Класс помечен тегом `slow`, а `slowTest` из `check` исключён (он красный по
+    // независимой причине), поэтому без явной зависимости сеть не запускалась ни
+    // в `build`, ни в `check` — только вручную.
+    dependsOn("fastTest", "characterizationTest", "extraCharacterizationTest")
 }
 
 tasks.register<Test>("fastTest") {
@@ -319,6 +325,7 @@ tasks.register<Test>("fastTest") {
     useJUnitPlatform { includeTags("fast") }
     filter {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
+        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
     }
     systemProperty("numerics.backend", numericsBackend)
@@ -332,6 +339,7 @@ tasks.register<Test>("slowTest") {
     useJUnitPlatform { includeTags("slow") }
     filter {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
+        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
     }
     systemProperty("numerics.backend", numericsBackend)
@@ -362,6 +370,40 @@ tasks.register<Test>("characterizationTest") {
     systemProperty("numerics.backend", numericsBackend)
 }
 
+/**
+ * ДОПОЛНИТЕЛЬНЫЙ ГЕЙТ численной нейтральности — то, что не покрыто `baseline-eh.tsv`.
+ *
+ * Закрывает три дыры основного гейта перед выносом общего кода решателей
+ * (этап 4 спека): схемы `combinedNystrom`/`iteratedCombinedNystrom` (у решателей
+ * РАЗНЫЕ критерии останова, и слияние тел изменит числа), неравномерные сетки
+ * `quasiUniform`/`geometric`/`graded` и отрезок, отличный от `[0,1]`.
+ *
+ * Почему ОТДЕЛЬНАЯ задача, а не расширение `characterizationTest`. `characterizationTest`
+ * — протокол доказательства нейтральности вокруг НЕПРИКОСНОВЕННОГО эталона
+ * `baseline-eh.tsv` (ровно 4 теста, 1316 значений); добавление в него пятого теста
+ * с другим эталоном смешало бы два независимых гейта, и падение одного нельзя было бы
+ * отличить от падения другого по имени задачи. Эталоны и наборы разведены намеренно.
+ *
+ * Тег класса — `slow` (фактический прогон ~20 с, в бюджет fast-набора не укладывается),
+ * поэтому тест входит и в `slowTest`; эта задача делает его исполнимым отдельно, как и
+ * `characterizationTest`, — `slowTest` сейчас красный по независимой причине
+ * (`PublishedValuesTest`, этап 8 спека). Именно эта задача, а не `slowTest`,
+ * подключена к `check`.
+ */
+tasks.register<Test>("extraCharacterizationTest") {
+    group = "verification"
+    description = "Гейт combinedNystrom и неравномерных сеток против baseline-extra.tsv, допуск 1e-9"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("characterization.ExtraCharacterizationTest")
+        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
+    }
+    // Тот же довод, что и у `characterizationTest`: снимок привязан к бэкенду.
+    systemProperty("numerics.backend", numericsBackend)
+}
+
 tasks.register<Test>("scipyVerify") {
     group = "verification"
     description = "Внешняя сверка со SciPy/NumPy (тег scipy): требует окружения Python"
@@ -370,6 +412,7 @@ tasks.register<Test>("scipyVerify") {
     useJUnitPlatform { includeTags("scipy") }
     filter {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
+        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
     }
     // Окружение Python и артефакты сверки — обязательные предпосылки именно этой
@@ -396,6 +439,21 @@ tasks.register<Test>("captureBaseline") {
     filter { includeTestsMatching("characterization.BaselineSnapshotTool") }
     outputs.upToDateWhen { false }
     // Снимок обязан сниматься на том же бэкенде, с которым его потом сверяют.
+    systemProperty("numerics.backend", numericsBackend)
+}
+
+// Снятие ДОПОЛНИТЕЛЬНОГО снимка (комбинированный Nyström, неравномерные сетки,
+// отрезок [0,2]) в build/baseline/baseline-extra.tsv. В отличие от `captureBaseline`,
+// имя файла детерминировано, а файл перезаписывается: повторный запуск даёт тот же
+// файл, пригодный для побайтового сравнения.
+tasks.register<Test>("captureExtraBaseline") {
+    group = "verification"
+    description = "Снять дополнительный снимок в build/baseline/baseline-extra.tsv"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("characterization.ExtraBaselineSnapshotTool") }
+    outputs.upToDateWhen { false }
     systemProperty("numerics.backend", numericsBackend)
 }
 
@@ -454,8 +512,10 @@ kover {
                 "test",
                 "slowTest",
                 "characterizationTest",
+                "extraCharacterizationTest",
                 "scipyVerify",
                 "captureBaseline",
+                "captureExtraBaseline",
                 "dumpVerificationArtifacts",
             )
         }
