@@ -340,10 +340,8 @@ abstract class SecondKindSolverCore<Operand>(
         var uFun: (Double) -> Double = { t -> fEff(t) }
         var uOperand = prepare(uFun)
         var uAtCheck = checkValues(uFun, uOperand)
-        var converged = false
-        var performedIterations = 0
-        var lastDiff = Double.NaN
-        for (iter in 0 until KULKARNI_QUASI_MAX_ITERATIONS) {
+        val stop = IterationStopCriterion(KULKARNI_QUASI_TOLERANCE)
+        while (stop.performedIterations < KULKARNI_QUASI_MAX_ITERATIONS) {
             val curFun = uFun
             val curOperand = uOperand
             // P_chi u: коэффициенты chi_j(u) по непрерывной u^{(m)} (сохраняет порядок).
@@ -364,28 +362,27 @@ abstract class SecondKindSolverCore<Operand>(
             uFun = nextFun
             uOperand = nextOperand
             uAtCheck = nextAtCheck
-            performedIterations = iter + 1
-            lastDiff = diff
-            if (diff < KULKARNI_QUASI_TOLERANCE) { converged = true; break }
+            if (stop.accept(diff)) break
         }
         // Ранее несошедшийся итерант возвращался МОЛЧА: отличить его от верного
         // результата было невозможно. Теперь действует единый контракт [reportConvergence].
         reportConvergence(
-            converged = converged,
+            converged = stop.converged,
             throwOnDivergence = throwOnDivergence,
             methodName = "Схема Кулкарни для квазиинтерполянта '${funcs.name}' ($equationName)",
-            iterations = performedIterations,
+            iterations = stop.performedIterations,
             maxIterations = KULKARNI_QUASI_MAX_ITERATIONS,
-            residual = lastDiff,
+            residual = stop.residual,
             tolerance = KULKARNI_QUASI_TOLERANCE,
             hint = kulkarniQuasiHint,
+            diverged = stop.diverged,
         )
         val finalFun = uFun
         return SolutionFunc(
             eval = { t -> finalFun(t) },
-            converged = converged,
-            iterations = performedIterations,
-            residual = lastDiff,
+            converged = stop.converged,
+            iterations = stop.performedIterations,
+            residual = stop.residual,
         )
     }
 

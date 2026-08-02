@@ -5,6 +5,7 @@ import kotlin.math.abs
 import numerics.*
 import numerics.functionals.*
 import solvers.core.ImageTriple
+import solvers.core.IterationStopCriterion
 import solvers.core.RhsWithDerivatives
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_MAX_ITERATIONS
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
@@ -567,10 +568,8 @@ class VolterraSecondKindSolver(
         // при правке одного из них две схемы молча разъехались бы.
         val checkPoints = this.checkPoints
         var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
-        var converged = false
-        var performedIterations = 0
-        var lastDiff = Double.NaN
-        for (iter in 0 until COMBINED_NYSTROM_MAX_ITERATIONS) {
+        val stop = IterationStopCriterion(COMBINED_NYSTROM_TOLERANCE)
+        while (stop.performedIterations < COMBINED_NYSTROM_MAX_ITERATIONS) {
             val currentFun = uFun
             val currentAtPoints = DoubleArray(sup.pts.size) { currentFun(sup.pts[it]) }
             // Точный оператор L и его проекция P_chi(L u).
@@ -593,26 +592,25 @@ class VolterraSecondKindSolver(
             for (k in nextAtCheck.indices) diff = maxOf(diff, abs(nextAtCheck[k] - uAtCheck[k]))
             uFun = nextFun
             uAtCheck = nextAtCheck
-            performedIterations = iter + 1
-            lastDiff = diff
-            if (diff < COMBINED_NYSTROM_TOLERANCE) { converged = true; break }
+            if (stop.accept(diff)) break
         }
         reportConvergence(
-            converged = converged,
+            converged = stop.converged,
             throwOnDivergence = throwOnDivergence,
             methodName = "Комбинированный Nyström (Вольтерра)",
-            iterations = performedIterations,
+            iterations = stop.performedIterations,
             maxIterations = COMBINED_NYSTROM_MAX_ITERATIONS,
-            residual = lastDiff,
+            residual = stop.residual,
             tolerance = COMBINED_NYSTROM_TOLERANCE,
             hint = "Для сходимости простой итерации требуется ||L_n|| < 1",
+            diverged = stop.diverged,
         )
         val resultFun = uFun
         return SolutionFunc(
             eval = { t -> resultFun(t) },
-            converged = converged,
-            iterations = performedIterations,
-            residual = lastDiff,
+            converged = stop.converged,
+            iterations = stop.performedIterations,
+            residual = stop.residual,
         )
     }
 

@@ -4,6 +4,7 @@ import kotlin.math.abs
 import numerics.*
 import numerics.functionals.*
 import solvers.core.ImageTriple
+import solvers.core.IterationStopCriterion
 import solvers.core.RhsWithDerivatives
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_MAX_ITERATIONS
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
@@ -377,10 +378,8 @@ class FredholmSecondKindSolver(
         val (pts, bAgg) = nystromSupport()
         var uFun: (Double) -> Double = { t -> fEff(t) }
         var uAtNodes = DoubleArray(ng) { uFun(op.gNode[it]) }
-        var converged = false
-        var performedIterations = 0
-        var lastDiff = Double.NaN
-        for (iter in 0 until COMBINED_NYSTROM_MAX_ITERATIONS) {
+        val stop = IterationStopCriterion(COMBINED_NYSTROM_TOLERANCE)
+        while (stop.performedIterations < COMBINED_NYSTROM_MAX_ITERATIONS) {
             val currentFun = uFun
             val currentNodes = uAtNodes
             val currentAtPoints = DoubleArray(pts.size) { currentFun(pts[it]) }
@@ -400,26 +399,25 @@ class FredholmSecondKindSolver(
             for (k in 0 until ng) diff = maxOf(diff, abs(nextNodes[k] - currentNodes[k]))
             uFun = nextFun
             uAtNodes = nextNodes
-            performedIterations = iter + 1
-            lastDiff = diff
-            if (diff < COMBINED_NYSTROM_TOLERANCE) { converged = true; break }
+            if (stop.accept(diff)) break
         }
         reportConvergence(
-            converged = converged,
+            converged = stop.converged,
             throwOnDivergence = throwOnDivergence,
             methodName = "Комбинированный Nyström (Фредгольм)",
-            iterations = performedIterations,
+            iterations = stop.performedIterations,
             maxIterations = COMBINED_NYSTROM_MAX_ITERATIONS,
-            residual = lastDiff,
+            residual = stop.residual,
             tolerance = COMBINED_NYSTROM_TOLERANCE,
             hint = "Для сходимости простой итерации требуется ||L_n|| < 1",
+            diverged = stop.diverged,
         )
         val resultFun = uFun
         return SolutionFunc(
             eval = { t -> resultFun(t) },
-            converged = converged,
-            iterations = performedIterations,
-            residual = lastDiff,
+            converged = stop.converged,
+            iterations = stop.performedIterations,
+            residual = stop.residual,
         )
     }
 
