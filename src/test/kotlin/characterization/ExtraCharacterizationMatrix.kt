@@ -308,9 +308,11 @@ object ExtraCharacterizationMatrix {
         val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER))
         val solver = solvers.fredholm.FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            solvers.core.RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
             throwOnDivergence = false,
         )
         val exact = { t: Double -> problem.exact(t) }
@@ -344,9 +346,11 @@ object ExtraCharacterizationMatrix {
         val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER))
         val solver = solvers.volterra.VolterraSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            solvers.core.RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
             throwOnDivergence = false,
         )
         val exact = { t: Double -> problem.exact(t) }

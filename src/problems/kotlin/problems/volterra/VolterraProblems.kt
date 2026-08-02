@@ -2,6 +2,7 @@ package problems.volterra
 
 import numerics.MinimalSplineBasis
 import numerics.functionals.FunctionalFamily
+import solvers.core.RhsWithDerivatives
 import solvers.volterra.KernelV
 import solvers.volterra.VolterraFirstKindSolver
 import solvers.volterra.VolterraOperator
@@ -200,9 +201,11 @@ fun secondKindSolver(
     op: VolterraOperator,
 ): VolterraSecondKindSolver = VolterraSecondKindSolver(
     basis, funcs, op, cL = 1.0,
-    fEff = { t -> problem.rhsExact(t, op) },
-    fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
-    fEffDeriv2 = { t -> problem.rhsExactDeriv2(t, op) },
+    rhs = RhsWithDerivatives(
+        value = { t -> problem.rhsExact(t, op) },
+        deriv = { t -> problem.rhsExactDeriv(t, op) },
+        deriv2 = { t -> problem.rhsExactDeriv2(t, op) },
+    ),
 )
 
 /**

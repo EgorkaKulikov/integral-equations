@@ -123,6 +123,7 @@ import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import problems.fredholm.FredholmProblem
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
 
@@ -135,9 +136,11 @@ fun main() {
 
     val solver = FredholmSecondKindSolver(
         basis, funcs, op, cL = 1.0,
-        fEff = { t -> problem.rhsExact(t, op) },
-        fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
-        fEffDeriv2 = { t -> problem.rhsExactDeriv2(t, op) },
+        rhs = RhsWithDerivatives(
+            value = { t -> problem.rhsExact(t, op) },
+            deriv = { t -> problem.rhsExactDeriv(t, op) },
+            deriv2 = { t -> problem.rhsExactDeriv2(t, op) },
+        ),
     )
 
     val approximate = solver.base()           // базовая схема коллокации

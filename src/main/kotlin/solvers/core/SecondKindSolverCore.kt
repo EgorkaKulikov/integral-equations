@@ -80,9 +80,9 @@ class ImageTriple(
  * @param funcs семейство функционалов chi_j.
  * @param cL множитель оператора: `c_L = 1` для уравнения II рода;
  *        `c_L = -1/alpha` при регуляризации уравнения I рода по Вазвазу.
- * @param fEff правая часть `f` и её производные — задаются явно, чтобы решатель
- *        переиспользовался решателями уравнений I рода с ДРУГОЙ (эффективной)
- *        правой частью.
+ * @param rhs правая часть `f` вместе с двумя производными — задаётся явно, чтобы
+ *        решатель переиспользовался решателями уравнений I рода с ДРУГОЙ (эффективной)
+ *        правой частью. Одним объектом, а не тремя параметрами: см. [RhsWithDerivatives].
  * @param throwOnDivergence поведение ИТЕРАЦИОННЫХ схем ([kulkarni] для
  *        квазиинтерполянтов, `combinedNystrom` в наследниках) при недостижении
  *        сходимости: `true` (по умолчанию) — исключение, `false` — результат с
@@ -94,11 +94,34 @@ abstract class SecondKindSolverCore<Operand>(
     val basis: MinimalSplineBasis,
     val funcs: FunctionalFamily,
     val cL: Double,
-    val fEff: (Double) -> Double,
-    val fEffDeriv: (Double) -> Double,
-    val fEffDeriv2: (Double) -> Double,
+    rhs: RhsWithDerivatives,
     val throwOnDivergence: Boolean,
+    val ctx: NumericsContext = NumericsContext.default(),
 ) {
+    init {
+        // Семейство функционалов решает СЛАУ при построении — тем же бэкендом, что и решатель.
+        NumericsContext.requireSame("SecondKindSolverCore", ctx, "funcs", funcs.ctx)
+    }
+
+    // Тройка РАСПАКОВЫВАЕТСЯ в собственные поля один раз, в конструкторе.
+    // Так все чтения в горячем пути (сборка M/M2, итерации Слоана и Кулкарни)
+    // остаются ровно тем же одним разыменованием поля, что и до объединения
+    // параметров: `rhs.value(t)` добавлял бы второе разыменование на КАЖДЫЙ вызов.
+    //
+    // Сам `rhs` — НЕ свойство, а просто параметр конструктора: иначе на три функции
+    // приходилось бы шесть публичных членов (`rhs.value` и `fEff` — одно и то же),
+    // а два способа получить одно и то же приглашают к ошибке. Как параметр он ещё и
+    // не занимает поля в объекте.
+
+    /** Правая часть `f(t)`. */
+    val fEff: (Double) -> Double = rhs.value
+
+    /** Первая производная правой части `f'(t)`. */
+    val fEffDeriv: (Double) -> Double = rhs.deriv
+
+    /** Вторая производная правой части `f''(t)`. */
+    val fEffDeriv2: (Double) -> Double = rhs.deriv2
+
     val grid = basis.grid
     val n = grid.n
     val dim = n + 2
@@ -208,7 +231,7 @@ abstract class SecondKindSolverCore<Operand>(
      */
     private fun assembleChiMatrix(images: (Int) -> ImageTriple): Array<DoubleArray> {
         // Столбцы M независимы по i; cols[i] = столбец i.
-        val cols = ParallelAssembly.assembleRows(dim, dim) { i ->
+        val cols = ParallelAssembly.assembleRows(dim, dim, ctx.parallel) { i ->
             val im = images(i)
             DoubleArray(dim) { j -> funcs.chi(j - 2).apply(im.value, im.deriv, im.deriv2) }
         }
@@ -248,7 +271,7 @@ abstract class SecondKindSolverCore<Operand>(
         val m = matrixM()
         val a = LinearAlgebra.zeros(dim, dim)
         for (r in 0 until dim) { for (c in 0 until dim) a[r][c] = -m[r][c]; a[r][r] += 1.0 }
-        return LinearAlgebra.solve(a, vectorG())
+        return LinearAlgebra.solve(a, vectorG(), ctx.backend)
     }
 
     fun base(): SolutionFunc {
@@ -274,7 +297,7 @@ abstract class SecondKindSolverCore<Operand>(
 
     private fun kulkarniProjector(): SolutionFunc {
         val m = matrixM(); val m2 = matrixM2(); val g = vectorG(); val d = vectorD()
-        val mm = LinearAlgebra.matMat(m, m)
+        val mm = LinearAlgebra.matMat(m, m, ctx.backend)
         // A = I - M - M2 + M^2
         val a = LinearAlgebra.zeros(dim, dim)
         for (r in 0 until dim) {
@@ -282,9 +305,9 @@ abstract class SecondKindSolverCore<Operand>(
             a[r][r] += 1.0
         }
         // rhs = (I - M) g + d
-        val mg = LinearAlgebra.matVec(m, g)
+        val mg = LinearAlgebra.matVec(m, g, ctx.backend)
         val rhs = DoubleArray(dim) { g[it] - mg[it] + d[it] }
-        val c = LinearAlgebra.solve(a, rhs) // коэффициенты y_h
+        val c = LinearAlgebra.solve(a, rhs, ctx.backend) // коэффициенты y_h
         // u_h^K = y_h + (I - P_chi)[f + L y_h]; (I - P_chi)w = w - P_chi w.
         val yh = { s: Double -> basis.evalSpline(c, s) }
         val yhD = { s: Double -> basis.evalSplineDeriv(c, s) }

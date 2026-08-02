@@ -24,7 +24,7 @@ class FredholmNystromGoldenTest {
         val funcs = ProjFunctionals(basis)
         val op = FredholmOperator(p.kernel, grid, numerics.GaussLegendre(8))
         return FredholmSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
+            solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })) to grid
     }
 
     private fun approx(v: Double, ref: Double) = kotlin.math.abs(v - ref) <= 0.03 * ref
@@ -56,7 +56,8 @@ class FredholmNystromGoldenTest {
         val funcs = numerics.functionals.DeBoorFixFunctionals(basis)
         val op = FredholmOperator(FredholmProblem.F2.kernel, grid, numerics.GaussLegendre(8))
         val s = FredholmSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> FredholmProblem.F2.rhsExact(t, op) }, { t -> FredholmProblem.F2.rhsExactDeriv(t, op) })
+            solvers.core.RhsWithDerivatives(
+                { t -> FredholmProblem.F2.rhsExact(t, op) }, { t -> FredholmProblem.F2.rhsExactDeriv(t, op) }))
         assertFailsWith<IllegalArgumentException> { s.nystrom() }
     }
 
@@ -66,7 +67,7 @@ class FredholmNystromGoldenTest {
         val funcs = numerics.functionals.DiscreteDeBoorFixFunctionals(basis, r)
         val op = FredholmOperator(p.kernel, grid, numerics.GaussLegendre(8))
         return FredholmSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
+            solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })) to grid
     }
 
     /** Дискретизованный xitilde^{<1>},xitilde^{<2>} ПРИНИМАЕТСЯ Nyström и сходится на F2. */

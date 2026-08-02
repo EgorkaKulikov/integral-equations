@@ -10,6 +10,7 @@ import numerics.functionals.ProjFunctionals
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
 import org.junit.jupiter.api.Tag
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmSecondKindSolver
 import solvers.volterra.VolterraSecondKindSolver
 import kotlin.math.abs
@@ -165,9 +166,11 @@ class CrossSchemeConsistencyTest {
                 )
                 val solver = FredholmSecondKindSolver(
                     basis, funcs, op, 1.0,
-                    { t -> problem.rhsExact(t, op) },
-                    { t -> problem.rhsExactDeriv(t, op) },
-                    { t -> problem.rhsExactDeriv2(t, op) },
+                    RhsWithDerivatives(
+                        { t -> problem.rhsExact(t, op) },
+                        { t -> problem.rhsExactDeriv(t, op) },
+                        { t -> problem.rhsExactDeriv2(t, op) },
+                    ),
                 )
                 val solutions = listOf(
                     "base" to solver.base(),
@@ -212,9 +215,11 @@ class CrossSchemeConsistencyTest {
                 )
                 val solver = VolterraSecondKindSolver(
                     basis, funcs, op, 1.0,
-                    { t -> problem.rhsExact(t, op) },
-                    { t -> problem.rhsExactDeriv(t, op) },
-                    { t -> problem.rhsExactDeriv2(t, op) },
+                    RhsWithDerivatives(
+                        { t -> problem.rhsExact(t, op) },
+                        { t -> problem.rhsExactDeriv(t, op) },
+                        { t -> problem.rhsExactDeriv2(t, op) },
+                    ),
                 )
                 val solutions = listOf(
                     "base" to solver.base(),
@@ -258,9 +263,11 @@ class CrossSchemeConsistencyTest {
         )
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
         )
         // Схема nystrom исключена намеренно: её приближение лежит ВНЕ сплайнового
         // пространства, поэтому на span-задаче она не обязана давать машинную

@@ -21,7 +21,7 @@ class VolterraGoldenTest {
         val funcs = ProjFunctionals(basis)
         val op = VolterraOperator(p.kernel, grid, numerics.GaussLegendre(8))
         val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })
+            solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }))
         return errorEh({ t -> p.exact(t) }, solver.base().eval, grid)
     }
 

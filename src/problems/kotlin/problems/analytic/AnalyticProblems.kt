@@ -2,6 +2,7 @@ package problems.analytic
 
 import numerics.MinimalSplineBasis
 import numerics.functionals.FunctionalFamily
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
 import solvers.fredholm.KernelF
@@ -565,9 +566,11 @@ fun analyticFredholmSolver(
     throwOnDivergence: Boolean = true,
 ): FredholmSecondKindSolver = FredholmSecondKindSolver(
     basis, funcs, op, cL = 1.0,
-    fEff = problem.rhs,
-    fEffDeriv = problem.rhsDeriv,
-    fEffDeriv2 = problem.rhsDeriv2,
+    rhs = RhsWithDerivatives(
+        value = problem.rhs,
+        deriv = problem.rhsDeriv,
+        deriv2 = problem.rhsDeriv2,
+    ),
     throwOnDivergence = throwOnDivergence,
 )
 
@@ -583,7 +586,9 @@ fun analyticVolterraSolver(
     op: VolterraOperator,
 ): VolterraSecondKindSolver = VolterraSecondKindSolver(
     basis, funcs, op, cL = 1.0,
-    fEff = problem.rhs,
-    fEffDeriv = problem.rhsDeriv,
-    fEffDeriv2 = problem.rhsDeriv2,
+    rhs = RhsWithDerivatives(
+        value = problem.rhs,
+        deriv = problem.rhsDeriv,
+        deriv2 = problem.rhsDeriv2,
+    ),
 )

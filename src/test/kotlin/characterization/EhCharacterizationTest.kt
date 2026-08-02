@@ -10,6 +10,7 @@ import numerics.functionals.FunctionalFamily
 import numerics.functionals.ThreePointFunctionals
 import numerics.functionals.errorEh
 import org.junit.jupiter.api.Tag
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmSecondKindSolver
 import solvers.volterra.VolterraSecondKindSolver
 import kotlin.math.abs
@@ -115,9 +116,11 @@ class EhCharacterizationTest {
                         val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(8))
                         val solver = FredholmSecondKindSolver(
                             basis, funcs, op, 1.0,
-                            { t -> problem.rhsExact(t, op) },
-                            { t -> problem.rhsExactDeriv(t, op) },
-                            { t -> problem.rhsExactDeriv2(t, op) },
+                            RhsWithDerivatives(
+                                { t -> problem.rhsExact(t, op) },
+                                { t -> problem.rhsExactDeriv(t, op) },
+                                { t -> problem.rhsExactDeriv2(t, op) },
+                            ),
                         )
                         val exact = { t: Double -> problem.exact(t) }
                         val prefix = "F.${problem.name}.${system.name}.$familyName.n$n"
@@ -164,9 +167,11 @@ class EhCharacterizationTest {
                         val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(8))
                         val solver = VolterraSecondKindSolver(
                             basis, funcs, op, 1.0,
-                            { t -> problem.rhsExact(t, op) },
-                            { t -> problem.rhsExactDeriv(t, op) },
-                            { t -> problem.rhsExactDeriv2(t, op) },
+                            RhsWithDerivatives(
+                                { t -> problem.rhsExact(t, op) },
+                                { t -> problem.rhsExactDeriv(t, op) },
+                                { t -> problem.rhsExactDeriv2(t, op) },
+                            ),
                         )
                         val exact = { t: Double -> problem.exact(t) }
                         val prefix = "V.${problem.name}.${system.name}.$familyName.n$n"

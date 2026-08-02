@@ -3,6 +3,7 @@ package problems.uryson
 import numerics.GaussLegendre
 import numerics.Grid
 import numerics.MinimalSplineBasis
+import numerics.NumericsContext
 import numerics.functionals.ProjFunctionals
 import solvers.uryson.Kernel
 import solvers.uryson.SplineSpace
@@ -108,13 +109,19 @@ class UrysonProblem(
     }
 }
 
-/** Создаёт решатель уравнения второго рода для модельной задачи. */
+/**
+ * Создаёт решатель уравнения второго рода для модельной задачи.
+ *
+ * @param ctx контекст вычислений; обязан совпадать с контекстами [funcs] и [space]
+ *        (проверяется конструктором решателя).
+ */
 fun secondKindSolver(
     problem: UrysonProblem,
     basis: MinimalSplineBasis,
     funcs: ProjFunctionals,
     space: SplineSpace,
     op: UrysohnOperator,
+    ctx: NumericsContext = NumericsContext.default(),
 ): UrysonSecondKindSolver = UrysonSecondKindSolver(
     basis = basis,
     funcs = funcs,
@@ -122,15 +129,21 @@ fun secondKindSolver(
     op = op,
     lambda = problem.lambda,
     rhs = { t -> problem.rhsExact(t, op) },
+    ctx = ctx,
 )
 
-/** Создаёт регуляризованный решатель уравнения первого рода. */
+/**
+ * Создаёт регуляризованный решатель уравнения первого рода.
+ *
+ * @param ctx контекст вычислений; обязан совпадать с контекстами [funcs] и [space].
+ */
 fun firstKindSolver(
     basis: MinimalSplineBasis,
     funcs: ProjFunctionals,
     space: SplineSpace,
     op: UrysohnOperator,
-): UrysonFirstKindSolver = UrysonFirstKindSolver(basis, funcs, space, op)
+    ctx: NumericsContext = NumericsContext.default(),
+): UrysonFirstKindSolver = UrysonFirstKindSolver(basis, funcs, space, op, ctx = ctx)
 
 /**
  * Число контрольных узлов профиля шума на один интервал сетки.

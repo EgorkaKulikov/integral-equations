@@ -4,13 +4,14 @@ import numerics.GaussLegendre
 import numerics.GeneratingSystem
 import numerics.Grid
 import numerics.MinimalSplineBasis
-import numerics.ParallelAssembly
+import numerics.NumericsContext
 import numerics.backend.Backends
 import numerics.backend.LinAlgBackend
 import numerics.backend.MultikCpuBackend
 import numerics.backend.ReferenceBackend
 import numerics.functionals.ProjFunctionals
 import problems.fredholm.FredholmProblem
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
 import java.io.File
@@ -85,15 +86,18 @@ private fun summarize(samplesNanos: LongArray): Measurement {
 private var blackHole: Double = 0.0
 
 /** Строит представительный решатель уравнения Фредгольма (задача F2) размера dim = n+2. */
-private fun buildSolver(n: Int): FredholmSecondKindSolver {
+private fun buildSolver(n: Int, ctx: NumericsContext = NumericsContext.default()): FredholmSecondKindSolver {
     val grid = Grid.uniform(n)
     val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-    val funcs = ProjFunctionals(basis)
+    val funcs = ProjFunctionals(basis, ctx)
     val op = FredholmOperator(FredholmProblem.F2.kernel, grid, GaussLegendre(8))
     return FredholmSecondKindSolver(
         basis, funcs, op, 1.0,
-        { t -> FredholmProblem.F2.rhsExact(t, op) },
-        { t -> FredholmProblem.F2.rhsExactDeriv(t, op) },
+        RhsWithDerivatives(
+            { t -> FredholmProblem.F2.rhsExact(t, op) },
+            { t -> FredholmProblem.F2.rhsExactDeriv(t, op) },
+        ),
+        ctx = ctx,
     )
 }
 
@@ -172,13 +176,12 @@ private fun runScalabilityStudy(config: BenchmarkConfig): List<Triple<Int, Measu
         ),
     )
 
-    // Опорная точка: строго последовательное выполнение того же кода.
-    val sequential = try {
-        ParallelAssembly.parallelEnabled = false
-        repeatMeasurement(config.repetitions, config.warmupRuns) { timeMatrixAssembly(solver) }
-    } finally {
-        ParallelAssembly.parallelEnabled = true
-    }
+    // Опорная точка: строго последовательное выполнение ТОГО ЖЕ кода — отдельный
+    // решатель с контекстом `parallel = false`, а не глобальный переключатель:
+    // так бенчмарк не меняет поведение чужого кода в той же JVM.
+    val sequentialSolver = buildSolver(config.speedupSize, NumericsContext(parallel = false))
+    val sequential =
+        repeatMeasurement(config.repetitions, config.warmupRuns) { timeMatrixAssembly(sequentialSolver) }
     println(
         "%8s %12.3f %12.3f %12.1f %10s %10s %10s".format(
             "1 (посл.)", sequential.median, sequential.min, sequential.spreadPercent, "1.00", "1.00", "-",
@@ -236,51 +239,48 @@ private fun runBackendComparison(config: BenchmarkConfig) {
         ),
     )
 
-    val savedBackend = Backends.active
-    try {
-        for (size in listOf(16, 64, 256, 1024)) {
-            val random = kotlin.random.Random(seed = 20240517 + size)
-            val a = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
-            val b = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
-            val x = DoubleArray(size) { random.nextDouble(-1.0, 1.0) }
-            // Строго диагонально доминирующая матрица — гарантированно невырожденная.
-            val solvable = Array(size) { i ->
-                DoubleArray(size) { j -> if (i == j) size + 1.0 else a[i][j] / size }
-            }
-
-            val operations = linkedMapOf<String, (LinAlgBackend) -> Double>(
-                "matVec" to { backend -> backend.matVec(a, x)[0] },
-                "matMat" to { backend -> backend.matMat(a, b)[0][0] },
-                "addScaled" to { backend -> backend.addScaled(a, b, 1.5)[0][0] },
-                "solve" to { backend -> backend.solve(solvable, x)[0] },
-            )
-
-            for ((operationName, operation) in operations) {
-                val timings = LinkedHashMap<String, Measurement>()
-                for (backend in listOf<LinAlgBackend>(MultikCpuBackend, ReferenceBackend)) {
-                    // matMat и solve кубичны: на 1024 повторы сокращаются, чтобы бенчмарк
-                    // завершался за разумное время даже на медленном JVM-бэкенде.
-                    val heavy = operationName == "matMat" || operationName == "solve"
-                    val repetitions = if (size >= 512 && heavy) 3 else config.repetitions
-                    val warmups = if (size >= 512 && heavy) 1 else config.warmupRuns
-                    timings[backend.name] = repeatMeasurement(repetitions, warmups) {
-                        val start = System.nanoTime()
-                        blackHole += operation(backend)
-                        System.nanoTime() - start
-                    }
-                }
-                val multik = timings.getValue(MultikCpuBackend.name)
-                val reference = timings.getValue(ReferenceBackend.name)
-                val ratio = multik.median / reference.median
-                println(
-                    "%6d %10s %14.4f %14.4f %10.2f".format(
-                        size, operationName, multik.median, reference.median, ratio,
-                    ),
-                )
-            }
+    // Бэкенды сравниваются НАПРЯМУЮ, без подмены глобального состояния и без
+    // восстановления в finally: каждый замер вызывает свой экземпляр [LinAlgBackend].
+    for (size in listOf(16, 64, 256, 1024)) {
+        val random = kotlin.random.Random(seed = 20240517 + size)
+        val a = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
+        val b = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
+        val x = DoubleArray(size) { random.nextDouble(-1.0, 1.0) }
+        // Строго диагонально доминирующая матрица — гарантированно невырожденная.
+        val solvable = Array(size) { i ->
+            DoubleArray(size) { j -> if (i == j) size + 1.0 else a[i][j] / size }
         }
-    } finally {
-        Backends.use(savedBackend)
+
+        val operations = linkedMapOf<String, (LinAlgBackend) -> Double>(
+            "matVec" to { backend -> backend.matVec(a, x)[0] },
+            "matMat" to { backend -> backend.matMat(a, b)[0][0] },
+            "addScaled" to { backend -> backend.addScaled(a, b, 1.5)[0][0] },
+            "solve" to { backend -> backend.solve(solvable, x)[0] },
+        )
+
+        for ((operationName, operation) in operations) {
+            val timings = LinkedHashMap<String, Measurement>()
+            for (backend in listOf<LinAlgBackend>(MultikCpuBackend, ReferenceBackend)) {
+                // matMat и solve кубичны: на 1024 повторы сокращаются, чтобы бенчмарк
+                // завершался за разумное время даже на медленном JVM-бэкенде.
+                val heavy = operationName == "matMat" || operationName == "solve"
+                val repetitions = if (size >= 512 && heavy) 3 else config.repetitions
+                val warmups = if (size >= 512 && heavy) 1 else config.warmupRuns
+                timings[backend.name] = repeatMeasurement(repetitions, warmups) {
+                    val start = System.nanoTime()
+                    blackHole += operation(backend)
+                    System.nanoTime() - start
+                }
+            }
+            val multik = timings.getValue(MultikCpuBackend.name)
+            val reference = timings.getValue(ReferenceBackend.name)
+            val ratio = multik.median / reference.median
+            println(
+                "%6d %10s %14.4f %14.4f %10.2f".format(
+                    size, operationName, multik.median, reference.median, ratio,
+                ),
+            )
+        }
     }
     println()
     println(" Колонка multik/ref: <1 — нативный бэкенд быстрее, >1 — быстрее чистый JVM.")
@@ -320,7 +320,7 @@ private fun printEnvironment(config: BenchmarkConfig) {
     println("Архитектура     : ${System.getProperty("os.arch")}")
     println("Доступно ядер   : ${Runtime.getRuntime().availableProcessors()}")
     println("JVM             : ${System.getProperty("java.vm.name")} ${System.getProperty("java.version")}")
-    println("Бэкенд линалг.  : ${Backends.active.name}")
+    println("Бэкенд линалг.  : ${Backends.default().name}")
     println("Повторов        : ${config.repetitions} (прогрев: ${config.warmupRuns} перед каждой серией)")
     println("Агрегация       : медиана; приводятся мин., макс. и разброс")
     println("Размеры задачи  : ${config.problemSizes.joinToString(", ")}")

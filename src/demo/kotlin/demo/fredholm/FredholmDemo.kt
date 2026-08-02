@@ -14,6 +14,7 @@ import numerics.functionals.errorEh
 import numerics.functionals.orders
 import problems.fredholm.FredholmProblem
 import problems.fredholm.firstKindSolver
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
 
@@ -43,9 +44,11 @@ object Tables {
         val op = FredholmOperator(problem.kernel, grid, quad)
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
         )
         return solver to grid
     }

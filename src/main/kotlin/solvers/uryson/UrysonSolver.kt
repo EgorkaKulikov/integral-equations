@@ -5,6 +5,7 @@ import numerics.GaussLegendre
 import numerics.Grid
 import numerics.LinearAlgebra
 import numerics.MinimalSplineBasis
+import numerics.NumericsContext
 import numerics.ParallelAssembly
 import numerics.SolutionFunc
 import numerics.functionals.ApproxFunctional
@@ -43,7 +44,11 @@ internal fun ProjFunctionals.valueFunctional(j: Int): ValueFunctional =
  * @param basis базис минимальных сплайнов.
  * @param quad квадратура для интегралов по сеточным интервалам.
  */
-class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
+class SplineSpace(
+    val basis: MinimalSplineBasis,
+    val quad: GaussLegendre,
+    val ctx: NumericsContext = NumericsContext.default(),
+) {
     val grid = basis.grid
     val n = grid.n
     val dim = n + 2
@@ -152,7 +157,7 @@ class SplineSpace(val basis: MinimalSplineBasis, val quad: GaussLegendre) {
     /** Квадратичная форма стабилизатора `Omega(x_h) = c^T R_h c`. */
     fun omegaReg(c: DoubleArray): Double {
         // Внутри класса читаем бэкинг-поле напрямую: копия здесь была бы лишней.
-        val rc = LinearAlgebra.matVec(gramRInternal, c)
+        val rc = LinearAlgebra.matVec(gramRInternal, c, ctx.backend)
         var s = 0.0
         for (i in c.indices) s += c[i] * rc[i]
         return s
@@ -273,6 +278,7 @@ class CollocationCore(
     val basis: MinimalSplineBasis,
     val funcs: ProjFunctionals,
     val op: UrysohnOperator,
+    val ctx: NumericsContext = NumericsContext.default(),
 ) {
     val grid = basis.grid
     val n = grid.n
@@ -362,7 +368,7 @@ class CollocationCore(
             }
         }
         // Строки B независимы: каждая задача пишет в свою строку, g только читается.
-        return ParallelAssembly.assembleRows(n + 2, n + 2) { k ->
+        return ParallelAssembly.assembleRows(n + 2, n + 2, ctx.parallel) { k ->
             val th = funcs.valueFunctional(k - 2)
             val row = DoubleArray(n + 2)
             for (q in th.nodes.indices) {
@@ -414,7 +420,14 @@ class UrysonSecondKindSolver(
     val kulkarniMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
     val nystromMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
     val throwOnDivergence: Boolean = true,
+    val ctx: NumericsContext = NumericsContext.default(),
 ) {
+    init {
+        // Семейство и сплайн-пространство считают ЧАСТИ ТОЙ ЖЕ задачи — тем же бэкендом.
+        NumericsContext.requireSame("UrysonSecondKindSolver", ctx, "funcs", funcs.ctx)
+        NumericsContext.requireSame("UrysonSecondKindSolver", ctx, "space", space.ctx)
+    }
+
     companion object {
         /** Критерий останова по умолчанию: близко к машинной точности. */
         const val DEFAULT_TOLERANCE = 1e-12
@@ -460,7 +473,7 @@ class UrysonSecondKindSolver(
     /** Предвычисленные значения `theta_j(f)` для точной правой части. */
     private val thetaF: DoubleArray = DoubleArray(n + 2) { k -> funcs.valueFunctional(k - 2).applyTo(rhs) }
 
-    private val collocation = CollocationCore(basis, funcs, op)
+    private val collocation = CollocationCore(basis, funcs, op, ctx)
 
     /**
      * Базовая схема: `c = theta(f) + lambda Xi(c)`.
@@ -506,12 +519,12 @@ class UrysonSecondKindSolver(
     /** Шаг Ньютона с якобианом `J = I - lambda B(c)` (строки собираются независимо). */
     private fun newtonStep(c: DoubleArray, negativeResidual: DoubleArray): DoubleArray {
         val b = collocation.bMatrix(c)
-        val jacobian = ParallelAssembly.assembleRows(n + 2, n + 2) { r ->
+        val jacobian = ParallelAssembly.assembleRows(n + 2, n + 2, ctx.parallel) { r ->
             val row = DoubleArray(n + 2) { col -> -lambda * b[r][col] }
             row[r] += 1.0
             row
         }
-        return LinearAlgebra.solve(jacobian, negativeResidual)
+        return LinearAlgebra.solve(jacobian, negativeResidual, ctx.backend)
     }
 
     /**
@@ -694,7 +707,7 @@ class UrysonSecondKindSolver(
                     jacobian[row][col] = (identity * step - (perturbed[row] - gx[row])) / step
                 }
             }
-            val delta = LinearAlgebra.solve(jacobian, DoubleArray(p) { -residual[it] })
+            val delta = LinearAlgebra.solve(jacobian, DoubleArray(p) { -residual[it] }, ctx.backend)
             for (i in x.indices) x[i] += delta[i]
             lastStep = LinearAlgebra.normInf(delta)
             if (lastStep < newtonTol) { converged = true; break }
@@ -769,7 +782,17 @@ class UrysonFirstKindSolver(
     val gnTol: Double = DEFAULT_GN_TOLERANCE,
     val gnMaxIter: Int = DEFAULT_GN_MAX_ITERATIONS,
     val throwOnDivergence: Boolean = false,
+    val ctx: NumericsContext = NumericsContext.default(),
 ) {
+    init {
+        // КРИТИЧНО именно здесь: [solveMorozov] считает стабилизатор `Omega` через
+        // `space.omegaReg` (то есть через `space.ctx.backend`), а систему Гаусса–Ньютона —
+        // через собственный `ctx.backend`. При расхождении две части ОДНОГО критерия
+        // Морозова считались бы разными реализациями LU — молча.
+        NumericsContext.requireSame("UrysonFirstKindSolver", ctx, "funcs", funcs.ctx)
+        NumericsContext.requireSame("UrysonFirstKindSolver", ctx, "space", space.ctx)
+    }
+
     companion object {
         /**
          * Коэффициент запаса в принципе невязки Морозова.
@@ -813,7 +836,7 @@ class UrysonFirstKindSolver(
 
     val grid = basis.grid
     val n = grid.n
-    private val core = CollocationCore(basis, funcs, op)
+    private val core = CollocationCore(basis, funcs, op, ctx)
     private val weights = space.weights
     private val gramR = space.gramR
 
@@ -838,13 +861,13 @@ class UrysonFirstKindSolver(
         repeat(gnMaxIter) {
             val xi = core.xiVector(c)
             val b = core.bMatrix(c)
-            val btwb = LinearAlgebra.atWa(b, weights)
-            val lhs = LinearAlgebra.addScaled(btwb, gramR, alpha)
+            val btwb = LinearAlgebra.atWa(b, weights, ctx.backend)
+            val lhs = LinearAlgebra.addScaled(btwb, gramR, alpha, ctx.backend)
             val r = DoubleArray(n + 2) { (xi[it] - thetaFDelta[it]) * weights[it] }
-            val btr = LinearAlgebra.matTransVec(b, r)
-            val rc = LinearAlgebra.matVec(gramR, c)
+            val btr = LinearAlgebra.matTransVec(b, r, ctx.backend)
+            val rc = LinearAlgebra.matVec(gramR, c, ctx.backend)
             val rhs = DoubleArray(n + 2) { -btr[it] - alpha * rc[it] }
-            val delta = LinearAlgebra.solve(lhs, rhs)
+            val delta = LinearAlgebra.solve(lhs, rhs, ctx.backend)
             for (i in c.indices) c[i] += delta[i]
             lastStep = LinearAlgebra.normInf(delta)
             if (lastStep < gnTol) return c

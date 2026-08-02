@@ -26,7 +26,7 @@ class VolterraNystromGoldenTest {
         val funcs = ProjFunctionals(basis)
         val op = VolterraOperator(p.kernel, grid, numerics.GaussLegendre(8))
         return VolterraSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
+            solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })) to grid
     }
 
     private fun approx(v: Double, ref: Double) = kotlin.math.abs(v - ref) <= 0.03 * ref
@@ -58,7 +58,8 @@ class VolterraNystromGoldenTest {
         val funcs = numerics.functionals.DeBoorFixFunctionals(basis)
         val op = VolterraOperator(VolterraProblem.V2.kernel, grid, numerics.GaussLegendre(8))
         val s = VolterraSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
+            solvers.core.RhsWithDerivatives(
+                { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) }))
         assertFailsWith<IllegalArgumentException> { s.nystrom() }
     }
 
@@ -68,7 +69,7 @@ class VolterraNystromGoldenTest {
         val funcs = numerics.functionals.DiscreteDeBoorFixFunctionals(basis, r)
         val op = VolterraOperator(p.kernel, grid, numerics.GaussLegendre(8))
         return VolterraSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) }) to grid
+            solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })) to grid
     }
 
     /** Дискретизованный xitilde^{<1>},xitilde^{<2>} ПРИНИМАЕТСЯ Nyström и сходится на V2. */

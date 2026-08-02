@@ -4,6 +4,7 @@ import kotlin.math.abs
 import numerics.*
 import numerics.functionals.*
 import solvers.core.ImageTriple
+import solvers.core.RhsWithDerivatives
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_MAX_ITERATIONS
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
 import solvers.core.SecondKindSolverCore
@@ -108,7 +109,7 @@ class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegen
 /**
  * Линейный решатель уравнения II рода u - L u = f, L = c_L * \mathcal K
  * (c_L = 1 для F2; c_L = -1/alpha для F1 Wazwaz, \mathcal K_eff = -(1/alpha)\mathcal K).
- * Правая часть f и её производная задаются явно (fEff/fEffDeriv) для переиспользования в F1.
+ * Правая часть f и её производные задаются явно ([RhsWithDerivatives]) для переиспользования в F1.
  *
  * Матрицы дискретной задачи:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
@@ -127,12 +128,11 @@ class FredholmSecondKindSolver(
     funcs: FunctionalFamily,
     val op: FredholmOperator,
     cL: Double,
-    fEff: (Double) -> Double,
-    fEffDeriv: (Double) -> Double,
-    fEffDeriv2: (Double) -> Double = { 0.0 },
+    rhs: RhsWithDerivatives,
     throwOnDivergence: Boolean = true,
+    ctx: NumericsContext = NumericsContext.default(),
 ) : SecondKindSolverCore<DoubleArray>(
-    basis, funcs, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence,
+    basis, funcs, cL, rhs, throwOnDivergence, ctx,
 ) {
     // Числовые параметры итерационных схем (COMBINED_NYSTROM_*, KULKARNI_QUASI_*)
     // живут в [solvers.core.SecondKindDefaults]: у Фредгольма и Вольтерры они
@@ -332,7 +332,7 @@ class FredholmSecondKindSolver(
      */
     fun nystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
-        val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) })
+        val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) }, ctx.backend)
         return SolutionFunc(eval = { t -> nystromEval(t, pts, bAgg, uHat) })
     }
 
@@ -343,7 +343,7 @@ class FredholmSecondKindSolver(
      */
     fun iteratedNystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
-        val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) })
+        val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) }, ctx.backend)
         val uNodes = DoubleArray(ng) { nystromEval(op.gNode[it], pts, bAgg, uHat) }
         return SolutionFunc(eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) })
     }
@@ -477,6 +477,7 @@ class FredholmFirstKindSolver(
     rhsDeriv2: (Double) -> Double = { 0.0 },
     val alpha: Double = DEFAULT_REGULARIZATION,
     val throwOnDivergence: Boolean = true,
+    val ctx: NumericsContext = NumericsContext.default(),
 ) {
     companion object {
         /**
@@ -498,12 +499,17 @@ class FredholmFirstKindSolver(
     private val cL = -1.0 / alpha
     private val fEff = { t: Double -> rhs(t) / alpha }
     private val fEffDeriv = { t: Double -> rhsDeriv(t) / alpha }
+    // Порядок построения лямбд сохранён дословно; объединение в один объект
+    // происходит ниже, на границе вызова внутреннего решателя.
     // Вторая производная правой части ОБЯЗАТЕЛЬНО пробрасывается во внутренний
     // решатель: без неё семейство xi^<0>, читающее f'', молча получало ноль вместо
     // истинного значения и строило неверную систему без какой-либо диагностики.
     private val fEffDeriv2 = { t: Double -> rhsDeriv2(t) / alpha }
-    private val inner =
-        FredholmSecondKindSolver(basis, funcs, op, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence)
+    private val inner = FredholmSecondKindSolver(
+        basis, funcs, op, cL,
+        RhsWithDerivatives(fEff, fEffDeriv, fEffDeriv2),
+        throwOnDivergence, ctx,
+    )
 
     /** Базовая коллокационная схема для регуляризованного уравнения. */
     fun base(): SolutionFunc = inner.base()

@@ -80,7 +80,8 @@ class VolterraCoverageTest {
         val funcs = DeBoorFixFunctionals(basis)
         val op = VolterraOperator(VolterraProblem.V2win.kernel, grid, quad)
         val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> VolterraProblem.V2win.rhsExact(t, op) }, { t -> VolterraProblem.V2win.rhsExactDeriv(t, op) })
+            solvers.core.RhsWithDerivatives(
+                { t -> VolterraProblem.V2win.rhsExact(t, op) }, { t -> VolterraProblem.V2win.rhsExactDeriv(t, op) }))
         val e = errorEh({ t -> VolterraProblem.V2win.exact(t) }, solver.kulkarni().eval, grid)
         assertTrue(finite(e) && e < 1e-2, "xi kulkarni E_h=$e")
     }
@@ -97,7 +98,8 @@ class VolterraCoverageTest {
         val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
         for (funcs in listOf(AveragingFunctionals(basis), ThreePointFunctionals(basis))) {
             val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
-                { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
+                solvers.core.RhsWithDerivatives(
+                    { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) }))
             val e = errorEh({ t -> VolterraProblem.V2.exact(t) }, solver.kulkarni().eval, grid)
             val eIt = errorEh({ t -> VolterraProblem.V2.exact(t) }, solver.iteratedKulkarni().eval, grid)
             assertTrue(finite(e) && e < 5e-1, "quasi kulkarni E_h=$e")
@@ -118,7 +120,8 @@ class VolterraCoverageTest {
         val op = VolterraOperator(VolterraProblem.V2.kernel, grid, quad)
         val funcs = AveragingFunctionals(basis)
         val solver = VolterraSecondKindSolver(basis, funcs, op, 1.0,
-            { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) })
+            solvers.core.RhsWithDerivatives(
+                { t -> VolterraProblem.V2.rhsExact(t, op) }, { t -> VolterraProblem.V2.rhsExactDeriv(t, op) }))
         val first = solver.kulkarni()
         val second = solver.kulkarni()
         val ts = doubleArrayOf(0.0, 0.13, 0.37, 0.5, 0.71, 0.99, 1.0)

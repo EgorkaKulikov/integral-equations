@@ -45,9 +45,11 @@ class CombinedNystromVolterraTest {
         val op = VolterraOperator(problem.kernel, grid, GaussLegendre(8))
         val solver = VolterraSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            solvers.core.RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
         )
         return solver to grid
     }

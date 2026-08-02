@@ -8,6 +8,7 @@ import numerics.functionals.AveragingFunctionals
 import numerics.functionals.ProjFunctionals
 import org.junit.jupiter.api.Tag
 import problems.fredholm.FredholmProblem
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
 import solvers.fredholm.KernelF
@@ -56,9 +57,11 @@ class DivergenceContractTest {
         val op = FredholmOperator(DIVERGENT_KERNEL, grid, GaussLegendre(8))
         return FredholmSecondKindSolver(
             basis, funcs, op, cL = 1.0,
-            fEff = { t -> t },
-            fEffDeriv = { 1.0 },
-            fEffDeriv2 = { 0.0 },
+            rhs = RhsWithDerivatives(
+                value = { t -> t },
+                deriv = { 1.0 },
+                deriv2 = { 0.0 },
+            ),
             throwOnDivergence = throwOnDivergence,
         )
     }
@@ -149,9 +152,11 @@ class DivergenceContractTest {
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
         )
         for ((name, solution) in listOf(
             "base" to solver.base(),

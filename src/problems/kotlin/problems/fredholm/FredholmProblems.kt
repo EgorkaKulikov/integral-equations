@@ -2,6 +2,7 @@ package problems.fredholm
 
 import numerics.MinimalSplineBasis
 import numerics.functionals.FunctionalFamily
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmFirstKindSolver
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
@@ -162,9 +163,11 @@ fun secondKindSolver(
     op: FredholmOperator,
 ): FredholmSecondKindSolver = FredholmSecondKindSolver(
     basis, funcs, op, cL = 1.0,
-    fEff = { t -> problem.rhsExact(t, op) },
-    fEffDeriv = { t -> problem.rhsExactDeriv(t, op) },
-    fEffDeriv2 = { t -> problem.rhsExactDeriv2(t, op) },
+    rhs = RhsWithDerivatives(
+        value = { t -> problem.rhsExact(t, op) },
+        deriv = { t -> problem.rhsExactDeriv(t, op) },
+        deriv2 = { t -> problem.rhsExactDeriv2(t, op) },
+    ),
 )
 
 /**

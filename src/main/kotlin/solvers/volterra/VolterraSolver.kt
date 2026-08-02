@@ -5,6 +5,7 @@ import kotlin.math.abs
 import numerics.*
 import numerics.functionals.*
 import solvers.core.ImageTriple
+import solvers.core.RhsWithDerivatives
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_MAX_ITERATIONS
 import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
 import solvers.core.SecondKindSolverCore
@@ -308,7 +309,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
  *
  * c_L = 1 для уравнения II рода; при редукции I->II рода (см. [VolterraFirstKindSolver])
  * тоже c_L = 1, но с другим (редуцированным) ядром и правой частью.
- * Правая часть f и её производные задаются явно (fEff/fEffDeriv/fEffDeriv2),
+ * Правая часть f и её производные задаются явно ([RhsWithDerivatives]),
  * чтобы решатель переиспользовался и для задач I рода.
  *
  * Матрицы дискретной задачи:
@@ -326,12 +327,11 @@ class VolterraSecondKindSolver(
     funcs: FunctionalFamily,
     val op: VolterraOperator,
     cL: Double,
-    fEff: (Double) -> Double,
-    fEffDeriv: (Double) -> Double,
-    fEffDeriv2: (Double) -> Double = { 0.0 },
+    rhs: RhsWithDerivatives,
     throwOnDivergence: Boolean = true,
+    ctx: NumericsContext = NumericsContext.default(),
 ) : SecondKindSolverCore<(Double) -> Double>(
-    basis, funcs, cL, fEff, fEffDeriv, fEffDeriv2, throwOnDivergence,
+    basis, funcs, cL, rhs, throwOnDivergence, ctx,
 ) {
     // Числовые параметры итерационных схем (KULKARNI_QUASI_*, COMBINED_NYSTROM_*)
     // живут в [solvers.core.SecondKindDefaults]: у Фредгольма и Вольтерры они
@@ -505,7 +505,7 @@ class VolterraSecondKindSolver(
             for (r in 0 until p) a[rho][r] = -cL * b[r] * op.kernel.k(sup.pts[rho], sup.pts[r])
             a[rho][rho] += 1.0
         }
-        return LinearAlgebra.solve(a, DoubleArray(p) { fEff(sup.pts[it]) })
+        return LinearAlgebra.solve(a, DoubleArray(p) { fEff(sup.pts[it]) }, ctx.backend)
     }
 
     /**
@@ -693,6 +693,7 @@ class VolterraFirstKindSolver(
     smoothPart: (Double) -> Double,
     smoothPartDeriv: (Double) -> Double,
     val throwOnDivergence: Boolean = true,
+    val ctx: NumericsContext = NumericsContext.default(),
 ) {
     private companion object {
         /**
@@ -918,8 +919,11 @@ class VolterraFirstKindSolver(
     private val gEffDeriv = { t: Double -> smoothPartDeriv(t) + deriv4(t, gEffResidual) }
 
     private val inner = VolterraSecondKindSolver(
-        basis, funcs, reducedOperator, cL = 1.0, fEff = gEff, fEffDeriv = gEffDeriv,
+        basis, funcs, reducedOperator, cL = 1.0,
+        // Вторая производная не задаётся: сохранён прежний дефолт `{ 0.0 }`.
+        rhs = RhsWithDerivatives(value = gEff, deriv = gEffDeriv),
         throwOnDivergence = throwOnDivergence,
+        ctx = ctx,
     )
 
     /** Базовая коллокационная схема для редуцированного уравнения. */

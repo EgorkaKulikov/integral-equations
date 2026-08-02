@@ -33,9 +33,11 @@ class CombinedNystromTest {
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            solvers.core.RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
         )
         return solver to grid
     }
@@ -141,8 +143,10 @@ class CombinedNystromTest {
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
+            solvers.core.RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+            ),
         )
         kotlin.test.assertFailsWith<IllegalArgumentException> { solver.combinedNystrom() }
     }

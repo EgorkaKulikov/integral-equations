@@ -7,6 +7,7 @@ import numerics.MinimalSplineBasis
 import numerics.functionals.ProjFunctionals
 import numerics.functionals.errorEh
 import problems.fredholm.FredholmProblem
+import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
 import java.io.File
@@ -141,9 +142,11 @@ object VerificationArtifacts {
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
-            { t -> problem.rhsExact(t, op) },
-            { t -> problem.rhsExactDeriv(t, op) },
-            { t -> problem.rhsExactDeriv2(t, op) },
+            RhsWithDerivatives(
+                { t -> problem.rhsExact(t, op) },
+                { t -> problem.rhsExactDeriv(t, op) },
+                { t -> problem.rhsExactDeriv2(t, op) },
+            ),
         )
         val m = solver.matrixM()
         val m2 = solver.matrixM2()
@@ -223,9 +226,11 @@ object VerificationArtifacts {
                         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
                         val solver = FredholmSecondKindSolver(
                             basis, funcs, op, 1.0,
-                            { t -> problem.rhsExact(t, op) },
-                            { t -> problem.rhsExactDeriv(t, op) },
-                            { t -> problem.rhsExactDeriv2(t, op) },
+                            RhsWithDerivatives(
+                                { t -> problem.rhsExact(t, op) },
+                                { t -> problem.rhsExactDeriv(t, op) },
+                                { t -> problem.rhsExactDeriv2(t, op) },
+                            ),
                         )
                         val exact = { t: Double -> problem.exact(t) }
                         val prefix = "${problem.name}\t${system.name}\t$n"
