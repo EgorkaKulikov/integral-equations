@@ -3,9 +3,10 @@
 # Разделение на job'ы повторяет разделение тестов по тегам в build.gradle.kts
 # и сделано по одной причине: обратная связь на каждый PR обязана быть быстрой.
 #   fast            — единицы секунд + покрытие, гоняется всегда;
-#   characterization — ГЕЙТ численной нейтральности (~90 с), гоняется всегда;
+#   characterization — ГЕЙТЫ численной нейтральности и порядка сходимости (~2.5 мин),
+#                      гоняется всегда;
 #   scipy           — внешняя сверка, требует venv с Python и потому вынесена отдельно;
-#   full            — прогон по крупным сеткам, ОТКЛЮЧЁН до этапа 1 спека (см. ниже).
+#   full            — прогон по крупным сеткам, ОТКЛЮЧЁН до этапа 8 спека (см. ниже).
 name: CI
 
 on:
@@ -72,11 +73,12 @@ jobs:
           if-no-files-found: warn
 
   characterization:
-    name: Гейт численной нейтральности
+    name: Гейты численной нейтральности и порядка сходимости
     runs-on: ubuntu-latest
-    # Замер: 4 теста, ~90 с. Запас многократный — на холодный старт JVM и
-    # непрогретый кэш Gradle на раннере.
-    timeout-minutes: 15
+    # Замеры на машине разработчика: `characterizationTest` 4 теста ~23 с,
+    # `extraCharacterizationTest` ~18 с, `convergenceOrderTest` 1.5-2 мин — итого ~2.5 мин.
+    # Запас многократный — на холодный старт JVM и непрогретый кэш Gradle на раннере.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -92,12 +94,24 @@ jobs:
       # Главная сеть безопасности всех последующих этапов рефакторинга: 1316
       # численных значений против src/test/resources/characterization/baseline-eh.tsv
       # с допуском 1e-9. Класс помечен тегом `slow` и потому не попадает в `fastTest`,
-      # а весь `slowTest` пока не завершается (этап 1 спека) — отдельная задача
-      # `characterizationTest` делает гейт достижимым уже сейчас.
+      # а весь `slowTest` сейчас КРАСНЫЙ по независимой причине (`PublishedValuesTest`,
+      # расхождение F1 с публикацией, этап 8 спека) — отдельная задача
+      # `characterizationTest` делает гейт достижимым.
       - name: Гейт E_h против эталона
         run: ./gradlew characterizationTest
 
-      - name: Отчёты гейта
+      # ГЕЙТ ПОРЯДКА СХОДИМОСТИ (задача 1 `TASK.md`). Полная матрица из 168 сочетаний
+      # на сетках до n = 64. Почему ЗДЕСЬ, а не в job `fast`: полная матрица стоит полторы-две
+      # минуты и ломала бы требование «обратная связь на PR — единицы секунд»; быстрый
+      # поднабор того же класса (тег `fast`, 32 сочетания) уже гоняется там в составе `fastTest`.
+      # Почему ОТДЕЛЬНЫМ ШАГОМ, а не через `check`: задача осознанно исключена из источников
+      # покрытия Kover (`disabledForTestTasks` в build.gradle.kts) — она дорожала `check` на
+      # полторы-две минуты, не добавляя ни одной покрытой строки. Без этого шага гейт
+      # не запускался бы НИ В ОДНОМ job, хотя README и TASK.md утверждают обратное.
+      - name: Гейт порядка сходимости (полная матрица)
+        run: ./gradlew convergenceOrderTest
+
+      - name: Отчёты гейтов
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -105,6 +119,8 @@ jobs:
           path: |
             build/reports/tests/characterizationTest/**
             build/test-results/characterizationTest/**
+            build/reports/tests/convergenceOrderTest/**
+            build/test-results/convergenceOrderTest/**
           if-no-files-found: warn
 
   scipy:
@@ -132,8 +148,9 @@ jobs:
           key: venv-verify-${{ runner.os }}-${{ hashFiles('tools/requirements-verify.txt') }}
 
       # Задача выставляет `scipy.required=true`, поэтому битое окружение
-      # (интерпретатор есть, SciPy нет) даёт FAILURE, а не 7 тихих SKIP при
+      # (интерпретатор есть, SciPy нет) даёт FAILURE, а не 9 тихих SKIP при
       # зелёной сборке. Именно этого job'а не должно быть достаточно «пройти молча».
+      # Фактический замер: 9 тестов, 60 проверок, NumPy 2.5.1 / SciPy 1.18.0.
       - name: Внешняя сверка со SciPy/NumPy
         run: ./gradlew scipyVerify
 
@@ -151,32 +168,39 @@ jobs:
 # ---------------------------------------------------------------------------
 # JOB `full` (медленный набор целиком) СОЗНАТЕЛЬНО ОТКЛЮЧЁН.
 #
-# Причина — не осторожность, а факт: `verification.PublishedValuesTest` не
-# завершается (прерван и на 600 с, и на 2400 с, шёл на 400+% CPU, сетки до n=64).
-# Значит `./gradlew slowTest` в CI гарантированно упирался бы в timeout, и job был
-# бы СИСТЕМАТИЧЕСКИ КРАСНЫМ по известной причине. Красный CI, который всегда
-# красный, перестаёт быть сигналом — это хуже отсутствующего job'а.
+# Причина — не время прогона, а КРАСНЫЙ РЕЗУЛЬТАТ. Замер `./gradlew slowTest --rerun`
+# на машине разработчика: 21 тест за 6 мин 23 с, из них `PublishedValuesTest` — 185 с.
+# То есть набор ЗАВЕРШАЕТСЯ и в timeout не упирается, НО падает 1 тест из 21:
+# `verification.PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` даёт
+# 4 расхождения с публикацией на ключах `F.F1.H.theta.*` (6.78 %, 4.23 %, 3.47 %,
+# 3.14 % при допуске 2 %) — уравнение ПЕРВОГО рода F1, регуляризация Вазваза,
+# `cond_2(I - M) ~ 1e10`; бэкенд `reference` воспроизводит публикацию, `multik` — нет.
+# Разбор отложен на этап 8 спека (п. 8.6). Значит job был бы СИСТЕМАТИЧЕСКИ
+# КРАСНЫМ по известной причине. Красный CI, который всегда красный, перестаёт
+# быть сигналом — это хуже отсутствующего job'а.
 #
 # Вариант `continue-on-error: true` отвергнут: он даёт ЗЕЛЁНУЮ галочку при
 # невыполненных проверках, то есть ровно тот ложный сигнал, от которого этот
 # этап и избавляется в остальных местах.
 #
-# Что уже покрыто без этого job'а: самый ценный из slow-классов —
-# `EhCharacterizationTest` — вынесен в job `characterization` выше и гоняется
-# на каждый push. Остальные slow-классы (`CrossSchemeConsistencyTest` 80 с,
-# `AnalyticSolutionTest` 36 с) выполнимы и войдут сюда вместе с включением job'а.
+# Что уже покрыто без этого job'а: самые ценные из slow-классов —
+# `EhCharacterizationTest` (job `characterization` выше, на каждый push) и
+# `ExtraCharacterizationTest` (задача `extraCharacterizationTest` в составе `check`,
+# то есть в job `fast` она не гоняется, но в `./gradlew build` входит). Остальные
+# slow-классы по тому же замеру: `CrossSchemeConsistencyTest` 21 с, `AnalyticSolutionTest`
+# 1 с, `ConvergenceOrderTest` 1.5-2 мин — все зелёные и войдут сюда с включением job'а.
 #
-# TODO(этап 1 спека, .tasks/code-review-remediation/SPEC.md): после ускорения
-# горячего пути (`LomegaNodes` → `by lazy`, кэш матрицы ядра в `matrixM`)
-# ВКЛЮЧИТЬ блок ниже, замерить `slowTest` и выставить `timeout-minutes` по факту.
-# Одновременно убрать "slowTest" из `disabledForTestTasks` в build.gradle.kts,
-# чтобы покрытие снова считалось по полному набору.
+# TODO(этап 8 спека, .tasks/code-review-remediation/SPEC.md, п. 8.6): после закрытия
+# расхождения F1 с публикацией ВКЛЮЧИТЬ блок ниже и выставить `timeout-minutes`
+# по факту на раннере (ориентир — втрое от локальных 6.5 мин). Одновременно убрать
+# "slowTest" из `disabledForTestTasks` в build.gradle.kts, чтобы покрытие снова
+# считалось по полному набору.
 #
 #  full:
 #    name: Медленный набор тестов
 #    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
 #    runs-on: ubuntu-latest
-#    timeout-minutes: 60   # ← пересмотреть по фактическому замеру после этапа 1
+#    timeout-minutes: 60   # ← пересмотреть по фактическому замеру на раннере
 #    steps:
 #      - uses: actions/checkout@v4
 #      - name: Установка JDK 21
