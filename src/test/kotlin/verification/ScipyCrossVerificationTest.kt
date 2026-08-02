@@ -34,7 +34,8 @@ import kotlin.test.fail
  *     L2  линейная алгебра, решение СЛАУ   <- scipy.linalg.solve
  *     L3  базис минимальных сплайнов       <- scipy.interpolate.BSpline
  *     L4/L5 образы операторов, правые части<- scipy.integrate.quad (QUADPACK)
- *     L6  итоговые решения                 <- независимый Nystrom на leggauss
+ *     L6a пригодность эталона           <- независимый Nystrom против точного решения
+ *     L6b решения ПРОЕКТА (E_h)         <- пороги и порядок сходимости против эталона
  *
  * Запуск. Штатный способ — `./gradlew scipyVerify`: эта задача готовит окружение
  * Python (`setupScipyVerification`), выгружает артефакты (`dumpVerificationArtifacts`)
@@ -68,7 +69,21 @@ class ScipyCrossVerificationTest {
         const val TIMEOUT_SECONDS = 300L
 
         /** Слои, наличие которых в отчёте обязательно. */
-        val REQUIRED_LAYERS = listOf("L1", "L2", "L3", "L4/L5", "L6")
+        val REQUIRED_LAYERS = listOf("L1", "L2", "L3", "L4/L5", "L6a", "L6b")
+
+        /** Задачи Фредгольма, выгружаемые дампером и сверяемые в слое L4/L5. */
+        val FREDHOLM_PROBLEMS = listOf("F2", "F2exp")
+
+        /** Задачи Вольтерры, выгружаемые дампером и сверяемые в слое L4/L5. */
+        val VOLTERRA_PROBLEMS = listOf("V2", "V2exp", "V2win")
+
+        /**
+         * Величины правой части, сверка которых обязательна для КАЖДОЙ задачи.
+         *
+         * `rhsDeriv`/`rhsDeriv2` перечислены ЯВНО: именно они раньше молча выпадали
+         * из сверки, и именно они проверяют формулы Лейбница для Вольтерры.
+         */
+        val RHS_QUANTITIES = listOf("rhs", "rhsDeriv", "rhsDeriv2")
 
         /**
          * Строгий режим: сверка запрошена явно, окружение обязано быть готово.
@@ -105,13 +120,21 @@ class ScipyCrossVerificationTest {
         assumeTrue(false, message)
     }
 
-    /** Одна проверка из отчёта скрипта. */
+    /**
+     * Одна проверка из отчёта скрипта.
+     *
+     * [compared] — число ФАКТИЧЕСКИ сравнённых точек, [skipped] — выпавших из
+     * сравнения. Без первого отчёт нельзя отличить «расхождений нет» от
+     * «сравнивать было нечего»: отклонение в обоих случаях равно нулю.
+     */
     private class Check(
         val layer: String,
         val name: String,
         val deviation: Double,
         val tolerance: Double,
         val ok: Boolean,
+        val compared: Int,
+        val skipped: Int,
     )
 
     /** Разобранный отчёт скрипта сверки. */
@@ -213,7 +236,8 @@ class ScipyCrossVerificationTest {
         val entry = Regex(
             "\\{\\s*\"layer\"\\s*:\\s*\"([^\"]*)\"\\s*,\\s*\"name\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*," +
                 "\\s*\"deviation\"\\s*:\\s*([-0-9.eE+]+)\\s*,\\s*\"tolerance\"\\s*:\\s*([-0-9.eE+]+)\\s*," +
-                "\\s*\"kind\"\\s*:\\s*\"[^\"]*\"\\s*,\\s*\"ok\"\\s*:\\s*(true|false)",
+                "\\s*\"kind\"\\s*:\\s*\"[^\"]*\"\\s*,\\s*\"ok\"\\s*:\\s*(true|false)\\s*," +
+                "\\s*\"compared\"\\s*:\\s*(\\d+)\\s*,\\s*\"skipped\"\\s*:\\s*(\\d+)",
             RegexOption.DOT_MATCHES_ALL,
         )
         for (match in entry.findAll(text)) {
@@ -223,6 +247,8 @@ class ScipyCrossVerificationTest {
                 deviation = match.groupValues[3].toDouble(),
                 tolerance = match.groupValues[4].toDouble(),
                 ok = match.groupValues[5] == "true",
+                compared = match.groupValues[6].toInt(),
+                skipped = match.groupValues[7].toInt(),
             )
         }
         return ScipyReport(
@@ -238,6 +264,27 @@ class ScipyCrossVerificationTest {
 
     /** Проверки одного слоя; пустой список означает, что слой не выполнялся. */
     private fun checksOf(layer: String): List<Check> = report().checks.filter { it.layer == layer }
+
+    /**
+     * Проверка обязана быть И СОШЕДШЕЙСЯ, И НЕПУСТОЙ.
+     *
+     * Второе требование не избыточно: скрипт исключает точки из сравнения в ряде
+     * случаев (индекс вне базиса, NaN эталона, точка на узле, вырожденный отрезок
+     * интегрирования), и если выпадут ВСЕ точки, отклонение останется нулём —
+     * внешне неотличимо от идеального согласия.
+     */
+    private fun assertMeaningful(check: Check) {
+        assertTrue(
+            check.compared > 0,
+            "${check.layer} ${check.name}: сравнено 0 точек (пропущено ${check.skipped}) — проверка " +
+                "не выполнена. Нулевое отклонение здесь означает отсутствие данных, а не согласие.",
+        )
+        assertTrue(
+            check.ok,
+            "${check.layer} ${check.name}: отклонение ${check.deviation} превышает допуск " +
+                "${check.tolerance} (сравнено точек ${check.compared}, пропущено ${check.skipped})",
+        )
+    }
 
     /**
      * Сводная проверка: расхождений со SciPy нет ни на одном слое.
@@ -261,7 +308,8 @@ class ScipyCrossVerificationTest {
                 for (check in failed) {
                     appendLine(
                         "  ${check.layer} / ${check.name}: отклонение ${check.deviation} " +
-                            "> допуска ${check.tolerance}",
+                            "> допуска ${check.tolerance} " +
+                            "(сравнено точек ${check.compared}, пропущено ${check.skipped})",
                     )
                 }
                 for (failure in result.failures) appendLine("  $failure")
@@ -296,6 +344,39 @@ class ScipyCrossVerificationTest {
     }
 
     /**
+     * НИ ОДНА проверка отчёта не смеет быть вырожденной (`compared == 0`).
+     *
+     * Зачем отдельным тестом. Наличие слоя в отчёте ещё не значит, что слой
+     * что-то сравнил: точки выпадают из сравнения молча (индекс вне базиса, NaN
+     * эталона, точка на узле, вырожденный отрезок интегрирования), а худшее
+     * отклонение инициализируется нулём. Без этого требования любая ошибка в
+     * условии пропуска превратила бы сверку в тихо зелёную пустышку.
+     */
+    @Test
+    fun everyCheckComparedAtLeastOnePoint() {
+        val result = report()
+        val empty = result.checks.filter { it.compared <= 0 }
+        assertTrue(
+            empty.isEmpty(),
+            buildString {
+                appendLine(
+                    "В отчёте есть проверки, не сравнившие НИ ОДНОЙ точки (${empty.size} шт.). " +
+                        "Такая проверка не доказывает ничего: отклонение равно нулю потому, " +
+                        "что сравнивать было нечего.",
+                )
+                for (check in empty) {
+                    appendLine("  ${check.layer} / ${check.name}: пропущено ${check.skipped} точек")
+                }
+            },
+        )
+        // Суммарное число сравнённых точек по каждому обязательному слою — положительно.
+        for (layer in REQUIRED_LAYERS) {
+            val total = result.checks.filter { it.layer == layer }.sumOf { it.compared }
+            assertTrue(total > 0, "Слой $layer не сравнил ни одной точки (суммарно compared = 0)")
+        }
+    }
+
+    /**
      * L1: узлы и веса квадратуры Гаусса–Лежандра совпадают с `numpy leggauss`.
      *
      * Проверка независима по существу: проект вычисляет узлы методом Ньютона по
@@ -305,12 +386,7 @@ class ScipyCrossVerificationTest {
     fun quadratureNodesMatchNumpy() {
         val checks = checksOf("L1")
         assertTrue(checks.size >= 2, "Ожидались проверки узлов и весов, получено ${checks.size}")
-        for (check in checks) {
-            assertTrue(
-                check.ok,
-                "L1 ${check.name}: отклонение ${check.deviation} превышает допуск ${check.tolerance}",
-            )
-        }
+        for (check in checks) assertMeaningful(check)
     }
 
     /** L2: решение собранной системы `(I - M) c = g` совпадает со `scipy.linalg.solve`. */
@@ -318,12 +394,7 @@ class ScipyCrossVerificationTest {
     fun linearAlgebraMatchesScipy() {
         val checks = checksOf("L2")
         assertTrue(checks.isNotEmpty(), "Слой L2 не выполнен")
-        for (check in checks) {
-            assertTrue(
-                check.ok,
-                "L2 ${check.name}: отклонение ${check.deviation} превышает допуск ${check.tolerance}",
-            )
-        }
+        for (check in checks) assertMeaningful(check)
     }
 
     /**
@@ -339,34 +410,52 @@ class ScipyCrossVerificationTest {
         val checks = checksOf("L3")
         // Четыре сетки по три величины (значение и две производные).
         assertTrue(checks.size >= 12, "Ожидалось не менее 12 проверок L3, получено ${checks.size}")
-        for (check in checks) {
-            assertTrue(
-                check.ok,
-                "L3 ${check.name}: отклонение ${check.deviation} превышает допуск ${check.tolerance}",
-            )
-        }
+        for (check in checks) assertMeaningful(check)
     }
 
     /**
-     * L4/L5: образы операторов и правые части совпадают с `scipy.integrate.quad`.
+     * L4/L5: образы операторов, правые части И ИХ ПРОИЗВОДНЫЕ совпадают с
+     * `scipy.integrate.quad`.
      *
-     * Это единственная численная проверка формул Лейбница для `(Vu)'` и `(Vu)''`,
-     * у которых, согласно docs/REFERENCES.md, отдельной публикации нет.
+     * Здесь единственная в проекте численная проверка формул Лейбница для `(Vu)'`
+     * и `(Vu)''` (отдельной публикации у `(Vu)''` нет, см. docs/REFERENCES.md, разд. 4):
+     * её выполняют проверки `V/<задача>/rhsDeriv` и `V/<задача>/rhsDeriv2`, где
+     * эталон собран из НЕЗАВИСИМО выведенных `K_t`, `K_tt`, `K(t,t)` и ПОЛНОЙ
+     * производной диагонали `d/dt K(t,t) = K_t(t,t) + K_s(t,t)` (вывод выписан в
+     * docstring `volterra_image_deriv` в `tools/verify_with_scipy.py`).
+     *
+     * Проверки требуются ПО ИМЕНАМ, а не просто «список непуст». Причина
+     * фактическая: до этого слой молча ронял `rhsDeriv`/`rhsDeriv2` в `continue` —
+     * выгруженные данные были, а сверки не было, и тест при этом был зелёным.
+     * Требование к именам делает повторение такого исчезновения невозможным.
      */
     @Test
     fun operatorImagesMatchQuadpack() {
         val checks = checksOf("L4/L5")
         assertTrue(checks.isNotEmpty(), "Слой L4/L5 не выполнен")
-        for (check in checks) {
-            assertTrue(
-                check.ok,
-                "L4/L5 ${check.name}: отклонение ${check.deviation} превышает допуск ${check.tolerance}",
-            )
+        val present = checks.map { it.name }.toSet()
+        val required = buildList {
+            for (problem in FREDHOLM_PROBLEMS) {
+                add("F/$problem/Ku")
+                for (quantity in RHS_QUANTITIES) add("F/$problem/$quantity")
+            }
+            for (problem in VOLTERRA_PROBLEMS) {
+                add("V/$problem/Vu")
+                for (quantity in RHS_QUANTITIES) add("V/$problem/$quantity")
+            }
         }
+        val missing = required.filterNot { it in present }
+        assertTrue(
+            missing.isEmpty(),
+            "В слое L4/L5 отсутствуют обязательные проверки: $missing. Выгруженные данные " +
+                "есть всегда, поэтому пропажа проверки означает, что скрипт снова роняет строки " +
+                "в `continue`. Фактически присутствуют: ${present.sorted()}",
+        )
+        for (check in checks) assertMeaningful(check)
     }
 
     /**
-     * L6: эталонный метод Nyström на квадратуре Гаусса–Лежандра воспроизводит
+     * L6a: эталонный метод Nyström на квадратуре Гаусса–Лежандра воспроизводит
      * точные решения модельных задач.
      *
      * Метод реализован средствами NumPy/SciPy без сплайнов и функционалов проекта
@@ -376,13 +465,41 @@ class ScipyCrossVerificationTest {
      */
     @Test
     fun referenceNystromReproducesExactSolutions() {
-        val checks = checksOf("L6")
-        assertTrue(checks.isNotEmpty(), "Слой L6 не выполнен")
-        for (check in checks) {
-            assertTrue(
-                check.ok,
-                "L6 ${check.name}: отклонение ${check.deviation} превышает допуск ${check.tolerance}",
-            )
-        }
+        val checks = checksOf("L6a")
+        assertTrue(checks.isNotEmpty(), "Слой L6a не выполнен")
+        for (check in checks) assertMeaningful(check)
+    }
+
+    /**
+     * L6b: итоговые погрешности `E_h` САМИХ СХЕМ ПРОЕКТА сверены с эталоном.
+     *
+     * Зачем отдельно от L6a. Слой L6a проверяет ТОЛЬКО оракул (эталон против
+     * точного решения) и не читает ни одного артефакта проекта — зелёный L6a не
+     * говорит о проекте ничего. Именно L6b читает `solution-errors.tsv` и сверяет
+     * выгруженные `E_h` с порогами и наблюдаемым порядком сходимости. До этого
+     * слоя выгруженный файл не читался НИГДЕ, и любая порча его значений проходила
+     * незамеченной.
+     *
+     * Требуется НЕ МЕНЕЕ 12 проверок порогов: две задачи на три порождающие
+     * системы на две схемы. Количество задано явно, чтобы исчезновение части
+     * сочетаний из выгрузки или из таблицы порогов не прошло тихо.
+     */
+    @Test
+    fun projectSolutionErrorsMatchReference() {
+        val checks = checksOf("L6b")
+        val limitChecks = checks.filter { it.name.contains("против порогов") }
+        assertTrue(
+            limitChecks.size >= 12,
+            "Ожидалось не менее 12 проверок порогов E_h (2 задачи x 3 системы x 2 схемы), " +
+                "получено ${limitChecks.size}. Фактические проверки L6b: ${checks.map { it.name }}",
+        )
+        // Проверки порядка сходимости обязаны присутствовать тоже: без них схема,
+        // застрявшая на точности грубой сетки, всё ещё прошла бы пороги.
+        assertTrue(
+            checks.any { it.name.contains("порядок сходимости") },
+            "В слое L6b нет ни одной проверки порядка сходимости: порогов без проверки " +
+                "убывания недостаточно",
+        )
+        for (check in checks) assertMeaningful(check)
     }
 }

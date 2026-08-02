@@ -36,6 +36,30 @@ object VerificationArtifacts {
     /** Сетка, на которой выгружаются базис и матрицы: достаточно мелкая и быстрая. */
     private const val DUMP_GRID_SIZE = 8
 
+    /**
+     * Границы отрезка выгрузки.
+     *
+     * Задаются ЯВНО и передаются в фабрики [Grid], а не оставляются на значения
+     * по умолчанию, потому что теперь выгружаются в `dump-meta.tsv` и задают
+     * пределы интегрирования во внешнем скрипте сверки. Раньше скрипт считал
+     * интегралы по зашитому [0,1], и согласие с дампером было СЛУЧАЙНЫМ совпадением
+     * со значениями по умолчанию.
+     */
+    private const val DUMP_A = 0.0
+    private const val DUMP_B = 1.0
+
+    /** Число узлов квадратуры Гаусса–Лежандра в интегральных операторах выгрузки. */
+    private const val DUMP_QUADRATURE_NODES = 8
+
+    /** Число точек выборки базиса; взаимно просто с числом узлов сетки. */
+    private const val DUMP_SPLINE_SAMPLES = 97
+
+    /** Число интервалов выборки для образов операторов (точек — на одну больше). */
+    private const val DUMP_OPERATOR_SAMPLES = 20
+
+    /** Максимальное m выгружаемой квадратуры Гаусса–Лежандра. */
+    private const val DUMP_GAUSS_MAX_M = 16
+
     /** Печать числа с полной точностью: сверка идёт на уровне 1e-15, округлять нельзя. */
     private fun Double.full(): String = "%.17g".format(this)
 
@@ -43,6 +67,7 @@ object VerificationArtifacts {
     fun dumpAll(dir: File = DEFAULT_DIR): List<File> {
         dir.mkdirs()
         return listOf(
+            dumpMeta(dir),
             dumpGaussLegendreNodes(dir),
             dumpSplineKnots(dir),
             dumpSplineValues(dir),
@@ -50,6 +75,32 @@ object VerificationArtifacts {
             dumpOperatorImages(dir),
             dumpSolutionErrors(dir),
         )
+    }
+
+    /**
+     * Метаданные выгрузки: всё, без чего внешний скрипт не знает, ЧТО ему сверять.
+     *
+     * Зачем нужны. Скрипт сверки считает интегралы `scipy.integrate.quad` по ОТРЕЗКУ,
+     * а границы отрезка задаёт именно дампер. Пока границы были зашиты в скрипте
+     * литералами `0.0, 1.0`, согласие держалось на том, что дампер не передаёт `a`/`b`
+     * и пользуется значениями по умолчанию. Смена отрезка здесь привела бы к МОЛЧАЛИВОЙ
+     * сверке с другими интегралами — то есть сверка перестала бы быть сверкой, оставаясь
+     * зелёной или краснея без обьяснения. Формат `ключ<TAB>значение` выбран расширяемым:
+     * добавление ключа не ломает разбор.
+     */
+    fun dumpMeta(dir: File): File {
+        val file = File(dir, "dump-meta.tsv")
+        file.printWriter().use { out ->
+            out.println("# key\tvalue")
+            out.println("a\t${DUMP_A.full()}")
+            out.println("b\t${DUMP_B.full()}")
+            out.println("dumpGridSize\t$DUMP_GRID_SIZE")
+            out.println("quadratureNodes\t$DUMP_QUADRATURE_NODES")
+            out.println("splineSampleCount\t$DUMP_SPLINE_SAMPLES")
+            out.println("operatorSampleCount\t$DUMP_OPERATOR_SAMPLES")
+            out.println("gaussLegendreMaxM\t$DUMP_GAUSS_MAX_M")
+        }
+        return file
     }
 
     /**
@@ -62,7 +113,7 @@ object VerificationArtifacts {
         val file = File(dir, "gauss-legendre.tsv")
         file.printWriter().use { out ->
             out.println("# m\tindex\tnode\tweight")
-            for (m in 1..16) {
+            for (m in 1..DUMP_GAUSS_MAX_M) {
                 val (nodes, weights) = GaussLegendre.gaussLegendreReference(m)
                 for (i in nodes.indices) {
                     out.println("$m\t$i\t${nodes[i].full()}\t${weights[i].full()}")
@@ -74,10 +125,10 @@ object VerificationArtifacts {
 
     /** Сетки, на которых сверяется базис: равномерная и три существенно неравномерные. */
     private fun dumpGrids(): Map<String, Grid> = linkedMapOf(
-        "uniform" to Grid.uniform(DUMP_GRID_SIZE),
-        "quasiUniform" to Grid.quasiUniform(DUMP_GRID_SIZE),
-        "geometric" to Grid.geometric(DUMP_GRID_SIZE),
-        "graded" to Grid.graded(DUMP_GRID_SIZE),
+        "uniform" to Grid.uniform(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B),
+        "quasiUniform" to Grid.quasiUniform(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B),
+        "geometric" to Grid.geometric(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B),
+        "graded" to Grid.graded(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B),
     )
 
     /**
@@ -108,7 +159,7 @@ object VerificationArtifacts {
     fun dumpSplineValues(dir: File): File {
         val file = File(dir, "spline-values.tsv")
         // Число точек взаимно просто с числом узлов: выборка не попадает на стыки.
-        val sampleCount = 97
+        val sampleCount = DUMP_SPLINE_SAMPLES
         file.printWriter().use { out ->
             out.println("# grid\tj\tt\tomega\tomegaDeriv\tomegaDeriv2")
             for ((name, grid) in dumpGrids()) {
@@ -136,10 +187,10 @@ object VerificationArtifacts {
      */
     fun dumpAssembledSystem(dir: File): File {
         val problem = FredholmProblem.F2
-        val grid = Grid.uniform(DUMP_GRID_SIZE)
+        val grid = Grid.uniform(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val funcs = ProjFunctionals(basis)
-        val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
+        val op = FredholmOperator(problem.kernel, grid, GaussLegendre(DUMP_QUADRATURE_NODES))
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,
             RhsWithDerivatives(
@@ -170,13 +221,21 @@ object VerificationArtifacts {
      * L4/L5. Образы интегральных операторов и правые части модельных задач.
      *
      * Эталон в SciPy — `scipy.integrate.quad` (адаптивный QUADPACK), независимый от
-     * составной квадратуры проекта. Это единственная численная проверка формул
-     * Лейбница для `(Vu)'` и `(Vu)''`, у которых отдельной публикации нет.
+     * составной квадратуры проекта.
+     *
+     * Выгружаются четыре величины на задачу: образ (`Ku`/`Vu`), правая часть `rhs`
+     * и её две производные `rhsDeriv`, `rhsDeriv2` — и все четыре сверяются. Именно
+     * проверки `V/<задача>/rhsDeriv` и `V/<задача>/rhsDeriv2` составляют единственную
+     * численную проверку формул Лейбница для `(Vu)'` и `(Vu)''`, у которых отдельной
+     * публикации нет: эталон собран из независимо выведенных `K_t`, `K_tt` и ПОЛНОЙ
+     * производной диагонали (см. `volterra_image_deriv` в `tools/verify_with_scipy.py`).
+     * Без них выгружаемые здесь производные не сверялись бы ни с чем.
      */
     fun dumpOperatorImages(dir: File): File {
-        val grid = Grid.uniform(DUMP_GRID_SIZE)
-        val quad = GaussLegendre(8)
-        val samplePoints = (0..20).map { grid.a + (grid.b - grid.a) * it / 20.0 }
+        val grid = Grid.uniform(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B)
+        val quad = GaussLegendre(DUMP_QUADRATURE_NODES)
+        val samplePoints = (0..DUMP_OPERATOR_SAMPLES)
+            .map { grid.a + (grid.b - grid.a) * it / DUMP_OPERATOR_SAMPLES.toDouble() }
 
         val file = File(dir, "operator-images.tsv")
         file.printWriter().use { out ->
@@ -220,10 +279,10 @@ object VerificationArtifacts {
             for (problem in listOf(FredholmProblem.F2, FredholmProblem.F2exp)) {
                 for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
                     for (n in listOf(8, 16, 32)) {
-                        val grid = Grid.uniform(n)
+                        val grid = Grid.uniform(n, a = DUMP_A, b = DUMP_B)
                         val basis = MinimalSplineBasis(system, grid)
                         val funcs = ProjFunctionals(basis)
-                        val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
+                        val op = FredholmOperator(problem.kernel, grid, GaussLegendre(DUMP_QUADRATURE_NODES))
                         val solver = FredholmSecondKindSolver(
                             basis, funcs, op, 1.0,
                             RhsWithDerivatives(
