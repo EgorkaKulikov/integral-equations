@@ -225,64 +225,60 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v4
 
-      # НАБОР РАЗБИТ ПО КЛАССАМ — НАМЕРЕННО, РАДИ ДИАГНОСТИКИ.
-      #
-      # Причина: логи job'а и артефакты через REST API требуют админ-прав на
-      # репозиторий (403), а аннотации check-run отдают лишь «Process completed with
-      # exit code 1» без имён тестов. При едином шаге на весь набор падение не
-      # локализуется вообще никак. Имя упавшего ШАГА видно в API всегда и без
-      # привилегий — то есть разбиение делает диагностируемость свойством конфигурации,
-      # а не привилегией владельца репозитория.
-      #
-      # `if: ${{ !cancelled() }}` на последующих шагах — чтобы падение ПЕРВОГО класса
-      # не скрывало состояние остальных: за один прогон видна вся картина, а не
-      # первый сбой. При отмене прогона шаги не запускаются (в отличие от `always()`).
-      #
-      # Цена: четыре запуска Gradle вместо одного (~+3 мин на старты демона);
-      # `timeout-minutes: 45` покрывает с запасом.
-      #
-      # Главное здесь и ни в одном другом job'е: `PublishedValuesTest` — сверка с
-      # ВНЕШНИМ источником правды, не замкнутая на собственные снимки проекта.
-      # Сверка с публикацией разбита ПОМЕТОДНО — второй шаг той же локализации.
-      # Поклассное разбиение уже показало, что из четырёх slow-классов падает
-      # только этот, причём УЖЕ ПОСЛЕ исключения F1 тегом `machine`. Осталось
-      # понять, какая именно группа величин не переносится, чтобы пометить ТОЧЕЧНО,
-      # а не выбрасывать из CI все 613 опубликованных значений целиком.
-      #
-      # ГЛАВНЫЙ ПОДОЗРЕВАЕМЫЙ — НЕ допуск 2 %, а ПОРОГ ОТСЕЧЕНИЯ `NOISE_FLOOR = 1e-13`:
-      # 37 ключей `.Eh` эталона лежат в окрестности 1e-15..1e-11, а KDoc самого
-      # порога признаёт, что число попавших под него величин «может немного плавать
-      # между JDK/бэкендами». Смена архитектуры может ЛИБО перевести ключ через
-      # порог (и тогда шум сравнивается с шумом — расхождение в сотни процентов),
-      # ЛИБО отсечь лишние ключи и уронить `checked` ниже `MIN_CHECKS` (запас там
-      # всего 10-11 ключей: F2 сверяет 260 при пороге 250, V2 — 341 при 330).
-      # Оба сценария различимы по тому, КАКОЙ шаг упадёт.
-      #
-      # Ресурсные методы (`publishedValuesResourceIsWellFormed`,
-      # `luPathDependentToleranceCoversExactlyTheDeclaredKeys`) здесь не повторяются:
-      # они помечены `fast` и уже гоняются в job `fast`.
-      - name: Публикация - Фредгольм II рода (260 значений)
-        run: ./gradlew slowTest --tests 'verification.PublishedValuesTest.fredholmSecondKindMatchesPublishedValues' -PmachineDependentGates=false
+      # 23 теста тега `slow` за ОДИН запуск. Главное здесь и ни в одном другом job'е:
+      # `PublishedValuesTest` — сверка с ВНЕШНИМ источником правды, не замкнутая
+      # на собственные снимки проекта.
+      - name: Медленный набор тестов
+        run: ./gradlew slowTest -PmachineDependentGates=false
 
-      - name: Публикация - Вольтерра II рода (341 значение)
+      # ДИАГНОСТИКА ПАДЕНИЙ ЧЕРЕЗ АННОТАЦИИ — НЕ КОСМЕТИКА, А ЕДИНСТВЕННЫЙ КАНАЛ.
+      #
+      # Проблема, ради которой этот шаг существует: логи job'а и артефакты через
+      # REST API требуют админ-прав на репозиторий (403 Must have admin rights),
+      # а штатные аннотации при падении содержат лишь «Process completed with exit
+      # code 1». То есть без этого шага причина падения видна ТОЛЬКО владельцу
+      # репозитория вручную через UI, а любому другому участнику и любому
+      # автоматическому средству — не видна вообще.
+      #
+      # Команда рабочего процесса `::error::` создаёт аннотацию, которая видна
+      # и в UI, и через API БЕЗ привилегий. Здесь она наполняется из JUnit-отчётов,
+      # то есть в аннотацию попадают ИМЕНА тестов и САМИ РАСХОЖДЕНИЯ (ключ,
+      # опубликованное и вычисленное значение, процент расхождения).
+      #
+      # Сторонние action’ы (dorny/test-reporter и пр.) сознательно НЕ использованы:
+      # задача решается встроенным механизмом, и гейт не должен зависеть от чужого
+      # репозитория и его прав на токен.
+      #
+      # `if: ${{ !cancelled() }}` — шаг обязан отработать ИМЕННО при падении
+      # предыдущего; при отмене прогона — нет (поэтому не `always()`).
+      # Сам шаг ВСЕГДА завершается успехом: он только СООБЩАЕТ о падениях,
+      # а вердикт job'а остаётся за шагом с тестами.
+      - name: Детали падений в аннотации (видны без админ-прав)
         if: ${{ !cancelled() }}
-        run: ./gradlew slowTest --tests 'verification.PublishedValuesTest.volterraSecondKindMatchesPublishedValues' -PmachineDependentGates=false
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
 
-      - name: Публикация - Вольтерра I рода (12 значений)
-        if: ${{ !cancelled() }}
-        run: ./gradlew slowTest --tests 'verification.PublishedValuesTest.volterraFirstKindMatchesPublishedValues' -PmachineDependentGates=false
+          def annotate(text: str) -> str:
+              # Экранирование по спецификации workflow-команд: без него многострочное
+              # сообщение оборвётся на первой же строке.
+              return (text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
 
-      - name: Перекрёстная согласованность схем (CrossSchemeConsistencyTest)
-        if: ${{ !cancelled() }}
-        run: ./gradlew slowTest --tests 'verification.CrossSchemeConsistencyTest' -PmachineDependentGates=false
-
-      - name: Аналитические решения (AnalyticSolutionTest)
-        if: ${{ !cancelled() }}
-        run: ./gradlew slowTest --tests 'verification.AnalyticSolutionTest' -PmachineDependentGates=false
-
-      - name: Порядки сходимости (ConvergenceOrderTest)
-        if: ${{ !cancelled() }}
-        run: ./gradlew slowTest --tests 'convergence.ConvergenceOrderTest' -PmachineDependentGates=false
+          found = 0
+          for path in sorted(glob.glob('build/test-results/**/*.xml', recursive=True)):
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError:
+                  continue
+              for case in root.iter('testcase'):
+                  for bad in list(case.iter('failure')) + list(case.iter('error')):
+                      found += 1
+                      body = bad.get('message') or bad.text or ''
+                      # Лимит аннотации — порядка 64 КБ; берём с запасом.
+                      print(f"::error title={case.get('classname')}.{case.get('name')}::"
+                            f"{annotate(body[:8000])}")
+          print(f"Найдено падений в отчётах: {found}")
+          PY
 
       - name: Отчёты тестов
         if: always()
