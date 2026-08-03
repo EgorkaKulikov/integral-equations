@@ -246,4 +246,58 @@ class EhCharacterizationTest {
         }
         reportIfAny(mismatches)
     }
+
+    /**
+     * РАСШИРЕННОЕ ПОКРЫТИЕ F1 — КОМПЕНСАЦИЯ широкого допуска сверки (этап 8.6).
+     *
+     * Зачем он есть. `verification.PublishedValuesTest` сверяет 42 величины F1 с
+     * публикацией с допуском 2 %, а шесть ключей из `table-f1.tex` — с 12 %
+     * (таблица снята на другом пути LU, см. KDoc там). ЗАМЕРЕНО (этап 8.6):
+     * при таких допусках огрубление квадратуры `GaussLegendre(8) → 6` и `→ 4`
+     * проходит сверку НЕЗАМЕЧЕННЫМ на всех 42 ключах. Причина не в допуске:
+     * у F1 `E_h ≈ 8e-5` определяется регуляризацией (`alpha = 1e-10`), а не
+     * дискретизацией — порядок сходимости ≈ 0, и сама величина к качеству
+     * квадратуры малочувствительна.
+     *
+     * Здесь же допуск [RELATIVE_TOLERANCE] = 1e-9, и та же мутация ловится
+     * немедленно. Состав покрытия — НАДМНОЖЕСТВО того, что сверяется с
+     * публикацией, поэтому ни одна ослабленная там величина не остаётся без
+     * строгого гейта. Перечисление сочетаний взято из [BaselineSnapshotTool.F1_COVERAGE]
+     * — одно и то же для гейта и для инструмента снятия, так что состав
+     * эталона и состав проверки разойтись не могут.
+     *
+     * О СХЕМЕ `sloan` ДЛЯ F1 — важное свойство, а НЕ дефект. Ключи `F1.*.sloan`
+     * ПРИВЯЗАНЫ К ПОРЯДКУ ОБХОДА УЗЛОВ в `FredholmOperator.applyNodes`. Причина:
+     * решение Слоана есть `fEff(t) + c_L·applyNodes(t, ·)`, где `c_L = -1/alpha = -1e10`,
+     * и ОБА слагаемых имеют порядок 1.38e10, а их сумма — порядок 2.7
+     * (измерено, этап 8.6). То есть происходит сокращение в 5·10^9 раз, и теряется
+     * около 9.7 из 16 значащих цифр. ЗАМЕР: три МАТЕМАТИЧЕСКИ ЭКВИВАЛЕНТНЫХ
+     * порядка суммирования той же формулы (прямой, обратный, компенсированный
+     * Кэхэна—Неймана) дают `E_h`, различающиеся на 4.3–39.9 % (медиана 28 %) —
+     * больше, чем расхождение с публикацией и больше, чем расхождение бэкендов.
+     *
+     * Практическое следствие для будущего рефакторинга: ЛЮБАЯ перестановка
+     * цикла суммирования в `applyNodes` (обратный обход, блочное или параллельное
+     * суммирование, компенсированное сложение) сломает этот гейт НА КЛЮЧАХ
+     * `F1.*.sloan`, НЕ ИЗМЕНИВ МАТЕМАТИКИ. Такое падение НЕ свидетельствует о
+     * ошибке в новом коде — но и не может быть просто заглушено: требуется
+     * осознанный пересъём этих ключей с записью в `docs/baseline-changes.md`.
+     */
+    @Test
+    fun firstKindExtendedFredholmMatchesBaseline() {
+        val mismatches = mutableListOf<String>()
+        val fp = problems.fredholm.FredholmProblem.F1
+        for ((system, familyName, n) in BaselineSnapshotTool.F1_COVERAGE) {
+            val grid = Grid.uniform(n)
+            val basis = MinimalSplineBasis(system, grid)
+            val funcs = family(familyName, basis)
+            val op = solvers.fredholm.FredholmOperator(fp.kernel, grid, GaussLegendre(8))
+            val solver = problems.fredholm.firstKindSolver(fp, basis, funcs, op)
+            val exact = { t: Double -> fp.exact(t) }
+            val prefix = "F1.${system.name}.$familyName.n$n"
+            check("$prefix.base", errorEh(exact, solver.base().eval, grid), mismatches)
+            check("$prefix.sloan", errorEh(exact, solver.sloan().eval, grid), mismatches)
+        }
+        reportIfAny(mismatches)
+    }
 }

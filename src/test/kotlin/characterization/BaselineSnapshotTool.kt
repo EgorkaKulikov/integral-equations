@@ -197,4 +197,68 @@ class BaselineSnapshotTool {
             emit("V1.B.theta.n$n.sloan", errorEh({ t -> vp.exact(t) }, vSolver.sloan().eval, grid))
         }
     }
+
+    /**
+     * РАСШИРЕННОЕ покрытие F1 (этап 8.6) — тот же набор сочетаний, что и
+     * в [F1_COVERAGE], см. KDoc там же. Отдельный тест-метод, а не дописка в
+     * [snapshotFirstKind]: тот содержит СУЩЕСТВУЮЩИЕ ключи эталона, и любая правка
+     * в нём рискует сдвинуть их; здесь же производятся ТОЛЬКО новые ключи.
+     */
+    @Test
+    fun snapshotFirstKindExtendedFredholm() {
+        val fp = problems.fredholm.FredholmProblem.F1
+        for ((system, familyName, n) in F1_COVERAGE) {
+            val grid = Grid.uniform(n)
+            val basis = MinimalSplineBasis(system, grid)
+            val funcs = family(familyName, basis)
+            val op = solvers.fredholm.FredholmOperator(fp.kernel, grid, GaussLegendre(8))
+            val solver = problems.fredholm.firstKindSolver(fp, basis, funcs, op)
+            val exact = { t: Double -> fp.exact(t) }
+            val prefix = "F1.${system.name}.$familyName.n$n"
+            emit("$prefix.base", errorEh(exact, solver.base().eval, grid))
+            emit("$prefix.sloan", errorEh(exact, solver.sloan().eval, grid))
+        }
+    }
+
+    companion object {
+        /**
+         * РАСШИРЕННОЕ ПОКРЫТИЕ F1 в характеризационном эталоне (этап 8.6).
+         *
+         * Состав: тройки (порождающая система, семейство, сетка) — все три системы
+         * B/H/T × семейства theta/xi1/xi2 × сетки 8/16/32, каждая тройка даёт два
+         * ключа (`base` и `sloan`) — 54 ключа.
+         *
+         * Почему ИМЕННО такой набор. Он НАДМНОЖЕСТВО 42 ключей F1, покрытых
+         * сверкой с публикацией (`verification/published-values.tsv`: 7 сочетаний
+         * B.xi1, B.xi2, H.theta, H.xi1, H.xi2, T.xi1, T.xi2 × 3 сетки × 2 схемы). То есть
+         * каждая величина, которая сверяется с публикацией с допуском 2 % или 12 %,
+         * ЗДЕСЬ же защищена допуском 1e-9. Именно это делает широкий допуск
+         * сверки безопасным: арифметическую невоспроизводимость между путями LU
+         * он прощает, а изменение самого вычисления ловит эта сеть.
+         *
+         * Семейство `xi0` в набор НЕ входит: в таблицах статьи для F1 его нет,
+         * а его функционалы читают `f''`, то есть требуют `K_tt`-квадратур и стоят
+         * заметно дороже при нулевом приросте сопоставимости с публикацией.
+         *
+         * НАЛОЖЕНИЕ С СТАРЫМИ КЛЮЧАМИ. Сочетания `B.theta` при n = 8 и 16
+         * уже снимаются [snapshotFirstKind] и потому ИСКЛЮЧЕНЫ из этого набора:
+         * иначе один и тот же ключ писался бы в снимок дважды и в эталоне появилась
+         * бы дублирующая строка. `B.theta.n32` — НОВЫЙ ключ и в набор входит.
+         *
+         * Список общий для инструмента снятия и для
+         * `EhCharacterizationTest.firstKindExtendedFredholmMatchesBaseline`: рассинхронизация
+         * состава между ними невозможна по построению.
+         */
+        val F1_COVERAGE: List<Triple<GeneratingSystem, String, Int>> = buildList {
+            for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
+                for (familyName in listOf("theta", "xi1", "xi2")) {
+                    for (n in listOf(8, 16, 32)) {
+                        // Исключаем то, что уже есть в эталоне под теми же ключами.
+                        if (system == GeneratingSystem.B && familyName == "theta" && n != 32) continue
+                        add(Triple(system, familyName, n))
+                    }
+                }
+            }
+        }
+    }
 }

@@ -75,8 +75,8 @@ jobs:
   characterization:
     name: Гейты численной нейтральности и порядка сходимости
     runs-on: ubuntu-latest
-    # Замеры на машине разработчика: `characterizationTest` 4 теста ~23 с,
-    # `extraCharacterizationTest` ~18 с, `convergenceOrderTest` 1.5-2 мин — итого ~2.5 мин.
+    # Замеры на машине разработчика: `characterizationTest` 5 тестов ~27 с,
+    # `extraCharacterizationTest` ~19 с, `convergenceOrderTest` 1.5-2 мин — итого ~2.5 мин.
     # Запас многократный — на холодный старт JVM и непрогретый кэш Gradle на раннере.
     timeout-minutes: 30
     steps:
@@ -91,12 +91,12 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v4
 
-      # Главная сеть безопасности всех последующих этапов рефакторинга: 1316
+      # Главная сеть безопасности всех этапов рефакторинга: 1366
       # численных значений против src/test/resources/characterization/baseline-eh.tsv
       # с допуском 1e-9. Класс помечен тегом `slow` и потому не попадает в `fastTest`,
-      # а весь `slowTest` сейчас КРАСНЫЙ по независимой причине (`PublishedValuesTest`,
-      # расхождение F1 с публикацией, этап 8 спека) — отдельная задача
-      # `characterizationTest` делает гейт достижимым.
+      # а весь `slowTest` идёт 8 мин 39 с (job `full` ниже). Отдельная задача
+      # `characterizationTest` даёт быстрый сигнал по главному гейту (~27 с) без
+      # ожидания всего slow-набора.
       - name: Гейт E_h против эталона
         run: ./gradlew characterizationTest
 
@@ -165,59 +165,68 @@ jobs:
             build/verification/scipy-report.json
           if-no-files-found: warn
 
-# ---------------------------------------------------------------------------
-# JOB `full` (медленный набор целиком) СОЗНАТЕЛЬНО ОТКЛЮЧЁН.
-#
-# Причина — не время прогона, а КРАСНЫЙ РЕЗУЛЬТАТ. Замер `./gradlew slowTest --rerun`
-# на машине разработчика: 21 тест за 6 мин 23 с, из них `PublishedValuesTest` — 185 с.
-# То есть набор ЗАВЕРШАЕТСЯ и в timeout не упирается, НО падает 1 тест из 21:
-# `verification.PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` даёт
-# 4 расхождения с публикацией на ключах `F.F1.H.theta.*` (6.78 %, 4.23 %, 3.47 %,
-# 3.14 % при допуске 2 %) — уравнение ПЕРВОГО рода F1, регуляризация Вазваза,
-# `cond_2(I - M) ~ 1e10`; бэкенд `reference` воспроизводит публикацию, `multik` — нет.
-# Разбор отложен на этап 8 спека (п. 8.6). Значит job был бы СИСТЕМАТИЧЕСКИ
-# КРАСНЫМ по известной причине. Красный CI, который всегда красный, перестаёт
-# быть сигналом — это хуже отсутствующего job'а.
-#
-# Вариант `continue-on-error: true` отвергнут: он даёт ЗЕЛЁНУЮ галочку при
-# невыполненных проверках, то есть ровно тот ложный сигнал, от которого этот
-# этап и избавляется в остальных местах.
-#
-# Что уже покрыто без этого job'а: самые ценные из slow-классов —
-# `EhCharacterizationTest` (job `characterization` выше, на каждый push) и
-# `ExtraCharacterizationTest` (задача `extraCharacterizationTest` в составе `check`,
-# то есть в job `fast` она не гоняется, но в `./gradlew build` входит). Остальные
-# slow-классы по тому же замеру: `CrossSchemeConsistencyTest` 21 с, `AnalyticSolutionTest`
-# 1 с, `ConvergenceOrderTest` 1.5-2 мин — все зелёные и войдут сюда с включением job'а.
-#
-# TODO(этап 8 спека, .tasks/code-review-remediation/SPEC.md, п. 8.6): после закрытия
-# расхождения F1 с публикацией ВКЛЮЧИТЬ блок ниже и выставить `timeout-minutes`
-# по факту на раннере (ориентир — втрое от локальных 6.5 мин). Одновременно убрать
-# "slowTest" из `disabledForTestTasks` в build.gradle.kts, чтобы покрытие снова
-# считалось по полному набору.
-#
-#  full:
-#    name: Медленный набор тестов
-#    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
-#    runs-on: ubuntu-latest
-#    timeout-minutes: 60   # ← пересмотреть по фактическому замеру на раннере
-#    steps:
-#      - uses: actions/checkout@v4
-#      - name: Установка JDK 21
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '21'
-#          distribution: 'temurin'
-#      - name: Настройка Gradle с кэшем
-#        uses: gradle/actions/setup-gradle@v4
-#      - name: Медленный набор тестов
-#        run: ./gradlew slowTest
-#      - name: Отчёты тестов
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: test-reports-full
-#          path: |
-#            build/reports/tests/slowTest/**
-#            build/test-results/slowTest/**
-#          if-no-files-found: warn
+  # -------------------------------------------------------------------------
+  # JOB `full` — МЕДЛЕННЫЙ НАБОР ЦЕЛИКОМ (включён этапом 8.6).
+  #
+  # ИСТОРИЯ. До этапа 8.6 job был ЗАКОММЕНТИРОВАН, и причина была не во времени
+  # прогона, а в КРАСНОМ РЕЗУЛЬТАТЕ: `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`
+  # давал 4 расхождения с публикацией на ключах `F.F1.H.theta.*` (до 6.78 % при
+  # допуске 2 %) — уравнение ПЕРВОГО рода F1 с регуляризацией Вазваза,
+  # `cond(I - M) ~ 1e10`. Пункт 8.6 закрыл это НЕ ослаблением общего допуска (он
+  # по-прежнему 2 %), а узким классом 8 % для шести ключей таблицы `table-f1.tex`,
+  # выведенным из измеренного разброса между реализациями LU на этих же ключах;
+  # компенсация — покрытие F1 в `baseline-eh.tsv` расширено с 4 до 54 ключей.
+  #
+  # ЗАМЕР ПОСЛЕ ЗАКРЫТИЯ (`./gradlew slowTest --rerun`, машина разработчика):
+  # 23 теста, 0 падений, 8 мин 39 с (из них `PublishedValuesTest` ~190 с,
+  # `ConvergenceOrderTest` 1.5-2 мин). `timeout-minutes: 45` — запас пятикратный на
+  # более медленный раннер, холодный старт JVM и непрогретый кэш Gradle.
+  #
+  # ПОЧЕМУ ОТДЕЛЬНЫМ JOB'ОМ, а не шагом в `fast`. Восемь минут в job'е `fast`
+  # сломали бы его назначение — обратная связь на PR за единицы секунд.
+  # Отдельный job идёт ПАРАЛЛЕЛЬНО остальным и ничего не замедляет.
+  #
+  # ПОЧЕМУ БЕЗ УСЛОВИЯ `if:` НА ВЕТКУ (было `github.ref == 'refs/heads/main'`).
+  # Смысл гейта — поймать регрессию ДО мержа, а не после. Гейт, работающий
+  # только на `main`, сообщает о поломке тогда, когда она уже в основной ветке.
+  # Сверка с публикацией и ограничитель ширины послабления живут именно здесь.
+  #
+  # Вариант `continue-on-error: true` ОТВЕРГНУТ и сейчас: он даёт ЗЕЛЁНУЮ галочку
+  # при невыполненных проверках — ровно тот ложный сигнал, от которого этап
+  # избавлялся в остальных местах.
+  #
+  # СООТНОШЕНИЕ С `check`: `slowTest` также входит в `check` (через источники Kover,
+  # см. build.gradle.kts), то есть исполняется и локально в `./gradlew build`.
+  # Этот job — гарантия на стороне CI, не зависящая от поведения плагина Kover.
+  full:
+    name: Медленный набор тестов (сверка с публикацией)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Настройка Gradle с кэшем
+        uses: gradle/actions/setup-gradle@v4
+
+      # 23 теста тега `slow`. Главное, что есть ТОЛЬКО здесь и ни в одном другом
+      # job'е: `verification.PublishedValuesTest` — единственная сверка с ВНЕШНИМ
+      # источником правды (708 опубликованных чисел), не замкнутая на собственные
+      # снимки проекта, плюс `CrossSchemeConsistencyTest` и `AnalyticSolutionTest`.
+      - name: Медленный набор тестов
+        run: ./gradlew slowTest
+
+      - name: Отчёты тестов
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-full
+          path: |
+            build/reports/tests/slowTest/**
+            build/test-results/slowTest/**
+          if-no-files-found: warn
