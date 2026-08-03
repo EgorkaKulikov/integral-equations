@@ -40,16 +40,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Установка JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Настройка Gradle с кэшем
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # ДИАГНОСТИКА БЭКЕНДА — обязательно ПЕРВЫМ прогоном тестов.
       #
@@ -74,7 +74,7 @@ jobs:
 
       - name: Отчёты тестов и покрытия
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-fast
           path: |
@@ -91,16 +91,16 @@ jobs:
     # Запас многократный — на холодный старт JVM и непрогретый кэш Gradle на раннере.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Установка JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Настройка Gradle с кэшем
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # ГЕЙТ E_h ПРОТИВ ЭТАЛОНА ЗДЕСЬ НЕ ГОНЯЕТСЯ — и это НЕ ослабление проверок.
       # `EhCharacterizationTest` сверяет 1366 значений с допуском 1e-9 против эталона,
@@ -124,7 +124,7 @@ jobs:
 
       - name: Отчёты гейтов
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-characterization
           path: |
@@ -139,21 +139,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Установка JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Настройка Gradle с кэшем
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # Ключ кэша — хеш файла требований: смена пиннинга обязана приводить к
       # переустановке окружения, иначе сверка шла бы на старых версиях SciPy.
       - name: Кэш окружения Python со SciPy
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .venv-verify
           key: venv-verify-${{ runner.os }}-${{ hashFiles('tools/requirements-verify.txt') }}
@@ -167,7 +167,7 @@ jobs:
 
       - name: Отчёты сверки
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-scipy
           path: |
@@ -214,16 +214,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Установка JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Настройка Gradle с кэшем
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # 23 теста тега `slow` за ОДИН запуск. Главное здесь и ни в одном другом job'е:
       # `PublishedValuesTest` — сверка с ВНЕШНИМ источником правды, не замкнутая
@@ -282,7 +282,7 @@ jobs:
 
       - name: Отчёты тестов
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports-full
           path: |
