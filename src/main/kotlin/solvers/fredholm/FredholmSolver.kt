@@ -263,6 +263,12 @@ class FredholmSecondKindSolver(
      * несуществен). Семейство xi (де Бура--Фикса) НЕ поддерживается: его функционалы
      * используют производную и не сводятся к линейной комбинации значений
      * (известное ограничение метода; обходится семейством xitilde).
+     *
+     * ИНДЕКСАЦИЯ ТОЧЕК — по паре (номер функционала, номер узла), см. [SupportPoints].
+     * Раньше индекс искался по ЗНАЧЕНИЮ точки в `HashMap<Double, Int>`, то есть держался
+     * на побитовом совпадении Double; работало это лишь потому, что и карта, и запрос
+     * читали один и тот же массив `vf.nodes`. Слияние совпадающих точек разных
+     * функционалов теперь идёт по ЯВНОМУ допуску `grid.breakpointInclusionEps`.
      */
     private fun nystromSupport(): Pair<DoubleArray, DoubleArray> {
         require(!funcs.usesDerivative) {
@@ -275,15 +281,12 @@ class FredholmSecondKindSolver(
         }
         // W_j = int_a^b omega_j (высокоточная составная квадратура по узлам сетки).
         val wJ = DoubleArray(dim) { k -> op.quad.integrate(grid.breakpoints) { s -> basis.omega(k - 2, s) } }
-        val ptSet = sortedSetOf<Double>()
-        for (vf in vfs) for (s in vf.nodes) ptSet.add(s)
-        val pts = ptSet.toDoubleArray()
-        val idx = HashMap<Double, Int>(pts.size * 2)
-        for (i in pts.indices) idx[pts[i]] = i
-        val bAgg = DoubleArray(pts.size)
+        val support = SupportPoints.byAscendingValue(vfs, grid.breakpointInclusionEps)
+        val pts = support.points
+        val bAgg = DoubleArray(support.size)
         for (k in 0 until dim) {
             val vf = vfs[k]; val w = wJ[k]
-            for (q in vf.nodes.indices) bAgg[idx.getValue(vf.nodes[q])] += vf.coeffs[q] * w
+            for (q in vf.nodes.indices) bAgg[support.indexOf(k, q)] += vf.coeffs[q] * w
         }
         return pts to bAgg
     }

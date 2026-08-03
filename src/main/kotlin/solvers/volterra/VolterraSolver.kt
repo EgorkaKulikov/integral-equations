@@ -443,15 +443,20 @@ class VolterraSecondKindSolver(
 
     /**
      * Опорные данные Nyström для Вольтерра: точки {eta_r} (по возрастанию t),
-     * ValueFunctional-ы семейства и карта точка->индекс. В отличие от Фредгольма
+     * ValueFunctional-ы семейства и индексация точек. В отличие от Фредгольма
      * веса W_j(t)=int_a^t omega_j зависят от t, поэтому агрегированные веса b_r(t)
      * вычисляются на лету (nystromB). Семейство xi (де Бура--Фикса) НЕ поддерживается:
      * его функционалы используют производную и не сводятся к линейной комбинации значений.
+     *
+     * ИНДЕКСАЦИЯ ТОЧЕК — по паре (номер функционала, номер узла), см. [SupportPoints].
+     * Раньше здесь жила `HashMap<Double, Int>` с поиском по ЗНАЧЕНИЮ точки, то есть
+     * требовавшая побитового совпадения Double и работавшая лишь потому, что и карта,
+     * и запрос читали один и тот же массив `vf.nodes`.
      */
     private class NystromSupport(
         val pts: DoubleArray,
         val vfs: Array<ValueFunctional>,
-        val idx: HashMap<Double, Int>,
+        val support: SupportPoints,
     )
 
     private fun nystromSupport(): NystromSupport {
@@ -463,12 +468,8 @@ class VolterraSecondKindSolver(
             funcs.chi(k - 2) as? ValueFunctional
                 ?: error("Nyström: функционал '${funcs.name}' (j=${k - 2}) не является ValueFunctional.")
         }
-        val ptSet = sortedSetOf<Double>()
-        for (vf in vfs) for (s in vf.nodes) ptSet.add(s)
-        val pts = ptSet.toDoubleArray()
-        val idx = HashMap<Double, Int>(pts.size * 2)
-        for (i in pts.indices) idx[pts[i]] = i
-        return NystromSupport(pts, vfs, idx)
+        val support = SupportPoints.byAscendingValue(vfs, grid.breakpointInclusionEps)
+        return NystromSupport(support.points, vfs, support)
     }
 
     /**
@@ -484,7 +485,7 @@ class VolterraSecondKindSolver(
             if (hi <= lo) continue             // носитель правее t -> W_j(t)=0 (причинность)
             val w = op.integrateRange(lo, hi) { s -> basis.omega(j, s) }
             val vf = sup.vfs[k]
-            for (q in vf.nodes.indices) b[sup.idx.getValue(vf.nodes[q])] += vf.coeffs[q] * w
+            for (q in vf.nodes.indices) b[sup.support.indexOf(k, q)] += vf.coeffs[q] * w
         }
         return b
     }

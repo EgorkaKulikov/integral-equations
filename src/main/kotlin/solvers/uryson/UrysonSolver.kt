@@ -10,6 +10,7 @@ import numerics.ParallelAssembly
 import numerics.SolutionFunc
 import numerics.functionals.ApproxFunctional
 import numerics.functionals.ProjFunctionals
+import numerics.functionals.SupportPoints
 import numerics.functionals.ValueFunctional
 import numerics.reportConvergence
 
@@ -298,23 +299,32 @@ class CollocationCore(
     private val refNodes: DoubleArray
     private val refWeights: DoubleArray
 
-    /** Различные опорные точки всех функционалов `theta_j` (узлы и середины интервалов). */
+    /**
+     * Различные опорные точки всех функционалов `theta_j` (узлы и середины интервалов)
+     * в ПОРЯДКЕ ПЕРВОГО ВХОЖДЕНИЯ при обходе `j = -2..n-1`.
+     *
+     * Порядок — часть контракта, а не деталь реализации: от него зависят нумерация
+     * строк `G` в [bMatrix] и порядок суммирования в [xiVector]. READ-ONLY по соглашению.
+     */
     val supportPts: DoubleArray
-    private val ptIdx: HashMap<Double, Int> = HashMap()
+
+    /**
+     * Индексация опорных точек по паре (номер функционала `j+2`, номер узла).
+     *
+     * Раньше здесь была `HashMap<Double, Int>` с поиском по ЗНАЧЕНИЮ точки: она требовала
+     * побитового совпадения Double и работала лишь потому, что и заполнение, и чтение
+     * шли из одного и того же массива `nodes` кэшированного функционала.
+     */
+    private val support: SupportPoints
 
     init {
         val (rn, rw) = quad.refNodesWeights()
         refNodes = rn
         refWeights = rw
-        val set = LinkedHashSet<Double>()
-        for (j in -2..n - 1) for (p in funcs.valueFunctional(j).nodes) set.add(p)
-        supportPts = set.toDoubleArray()
-        for (i in supportPts.indices) ptIdx[supportPts[i]] = i
+        val vfs = Array(n + 2) { funcs.valueFunctional(it - 2) }
+        support = SupportPoints.byFirstOccurrence(vfs, grid.breakpointInclusionEps)
+        supportPts = support.points
     }
-
-    /** Индекс опорной точки; отсутствие точки означает рассогласование построения. */
-    private fun indexOf(point: Double): Int = ptIdx[point]
-        ?: error("Опорная точка $point не найдена среди точек функционалов theta_j.")
 
     /** Значения `(U x_h)` в опорных точках (по одному интегралу на точку). */
     fun uAtSupport(c: DoubleArray): DoubleArray =
@@ -326,7 +336,7 @@ class CollocationCore(
         return DoubleArray(n + 2) { k ->
             val th = funcs.valueFunctional(k - 2)
             var s = 0.0
-            for (q in th.nodes.indices) s += th.coeffs[q] * uVals[indexOf(th.nodes[q])]
+            for (q in th.nodes.indices) s += th.coeffs[q] * uVals[support.indexOf(k, q)]
             s
         }
     }
@@ -372,7 +382,7 @@ class CollocationCore(
             val th = funcs.valueFunctional(k - 2)
             val row = DoubleArray(n + 2)
             for (q in th.nodes.indices) {
-                val gRow = g[indexOf(th.nodes[q])]
+                val gRow = g[support.indexOf(k, q)]
                 val coefficient = th.coeffs[q]
                 for (i in 0 until n + 2) row[i] += coefficient * gRow[i]
             }
@@ -653,25 +663,24 @@ class UrysonSecondKindSolver(
      * вырождается и метод не сдвигается с места.
      */
     fun nystrom(): SolutionFunc {
-        val pointSet = LinkedHashSet<Double>()
-        for (j in -2..n - 1) for (p in funcs.valueFunctional(j).nodes) pointSet.add(p)
-        val pts = pointSet.toDoubleArray()
+        // Порядок точек — ПОРЯДОК ПЕРВОГО ВХОЖДЕНИЯ при обходе `j = -2..n-1`: он задаёт
+        // нумерацию неизвестных, порядок строк якобиана и вектор начального приближения.
+        // Индексация — по паре (номер функционала, номер узла), а НЕ поиском по значению
+        // точки в `HashMap<Double, Int>`, который требовал побитового совпадения Double.
+        val vfs = Array(n + 2) { funcs.valueFunctional(it - 2) }
+        val support = SupportPoints.byFirstOccurrence(vfs, grid.breakpointInclusionEps)
+        val pts = support.points
         val wInt = space.wInt
-        val ptIndex = HashMap<Double, Int>()
-        for (i in pts.indices) ptIndex[pts[i]] = i
-
-        fun indexOf(point: Double): Int = ptIndex[point]
-            ?: error("Опорная точка $point не найдена среди точек функционалов theta_j.")
 
         /** Правая часть схемы Nyström по значениям решения в опорных точках. */
         fun evalAtVals(t: Double, xVals: DoubleArray): Double {
             var acc = 0.0
             for (j in -2..n - 1) {
-                val th = funcs.valueFunctional(j)
+                val th = vfs[j + 2]
                 var gtVal = 0.0
                 for (q in th.nodes.indices) {
                     val supportPoint = th.nodes[q]
-                    gtVal += th.coeffs[q] * op.kernel.k(t, supportPoint, xVals[indexOf(supportPoint)])
+                    gtVal += th.coeffs[q] * op.kernel.k(t, supportPoint, xVals[support.indexOf(j + 2, q)])
                 }
                 acc += gtVal * wInt[j + 2]
             }
