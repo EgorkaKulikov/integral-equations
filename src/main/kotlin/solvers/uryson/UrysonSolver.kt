@@ -964,10 +964,24 @@ class UrysonFirstKindSolver(
      * Если цель недостижима на всём пути (например, на слишком грубой сетке),
      * возвращается решение с наименьшей достигнутой невязкой — без «раскачки» решения.
      *
+     * НЕЯВНАЯ ЗАВИСИМОСТЬ ОЦЕНКИ ШУМА ОТ ТИПА [funcs]. Множитель
+     * `funcs.cChi()` в `barDelta` — коэффициент усиления возмущения входных
+     * данных функционалами `theta_j`. Он корректен ИМЕННО потому, что тип
+     * параметра [funcs] ограничен [ProjFunctionals] — семейством функционалов-
+     * ЗНАЧЕНИЙ (`usesDerivative` там есть константа `false`). Для них
+     * `cChi()` действительно равен норме (квази)проектора на возмущениях значений.
+     *
+     * Расширение типа [funcs] до общего `FunctionalFamily` ПОТРЕБУЕТ пересмотра
+     * этой оценки: для семейств с производными (xi) `cChi()` оценкой усиления
+     * шума не является и ведёт себя по `h` качественно противоположно (см. KDoc
+     * `numerics.functionals.FunctionalFamily.cChi` и `numerics.functionals.DerivFunctional`).
+     *
      * @param thetaFDelta вектор `theta_j(f^delta)` зашумлённых данных.
      * @param delta уровень шума в норме `L^2`; при `delta = 0` путь проходится целиком.
      */
     fun solveMorozov(thetaFDelta: DoubleArray, delta: Double): FirstKindSolution {
+        // Корректность cChi() как коэффициента усиления шума держится на том, что
+        // funcs — ProjFunctionals (функционалы-значения). См. KDoc метода.
         val barDelta = funcs.cChi() * Math.sqrt(grid.b - grid.a) * delta
         val target = tau * barDelta
         val initialGuess = funcs.projectorCoeffs({ 1.0 })
