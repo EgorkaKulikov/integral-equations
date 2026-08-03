@@ -258,8 +258,13 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
  *
  * @param coeffs найденные коэффициенты сплайна.
  * @param converged признак достижения сходимости.
- * @param iterations число выполненных итераций.
- * @param residual последняя достигнутая норма невязки.
+ * @param iterations число ФАКТИЧЕСКИ ВЫПОЛНЕННЫХ шагов Ньютона (см. [NewtonRun]);
+ *        `0` означает, что коэффициенты не изменились относительно начального
+ *        приближения.
+ * @param residual норма невязки. При `converged == true` — измеренная В ТОЙ ЖЕ
+ *        точке, что возвращается в [coeffs]. При исчерпании предела шагов — невязка
+ *        ПЕРЕД ПОСЛЕДНИМ шагом, а НЕ в возвращаемой точке: сознательное ограничение,
+ *        полное обоснование — в KDoc [runNewtonIterations] и [NewtonRun.residual].
  */
 class NewtonResult(
     val coeffs: DoubleArray,
@@ -498,33 +503,63 @@ class UrysonSecondKindSolver(
      */
     fun solveBase(): NewtonResult {
         val c = thetaF.copyOf()
-        var iter = 0
         val newtonTol = maxOf(tol, NEWTON_TOLERANCE_FLOOR)
-        var converged = false
-        var lastResidual = Double.NaN
-        var lastStep = Double.NaN
-        while (iter < maxIter) {
-            val xi = collocation.xiVector(c)
-            val f = DoubleArray(n + 2) { c[it] - thetaF[it] - lambda * xi[it] }
-            lastResidual = LinearAlgebra.normInf(f)
-            iter++
-            if (lastResidual < newtonTol) { converged = true; break }
-            val delta = newtonStep(c, DoubleArray(n + 2) { -f[it] })
-            for (i in c.indices) c[i] += delta[i]
-            lastStep = LinearAlgebra.normInf(delta)
-            if (lastStep < newtonTol) { converged = true; break }
-        }
+        val run = runNewtonIterations(
+            x = c,
+            maxSteps = maxIter,
+            tolerance = newtonTol,
+            residualAt = { current ->
+                val xi = collocation.xiVector(current)
+                DoubleArray(n + 2) { current[it] - thetaF[it] - lambda * xi[it] }
+            },
+            stepAt = analyticNewtonStep,
+        )
         reportConvergence(
-            converged = converged,
+            converged = run.converged,
             throwOnDivergence = throwOnDivergence,
             methodName = "Ньютон (базовая схема Урысона)",
-            iterations = iter,
+            iterations = run.performedSteps,
             maxIterations = maxIter,
-            residual = lastResidual,
+            residual = run.residual,
             tolerance = newtonTol,
+            hint = stallHint(run),
         )
-        return NewtonResult(c, converged, iter, lastResidual)
+        return NewtonResult(c, run.converged, run.performedSteps, run.residual)
     }
+
+    /**
+     * Пояснение для диагностики, если счёт прерван ЗАСТОЕМ ([NewtonRun.stalled]).
+     *
+     * Без него сообщение [reportConvergence] утверждало бы «не достигнуто за N
+     * итераций (предел M)», из чего читатель заключил бы, что поможет повышение
+     * предела. При застое это неверно: предел НЕ исчерпан, итерация просто
+     * перестала двигаться.
+     */
+    private fun stallHint(run: NewtonRun): String? =
+        if (!run.stalled) {
+            null
+        } else {
+            "Счёт прерван ЗАСТОЕМ на шаге ${run.performedSteps}: норма шага упала ниже допуска, " +
+                "а невязка осталась выше него. Предел итераций НЕ исчерпан, поэтому его повышение " +
+                "не поможет: итерация перестала двигаться (вероятные причины — плохая " +
+                "обусловленность якобиана либо его приближённость). Нужно менять сетку, " +
+                "начальное приближение или требуемую точность"
+        }
+
+    /**
+     * Шаг Ньютона с АНАЛИТИЧЕСКИМ якобианом `I - lambda B(c)`, ОБЩИЙ для базовой
+     * схемы и схемы Кулкарни.
+     *
+     * Совпадение ЗДЕСЬ НЕ СЛУЧАЙНОЕ и потому вынесено в одно место: у Кулкарни
+     * якобиан базовой схемы выступает ПРЕДОБУСЛАВЛИВАТЕЛЕМ квази-Ньютона ПО
+     * ПРЕДПИСАНИЮ ИСТОЧНИКА (см. KDoc [kulkarni]) — то есть тождественность шага
+     * является частью определения схемы, а не совпадением реализаций. Различие двух
+     * схем живёт ЦЕЛИКОМ в `residualAt` (`F(c)` против `c - G_K(c)`), и общий шаг
+     * это различие не размывает. Схема `nystrom` сюда НЕ входит: у неё другой,
+     * конечно-разностный якобиан и другое пространство неизвестных.
+     */
+    private val analyticNewtonStep: (DoubleArray, DoubleArray) -> DoubleArray =
+        { current, residual -> newtonStep(current, DoubleArray(n + 2) { -residual[it] }) }
 
     /** Шаг Ньютона с якобианом `J = I - lambda B(c)` (строки собираются независимо). */
     private fun newtonStep(c: DoubleArray, negativeResidual: DoubleArray): DoubleArray {
@@ -614,38 +649,34 @@ class UrysonSecondKindSolver(
         }
 
         val c = thetaF.copyOf()
-        var iter = 0
         val newtonTol = maxOf(tol, NEWTON_TOLERANCE_FLOOR)
-        var converged = false
-        var lastResidual = Double.NaN
-        var lastStep = Double.NaN
-        while (iter < kulkarniMaxIter) {
-            val g = gK(c)
-            val residual = DoubleArray(n + 2) { c[it] - g[it] }
-            lastResidual = LinearAlgebra.normInf(residual)
-            iter++
-            if (lastResidual < newtonTol) { converged = true; break }
-            val delta = newtonStep(c, DoubleArray(n + 2) { -residual[it] })
-            for (i in c.indices) c[i] += delta[i]
-            lastStep = LinearAlgebra.normInf(delta)
-            if (lastStep < newtonTol) { converged = true; break }
-        }
+        val run = runNewtonIterations(
+            x = c,
+            maxSteps = kulkarniMaxIter,
+            tolerance = newtonTol,
+            residualAt = { current ->
+                val g = gK(current)
+                DoubleArray(n + 2) { current[it] - g[it] }
+            },
+            stepAt = analyticNewtonStep,
+        )
         reportConvergence(
-            converged = converged,
+            converged = run.converged,
             throwOnDivergence = throwOnDivergence,
             methodName = "Квази-Ньютон (схема Кулкарни Урысона)",
-            iterations = iter,
+            iterations = run.performedSteps,
             maxIterations = kulkarniMaxIter,
-            residual = lastResidual,
+            residual = run.residual,
             tolerance = newtonTol,
+            hint = stallHint(run),
         )
         val (_, gAtSupport, gCoeffs) = projectedRhs(c)
         val eval = { t: Double -> basis.evalSpline(c, t) + (gAtSupport(t) - basis.evalSpline(gCoeffs, t)) }
         return SolutionFunc(
             eval = eval,
-            converged = converged,
-            iterations = iter,
-            residual = lastResidual,
+            converged = run.converged,
+            iterations = run.performedSteps,
+            residual = run.residual,
         )
     }
 
@@ -690,52 +721,68 @@ class UrysonSecondKindSolver(
         val p = pts.size
         val constantProjection = funcs.projectorCoeffs({ 1.0 })
         val x = DoubleArray(p) { basis.evalSpline(constantProjection, pts[it]) }
-        var iter = 0
         val newtonTol = maxOf(tol, FINITE_DIFFERENCE_TOLERANCE_FLOOR)
-        var converged = false
-        var lastResidual = Double.NaN
-        var lastStep = Double.NaN
-        while (iter < nystromMaxIter) {
-            val gx = DoubleArray(p) { evalAtVals(pts[it], x) }
-            val residual = DoubleArray(p) { x[it] - gx[it] }
-            lastResidual = LinearAlgebra.normInf(residual)
-            iter++
-            if (lastResidual < newtonTol) { converged = true; break }
-            val jacobian = LinearAlgebra.zeros(p, p)
-            for (col in 0 until p) {
-                val saved = x[col]
-                // Шаг масштабируется величиной переменной, чтобы сохранять точность
-                // и при больших, и при близких к нулю значениях.
-                val step = JACOBIAN_RELATIVE_STEP * (abs(saved) + 1.0)
-                x[col] = saved + step
-                val perturbed = DoubleArray(p) { evalAtVals(pts[it], x) }
-                x[col] = saved
-                // F(x) = x - G(x), поэтому dF[row]/dx[col] = [row == col] - dG[row]/dx[col].
-                for (row in 0 until p) {
-                    val identity = if (row == col) 1.0 else 0.0
-                    jacobian[row][col] = (identity * step - (perturbed[row] - gx[row])) / step
+        // Правая часть `G(x)` в ТЕКУЩЕЙ точке, передаваемая из расчёта невязки в расчёт
+        // шага. Не восстанавливается как `x - F(x)` СОЗНАТЕЛЬНО: такое обратное вычитание
+        // в IEEE 754 воспроизводит исходные биты лишь пока `x` и `G(x)` близки по порядку,
+        // а при большом разбросе порядков теряет точность — это молча сдвинуло бы числа.
+        // Повторное вычисление `G` тоже нежелательно: оно стоит `p` вычислений правой
+        // части. Передача опирается на ГАРАНТИЮ ПОРЯДКА ВЫЗОВОВ, явно записанную в KDoc
+        // параметра `stepAt` функции [runNewtonIterations]: `residualAt` всегда вызывается
+        // непосредственно перед `stepAt` в той же точке. `null` вместо мёртвого
+        // нулевого массива — не микрооптимизация, а КОНТРОЛЬ: если гарантию когда-нибудь
+        // нарушат, `error` ниже упадёт громко, тогда как нулевой массив молча дал бы
+        // неверный якобиан и правдоподобные числа.
+        var currentG: DoubleArray? = null
+        val run = runNewtonIterations(
+            x = x,
+            maxSteps = nystromMaxIter,
+            tolerance = newtonTol,
+            residualAt = { current ->
+                val gx = DoubleArray(p) { evalAtVals(pts[it], current) }
+                currentG = gx
+                DoubleArray(p) { current[it] - gx[it] }
+            },
+            stepAt = { current, residual ->
+                val gx = currentG
+                    ?: error(
+                        "Нарушена гарантия порядка вызовов runNewtonIterations: stepAt вызван без " +
+                            "предшествующего residualAt, поэтому G(x) в текущей точке неизвестна.",
+                    )
+                val jacobian = LinearAlgebra.zeros(p, p)
+                for (col in 0 until p) {
+                    val saved = current[col]
+                    // Шаг масштабируется величиной переменной, чтобы сохранять точность
+                    // и при больших, и при близких к нулю значениях.
+                    val step = JACOBIAN_RELATIVE_STEP * (abs(saved) + 1.0)
+                    current[col] = saved + step
+                    val perturbed = DoubleArray(p) { evalAtVals(pts[it], current) }
+                    current[col] = saved
+                    // F(x) = x - G(x), поэтому dF[row]/dx[col] = [row == col] - dG[row]/dx[col].
+                    for (row in 0 until p) {
+                        val identity = if (row == col) 1.0 else 0.0
+                        jacobian[row][col] = (identity * step - (perturbed[row] - gx[row])) / step
+                    }
                 }
-            }
-            val delta = LinearAlgebra.solve(jacobian, DoubleArray(p) { -residual[it] }, ctx.backend)
-            for (i in x.indices) x[i] += delta[i]
-            lastStep = LinearAlgebra.normInf(delta)
-            if (lastStep < newtonTol) { converged = true; break }
-        }
+                LinearAlgebra.solve(jacobian, DoubleArray(p) { -residual[it] }, ctx.backend)
+            },
+        )
         reportConvergence(
-            converged = converged,
+            converged = run.converged,
             throwOnDivergence = throwOnDivergence,
             methodName = "Ньютон (схема Nyström Урысона)",
-            iterations = iter,
+            iterations = run.performedSteps,
             maxIterations = nystromMaxIter,
-            residual = lastResidual,
+            residual = run.residual,
             tolerance = newtonTol,
+            hint = stallHint(run),
         )
         val xFinal = x
         return SolutionFunc(
             eval = { t -> evalAtVals(t, xFinal) },
-            converged = converged,
-            iterations = iter,
-            residual = lastResidual,
+            converged = run.converged,
+            iterations = run.performedSteps,
+            residual = run.residual,
         )
     }
 }
