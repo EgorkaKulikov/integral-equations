@@ -225,12 +225,38 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v4
 
-      # 23 теста тега `slow`. Главное, что есть ТОЛЬКО здесь и ни в одном другом
-      # job'е: `verification.PublishedValuesTest` — единственная сверка с ВНЕШНИМ
-      # источником правды (708 опубликованных чисел), не замкнутая на собственные
-      # снимки проекта, плюс `CrossSchemeConsistencyTest` и `AnalyticSolutionTest`.
-      - name: Медленный набор тестов
-        run: ./gradlew slowTest -PmachineDependentGates=false
+      # НАБОР РАЗБИТ ПО КЛАССАМ — НАМЕРЕННО, РАДИ ДИАГНОСТИКИ.
+      #
+      # Причина: логи job'а и артефакты через REST API требуют админ-прав на
+      # репозиторий (403), а аннотации check-run отдают лишь «Process completed with
+      # exit code 1» без имён тестов. При едином шаге на весь набор падение не
+      # локализуется вообще никак. Имя упавшего ШАГА видно в API всегда и без
+      # привилегий — то есть разбиение делает диагностируемость свойством конфигурации,
+      # а не привилегией владельца репозитория.
+      #
+      # `if: ${{ !cancelled() }}` на последующих шагах — чтобы падение ПЕРВОГО класса
+      # не скрывало состояние остальных: за один прогон видна вся картина, а не
+      # первый сбой. При отмене прогона шаги не запускаются (в отличие от `always()`).
+      #
+      # Цена: четыре запуска Gradle вместо одного (~+3 мин на старты демона);
+      # `timeout-minutes: 45` покрывает с запасом.
+      #
+      # Главное здесь и ни в одном другом job'е: `PublishedValuesTest` — сверка с
+      # ВНЕШНИМ источником правды, не замкнутая на собственные снимки проекта.
+      - name: Сверка с публикацией (PublishedValuesTest)
+        run: ./gradlew slowTest --tests 'verification.PublishedValuesTest' -PmachineDependentGates=false
+
+      - name: Перекрёстная согласованность схем (CrossSchemeConsistencyTest)
+        if: ${{ !cancelled() }}
+        run: ./gradlew slowTest --tests 'verification.CrossSchemeConsistencyTest' -PmachineDependentGates=false
+
+      - name: Аналитические решения (AnalyticSolutionTest)
+        if: ${{ !cancelled() }}
+        run: ./gradlew slowTest --tests 'verification.AnalyticSolutionTest' -PmachineDependentGates=false
+
+      - name: Порядки сходимости (ConvergenceOrderTest)
+        if: ${{ !cancelled() }}
+        run: ./gradlew slowTest --tests 'convergence.ConvergenceOrderTest' -PmachineDependentGates=false
 
       - name: Отчёты тестов
         if: always()
