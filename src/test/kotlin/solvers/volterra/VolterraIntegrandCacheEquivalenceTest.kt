@@ -65,7 +65,16 @@ class VolterraIntegrandCacheEquivalenceTest {
 
     private class GridCase(val name: String, val grid: Grid)
     private class KernelCase(val name: String, val kernel: KernelV)
-    private class IntegrandCase(val name: String, val u: (Double) -> Double)
+    /**
+     * @param definedOutsideSegment определена ли `u` ВНЕ отрезка сетки. С пункта 8.3
+     *   сплайновые `u` там НЕ определены и бросают `IllegalArgumentException` вместо
+     *   молчаливой экстраполяции; гладкая и полиномиальная — определены всюду.
+     */
+    private class IntegrandCase(
+        val name: String,
+        val definedOutsideSegment: Boolean,
+        val u: (Double) -> Double,
+    )
     private class TCase(val t: Double, val label: String)
 
     /**
@@ -106,10 +115,22 @@ class VolterraIntegrandCacheEquivalenceTest {
         // в накоплении суммы участвовали все биты мантиссы).
         val coeffs = DoubleArray(grid.n + 2) { i -> Math.sin(0.7 * i + 0.3) }
         return listOf(
-            IntegrandCase("гладкая sin(3s)*exp(-s/2)") { s -> Math.sin(3.0 * s) * Math.exp(-0.5 * s) },
-            IntegrandCase("полином 1-2s+3s^2-s^3") { s -> 1.0 - 2.0 * s + 3.0 * s * s - s * s * s },
-            IntegrandCase("сплайн evalSpline(c,s) (как в sloan)") { s -> basis.evalSpline(coeffs, s) },
-            IntegrandCase("базисный сплайн omega_1(s) (как в matrixM)") { s -> basis.omega(1, s) },
+            IntegrandCase("гладкая sin(3s)*exp(-s/2)", definedOutsideSegment = true) { s ->
+                Math.sin(3.0 * s) * Math.exp(-0.5 * s)
+            },
+            IntegrandCase("полином 1-2s+3s^2-s^3", definedOutsideSegment = true) { s ->
+                1.0 - 2.0 * s + 3.0 * s * s - s * s * s
+            },
+            // Сплайновые: определены ТОЛЬКО на отрезке сетки (пункт 8.3).
+            IntegrandCase("сплайн evalSpline(c,s) (как в sloan)", definedOutsideSegment = false) { s ->
+                basis.evalSpline(coeffs, s)
+            },
+            // `omega_j` — исключение: она отсекает точки вне носителя ДО обращения к
+            // `intervalOf`, а носитель лежит внутри отрезка, поэтому вне отрезка она
+            // штатно возвращает 0 и остаётся пригодной для побитовой сверки при t>b.
+            IntegrandCase("базисный сплайн omega_1(s) (как в matrixM)", definedOutsideSegment = true) { s ->
+                basis.omega(1, s)
+            },
         )
     }
 
@@ -422,6 +443,13 @@ class VolterraIntegrandCacheEquivalenceTest {
         for (d in listOf(1e-16, 1e-15, 1e-14, 1e-9, 1e-3, 0.25 * span, span)) {
             res.add(TCase(grid.b + d, "t=b+$d ЗА верхней границей (b=${grid.b})"))
         }
+        // На отрезках большого масштаба сдвиги 1e-16..1e-14 лежат НИЖЕ ulp самого `b`
+        // (ulp(1e3) ~ 2.3e-13), и `b + d` возвращает РОВНО `b` — точка оказывается не
+        // за границей, а на ней. Явный nextUp(b) гарантирует НАИМЕНЬШИЙ возможный
+        // выход за отрезок — ровно один ulp — на ЛЮБОМ масштабе. Именно он доказывает,
+        // что проверка принадлежности СТРОГАЯ (без допуска), а отбор ячеек у двух
+        // путей совпадает даже при минимальном возможном превышении.
+        res.add(TCase(Math.nextAfter(grid.b, Double.POSITIVE_INFINITY), "t=nextUp(b) (один ulp правее b)"))
         return res
     }
 
@@ -439,12 +467,29 @@ class VolterraIntegrandCacheEquivalenceTest {
             res.add(TCase(grid.b - d, "t=b-$d (b=${grid.b}, окрестность верхней границы)"))
         }
         res.add(TCase(Math.nextAfter(grid.b, Double.NEGATIVE_INFINITY), "t=nextDown(b) (ближайший double левее b)"))
-        res.add(TCase(Math.nextAfter(grid.b, Double.POSITIVE_INFINITY), "t=nextUp(b) (ближайший double правее b)"))
+        // nextUp(b) ПЕРЕЕХАЛ в [beyondUpperBoundTs]: это точка ВНЕ отрезка, а здесь
+        // собрана окрестность `b` СНИЗУ. Покрытие не потеряно: там она проверяется
+        // ОБОИМИ тестами — и побитовым сравнением, и сверкой отвержения.
         return res
     }
 
     /**
      * `t` ЗА верхней границей: ветка исчерпания массива узлов (`included == bp.size`).
+     *
+     * О ПУНКТЕ 8.3. Все четыре функции ОСТАЛИСЬ в сверке, включая `evalSpline`,
+     * которая вне отрезка теперь бросает: [compareAll] сверяет ИСХОД ЦЕЛИКОМ
+     * (число либо исключение), а не только числа. Требование стало СТРОЖЕ: пути
+     * обязаны совпадать и в том, вычисляется ли значение вообще.
+     *
+     * ФАКТ (замерен): при МАЛОМ превышении (`b + 1e-15` … `b + 1e-3` на `[0,1]`)
+     * `evalSpline` НЕ бросает, хотя `t > b`. Причина — квадратура Гаусса ОТКРЫТАЯ:
+     * её узлы лежат СТРОГО ВНУТРИ ячейки (максимальный узел 8-точечного правила —
+     * 0.96029 от полуширины), и при усечённой ячейке `[x_{n-1}, t]` самый правый
+     * узел пересекает `b` лишь когда превышение становится сравнимым с шириной
+     * ячейки (на uniform n=4 — примерно с `d > 5.1e-3`). Поэтому требовать отказа
+     * на всех `t > b` было бы НЕВЕРНО: проверка стоит на точке ВЫЧИСЛЕНИЯ `u`,
+     * а не на верхнем пределе интегрирования. Оба режима покрыты: см.
+     * [beyondUpperBound_bothPathsAgreeOnRejection], где зафиксированы ОБА исхода.
      */
     @Test fun beyondUpperBound_cachedMatchesUncachedBitwise() {
         val stats = compareAll("точки за верхней границей t>b") { grid -> beyondUpperBoundTs(grid) }
@@ -454,6 +499,75 @@ class VolterraIntegrandCacheEquivalenceTest {
             stats.comparisons == stats.withFullCells,
             "Вырожденный набор: при t>b полными обязаны быть все ячейки, но из сверок " +
                 "${stats.comparisons} таких лишь ${stats.withFullCells}",
+        )
+    }
+
+    /**
+     * При `t > b` и `u`, НЕ ОПРЕДЕЛЁННОЙ вне отрезка, оба пути ведут себя ОДИНАКОВО,
+     * и при достаточно большом превышении ОБА отвергают вызов (пункт 8.3).
+     *
+     * Заменяет прежнее сочетание «`evalSpline` × `t>b`» и ПРОВЕРЯЕТ БОЛЬШЕ, чем оно.
+     * Раньше сверялись ДВЕ ЭКСТРАПОЛЯЦИИ — числа, которые оба пути получали из
+     * неопределённого значения. Теперь требуется совпадение ИСХОДОВ — включая то,
+     * брошено ли исключение, — а это и есть исходный смысл теста: кэш не должен
+     * расходиться с оригиналом НИ НА КАКОМ входе, включая плохой.
+     *
+     * Почему это критично именно для кэша: он вычисляет `u` в узлах ПОЛНЫХ ячеек
+     * (все внутри отрезка), а за `b` выходят только узлы УСЕЧЁННОЙ ячейки
+     * `[x_{n-1}, t]`, которую оба пути считают одинаково, без кэша. Расхождение
+     * исходов означало бы, что множества точек вычисления `u` у путей разные.
+     *
+     * НЕВЫРОЖДЕННОСТЬ требуется ЯВНО в ОБЕ СТОРОНЫ: среди точек обязаны быть
+     * и такие, где вызов ОТВЕРГНУТ (большое превышение — узлы квадратуры ушли за `b`),
+     * и такие, где он ПРОШЁЛ (малое превышение — открытая квадратура осталась
+     * внутри). Без этого тест мог бы тихо выродиться в проверку одного режима.
+     */
+    @Test fun beyondUpperBound_bothPathsAgreeOnRejection() {
+        var checks = 0
+        var rejectedCount = 0
+        var acceptedCount = 0
+        for (g in gridCases()) {
+            // Только точки, ФАКТИЧЕСКИ оказавшиеся за `b`: на отрезках большого
+            // масштаба `b + 1e-16` даёт РОВНО `b` (сдвиг ниже ulp).
+            val ts = beyondUpperBoundTs(g.grid).filter { it.t > g.grid.b }
+            for (k in kernelCases) {
+                val op = VolterraOperator(k.kernel, g.grid, quad)
+                for (integrand in integrands(g.grid).filter { !it.definedOutsideSegment }) {
+                    val cache = op.integrandCache(integrand.u)
+                    for (tc in ts) {
+                        val uncached = runCatching { op.apply(tc.t, integrand.u) }
+                        val cached = runCatching { op.apply(tc.t, cache) }
+                        checks++
+                        if (uncached.isFailure) rejectedCount++ else acceptedCount++
+                        assertSameOutcome(uncached, cached) {
+                            outcomeReport("t>b с u, не определённой вне отрезка", g, k, integrand, tc, uncached, cached)
+                        }
+                        if (uncached.isFailure) {
+                            val e = uncached.exceptionOrNull()!!
+                            assertTrue(
+                                e is IllegalArgumentException,
+                                "Ожидалось IllegalArgumentException от проверки принадлежности отрезку, " +
+                                    "получено ${e::class}: $e",
+                            )
+                            assertTrue(
+                                (e.message ?: "").contains("MinimalSplineBasis"),
+                                "Сообщение обязано называть источник отказа: \"${e.message}\"",
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(checks > 0, "Вырожденный тест: ни одной сверки при t>b не выполнено")
+        assertTrue(
+            rejectedCount > 0,
+            "Вырожденный набор: ни один вызов не был отвергнут, то есть новая проверка " +
+                "принадлежности отрезку не сработала ни разу (сверок $checks)",
+        )
+        assertTrue(
+            acceptedCount > 0,
+            "Вырожденный набор: отвергнуты ВСЕ вызовы, то есть режим «малое превышение, " +
+                "открытая квадратура осталась внутри отрезка» не проверяется (сверок $checks)",
         )
     }
 
@@ -475,12 +589,18 @@ class VolterraIntegrandCacheEquivalenceTest {
     @Test fun nestedCache_cachedMatchesUncachedBitwise() {
         var comparisons = 0
         var nonZero = 0
+        var beyondComparisons = 0
         for (g in gridCases()) {
-            val ts = boundaryTs(g.grid) + interiorTs(g.grid) +
-                upperBoundNeighborhoodTs(g.grid) + beyondUpperBoundTs(g.grid)
+            val withinSegment = boundaryTs(g.grid) + interiorTs(g.grid) + upperBoundNeighborhoodTs(g.grid)
+            val beyond = beyondUpperBoundTs(g.grid)
             for (k in kernelCases) {
                 val op = VolterraOperator(k.kernel, g.grid, quad)
                 for (integrand in integrands(g.grid)) {
+                    // Точки t>b добавляются ТОЛЬКО для функций, определённых вне отрезка
+                    // (пункт 8.3): для `evalSpline` такой вызов — ошибка, и её согласованность
+                    // между путями проверяет [beyondUpperBound_bothPathsRejectUndefinedIntegrand].
+                    val ts = withinSegment + beyond
+                    beyondComparisons += beyond.size
                     // Оракул: оба уровня без кэша.
                     val innerUncached = { s: Double -> op.apply(s, integrand.u) }
                     // Проверяемое: оба уровня через кэш (как в matrixM2).
@@ -488,9 +608,17 @@ class VolterraIntegrandCacheEquivalenceTest {
                     val innerCached = { s: Double -> op.apply(s, innerCache) }
                     val outerCache = op.integrandCache(innerCached)
                     for (tc in ts) {
-                        val expected = op.apply(tc.t, innerUncached)
-                        val actual = op.apply(tc.t, outerCache)
+                        // Сверяется ИСХОД ЦЕЛИКОМ (пункт 8.3): при t>b и сплайновой `u`
+                        // оба уровня могут согласованно отвергнуть вызов — это тоже совпадение.
+                        val expectedRes = runCatching { op.apply(tc.t, innerUncached) }
+                        val actualRes = runCatching { op.apply(tc.t, outerCache) }
                         comparisons++
+                        assertSameOutcome(expectedRes, actualRes) {
+                            outcomeReport("вложенный кэш", g, k, integrand, tc, expectedRes, actualRes)
+                        }
+                        if (expectedRes.isFailure) continue
+                        val expected = expectedRes.getOrThrow()
+                        val actual = actualRes.getOrThrow()
                         if (expected != 0.0) nonZero++
                         assertBitwise(expected, actual) {
                             "Вложенный кэш (как в matrixM2: applyL(applyL(omega))) разошёлся с полностью " +
@@ -510,6 +638,14 @@ class VolterraIntegrandCacheEquivalenceTest {
         }
         assertTrue(comparisons > 0, "Вырожденный тест: ни одной сверки вложенного кэша")
         assertTrue(nonZero > 0, "Вырожденный тест: все значения вложенного кэша оказались нулевыми")
+        // Ветка t>b у ВЛОЖЕННОГО кэша обязана остаться пройденной: именно она
+        // была смыслом включения [beyondUpperBoundTs] в этот тест. Фильтр выше убрал
+        // лишь одну функцию из четырёх, и эта проверка не даёт ему тихо разрастись
+        // до полного исчезновения ветки.
+        assertTrue(
+            beyondComparisons > 0,
+            "Вырожденный набор: вложенный кэш ни разу не проверен на точках t>b",
+        )
     }
 
     /**
@@ -623,6 +759,60 @@ class VolterraIntegrandCacheEquivalenceTest {
         var comparisons = 0
         var withFullCells = 0
         var nonZero = 0
+
+        /** Сверки, где ОБА пути согласованно отвергли вызов (точка вне отрезка). */
+        var rejected = 0
+    }
+
+    /**
+     * Исходы двух путей совпадают КАЧЕСТВЕННО: либо оба вернули число, либо оба
+     * бросили исключение ОДНОГО ТИПА. Сами числа сверяются отдельно, побитово.
+     *
+     * Совпадение ТИПА исключения обязательно: иначе один путь мог бы падать по
+     * проверке принадлежности отрезку, а другой — по выходу за границу массива
+     * ячеек, и «оба упали» оказалось бы совпадением, а не эквивалентностью.
+     */
+    private fun assertSameOutcome(
+        expected: Result<Double>,
+        actual: Result<Double>,
+        message: () -> String,
+    ) {
+        if (expected.isFailure != actual.isFailure) fail(message())
+        if (expected.isFailure &&
+            expected.exceptionOrNull()!!::class != actual.exceptionOrNull()!!::class
+        ) {
+            fail(message())
+        }
+    }
+
+    /** Диагностика расхождения ИСХОДОВ (число против исключения). */
+    private fun outcomeReport(
+        scenario: String,
+        g: GridCase,
+        k: KernelCase,
+        integrand: IntegrandCase,
+        tc: TCase,
+        expected: Result<Double>,
+        actual: Result<Double>,
+    ): String = buildString {
+        append("Кэшированный и некэшированный пути дали РАЗНЫЕ ПО РОДУ исходы.\n")
+        append("  сценарий: ").append(scenario).append('\n')
+        append("  сетка:    ").append(g.name)
+            .append(" [a=").append(g.grid.a).append(", b=").append(g.grid.b).append("]\n")
+        append("  ядро:     ").append(k.name).append('\n')
+        append("  функция:  ").append(integrand.name)
+            .append(if (integrand.definedOutsideSegment) " (определена вне отрезка)" else " (ТОЛЬКО на отрезке)")
+            .append('\n')
+        append("  точка:    ").append(tsDescription(tc)).append('\n')
+        append("  без кэша: ")
+            .append(expected.fold({ fmt(it) }, { "исключение ${it::class.simpleName}: ${it.message}" }))
+            .append('\n')
+        append("  с кэшем:  ")
+            .append(actual.fold({ fmt(it) }, { "исключение ${it::class.simpleName}: ${it.message}" }))
+            .append('\n')
+        append("  Причина важна: кэш вычисляет u в узлах ПОЛНЫХ ячеек, а некэшированный\n")
+        append("  путь — в узлах ВСЕГО разбиения. Расхождение исходов означает, что эти\n")
+        append("  множества точек РАЗНЫЕ.\n")
     }
 
     /**
@@ -630,7 +820,10 @@ class VolterraIntegrandCacheEquivalenceTest {
      * побитово. Кэш создаётся ОДИН на сочетание (сетка, ядро, функция) и обслуживает все
      * `t` — ровно так он живёт в `VolterraSecondKindSolver.applyL`.
      */
-    private fun compareAll(scenario: String, tsOf: (Grid) -> List<TCase>): Stats {
+    private fun compareAll(
+        scenario: String,
+        tsOf: (Grid) -> List<TCase>,
+    ): Stats {
         val stats = Stats()
         for (g in gridCases()) {
             val ts = tsOf(g.grid)
@@ -639,10 +832,26 @@ class VolterraIntegrandCacheEquivalenceTest {
                 for (integrand in integrands(g.grid)) {
                     val cache = op.integrandCache(integrand.u)
                     for (tc in ts) {
-                        val expected = op.apply(tc.t, integrand.u)
-                        val actual = op.apply(tc.t, cache)
+                        // ОБА пути вызываются через runCatching, и сверяется ИСХОД ЦЕЛИКОМ.
+                        // С пункта 8.3 исходов два: число либо исключение (если узел квадратуры
+                        // ушёл за отрезок). Требование НЕ ОСЛАБЛЕНО, а РАСШИРЕНО: раньше
+                        // требовалось совпадение только чисел, теперь — ещё и совпадение самого
+                        // факта отказа. Именно здесь ловится главный риск кэша: он вычисляет `u`
+                        // в узлах ПОЛНЫХ ячеек, а некэшированный путь — в узлах ВСЕГО разбиения;
+                        // если бы множества точек разошлись, один путь бросил бы, а второй нет.
+                        val expectedRes = runCatching { op.apply(tc.t, integrand.u) }
+                        val actualRes = runCatching { op.apply(tc.t, cache) }
                         stats.comparisons++
                         if (fullCellCount(g.grid, tc.t) > 0) stats.withFullCells++
+                        assertSameOutcome(expectedRes, actualRes) {
+                            outcomeReport(scenario, g, k, integrand, tc, expectedRes, actualRes)
+                        }
+                        if (expectedRes.isFailure) {
+                            stats.rejected++
+                            continue
+                        }
+                        val expected = expectedRes.getOrThrow()
+                        val actual = actualRes.getOrThrow()
                         if (expected != 0.0) stats.nonZero++
                         assertBitwise(expected, actual) {
                             report(scenario, g, k, integrand, tc, expected, actual, op, cache)
