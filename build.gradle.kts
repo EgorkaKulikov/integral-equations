@@ -65,6 +65,29 @@ application {
     mainClass.set("demo.fredholm.FredholmDemoKt")
 }
 
+/*
+ * ПОЧЕМУ `run` НУЖДАЕТСЯ В ПРАВКЕ CLASSPATH.
+ *
+ * Плагин `application` строит задачу `run` по classpath исходного набора `main`,
+ * а точка входа `demo.fredholm.FredholmDemoKt` живёт в `src/demo` — отдельном наборе,
+ * созданном ради того, чтобы вычислительное ядро не зависело от демонстраций.
+ * В результате `./gradlew run` падал:
+ *
+ *     Error: Could not find or load main class demo.fredholm.FredholmDemoKt
+ *     Caused by: java.lang.ClassNotFoundException
+ *
+ * Почему не замечали: все демонстрации запускаются через собственные задачи
+ * (`runFredholm`, `runVolterra`, `runUryson`, `runBenchmark`), где classpath задан явно,
+ * а `run` в документации не упоминается. Но задача всё равно видна в `tasks`
+ * и в IDE, а первое, что пробует новый человек в Gradle-проекте, — именно `run`.
+ *
+ * Альтернатива «убрать плагин `application`» отвергнута: он даёт ещё и `distZip`/
+ * `installDist`, а сломанная задача починена одной строкой.
+ */
+tasks.named<JavaExec>("run") {
+    classpath = sourceSets["demo"].runtimeClasspath
+}
+
 // --- Внешняя сверка со SciPy: подготовка окружения ---------------------------
 // Сверка со SciPy/NumPy — единственная проверка, не замкнутая на код проекта.
 // Она вынесена в отдельную задачу `scipyVerify` (тег `scipy`), а не входит в
