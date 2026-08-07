@@ -266,13 +266,28 @@ abstract class SecondKindSolverCore<Operand>(
         return chiOf(rhsImage, rhsImageDeriv, rhsImageDeriv2)
     }
 
-    /** Базовая схема: (I - M) c = g. */
-    fun solveBaseCoeffs(): DoubleArray {
+    /**
+     * Матрица базовой схемы `I - M` — та самая, с которой решается СЛАУ
+     * в [solveBaseCoeffs].
+     *
+     * ЗАЧЕМ ПУБЛИЧНА. Без неё обусловленность собранной системы было нечем
+     * измерить извне: [matrixM] даёт только `M`, а решается система с `I - M`,
+     * и восстанавливать её на стороне вызывающего — значит дублировать формулу
+     * схемы и рисковать расхождением с ней.
+     *
+     * Порядок операций сохранён ДОСЛОВНО: выделение этого метода из
+     * [solveBaseCoeffs] — чистое перемещение строк, числа от него не меняются.
+     */
+    fun baseMatrix(): Array<DoubleArray> {
         val m = matrixM()
         val a = LinearAlgebra.zeros(dim, dim)
         for (r in 0 until dim) { for (c in 0 until dim) a[r][c] = -m[r][c]; a[r][r] += 1.0 }
-        return LinearAlgebra.solve(a, vectorG(), ctx.backend)
+        return a
     }
+
+    /** Базовая схема: (I - M) c = g. */
+    fun solveBaseCoeffs(): DoubleArray =
+        LinearAlgebra.solve(baseMatrix(), vectorG(), ctx.backend)
 
     fun base(): SolutionFunc {
         val c = solveBaseCoeffs()
