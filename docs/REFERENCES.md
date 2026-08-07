@@ -78,7 +78,7 @@
 | Элемент | Реализация | Источник | Статус |
 |---|---|---|---|
 | Регуляризация Фредгольма `(alpha I + K)u = f` | `solvers/fredholm`, `FredholmFirstKindSolver` | [Wazwaz 2011a] | Подтверждено |
-| Значение `alpha = 1e-10` | `FredholmFirstKindSolver` | [Kulikov, Makarov 2023] | Экспериментальный выбор авторов, не рекомендация [Wazwaz 2011a] |
+| Значение `alpha = 1e-10` | `FredholmFirstKindSolver` | [Kulikov, Makarov 2023] | Экспериментальный выбор авторов, не рекомендация [Wazwaz 2011a]. Попадает в диапазон потери точности: при `alpha = 1e-10` измерен разброс 15.19 % между алгебраически эквивалентными записями при `cond_inf ≈ 2.636149e+10`, при `1e-6`/`1e-8` расхождения нет (0.00 %/0.01 %) — см. [`ACCURACY.md`](ACCURACY.md) |
 | Сведение Вольтерры I → II рода дифференцированием | `solvers/volterra`, `VolterraFirstKindSolver` | [Wazwaz 2011b], [Brunner 2004] | Подтверждено для случая `m = 1`; требует `K(t,t) != 0` во всех точках деления, проверяется `safeDiagonal` |
 | Формулы `(Vu)'` и `(Vu)''` (правило Лейбница) | `VolterraOperator.applyDeriv`, `applyDeriv2` | [Makarov, Kulikov 2026] | `(Vu)'` подтверждено; `(Vu)''` — отдельной публикации нет. Обе формулы численно сверены с `scipy.integrate.quad` проверками слоя L4/L5 `V/V2/rhsDeriv`, `V/V2/rhsDeriv2`, `V/V2exp/rhsDeriv`, `V/V2exp/rhsDeriv2`, `V/V2win/rhsDeriv`, `V/V2win/rhsDeriv2` (эталон выведен независимо от кода: `volterra_image_deriv` в `tools/verify_with_scipy.py`, включая ПОЛНУЮ производную диагонали `d/dt K(t,t) = K_t(t,t) + K_s(t,t)`); фактическое отклонение — машинная точность, до 6.7e-16 при допуске 1e-10 |
 

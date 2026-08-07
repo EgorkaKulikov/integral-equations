@@ -435,6 +435,7 @@ reference) по отдельным операциям; эти числа в до
 | [`docs/REFERENCES.md`](docs/REFERENCES.md) | 24 публикации с DOI и статусом каждого метода |
 | [`docs/TESTING.md`](docs/TESTING.md) | задачи Gradle, состав `check`, категории тестов, CI |
 | [`docs/HPC.md`](docs/HPC.md) | нативный BLAS, параллельная сборка матриц, подключаемые бэкенды |
+| [`docs/ACCURACY.md`](docs/ACCURACY.md) | **границы достижимой точности**: обратная против прямой ошибки, граница по `alpha` для F1 |
 | [`docs/baseline-changes.md`](docs/baseline-changes.md) | **протокол правки численных эталонов** и история их изменений |
 
 Основные источники методов: минимальные сплайны — Демьянович (1994) и Makarov (2012);
