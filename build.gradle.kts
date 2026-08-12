@@ -344,6 +344,7 @@ tasks.test {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
         excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
+        excludeTestsMatching("verification.Sec4VerificationTool")
     }
     // Путь к интерпретатору передаётся тесту явно: искать его самостоятельно тест
     // не должен — иначе на разных машинах он находил бы разные интерпретаторы.
@@ -451,6 +452,7 @@ tasks.register<Test>("fastTest") {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
         excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
+        excludeTestsMatching("verification.Sec4VerificationTool")
     }
     systemProperty("numerics.backend", numericsBackend)
 }
@@ -472,6 +474,7 @@ tasks.register<Test>("slowTest") {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
         excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
+        excludeTestsMatching("verification.Sec4VerificationTool")
     }
     systemProperty("numerics.backend", numericsBackend)
 }
@@ -600,6 +603,7 @@ tasks.register<Test>("scipyVerify") {
         excludeTestsMatching("characterization.BaselineSnapshotTool")
         excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
         excludeTestsMatching("verification.VerificationArtifactDumpTool")
+        excludeTestsMatching("verification.Sec4VerificationTool")
     }
     // Окружение Python и артефакты сверки — обязательные предпосылки именно этой
     // задачи: тест читает выгрузку из build/verification/.
@@ -648,6 +652,25 @@ tasks.register<Test>("captureExtraBaseline") {
 // НЕЗАВИСИМОЙ внешней сверки скриптом tools/verify_with_scipy.py.
 // Это не проверка, а генератор данных, поэтому в обычный `test` не входит;
 // её запускает задача `scipyVerify`, которой выгрузка нужна по сути.
+// Генерация таблиц §5--6 статьи о минимальных сплайнах (модельные задачи M1--M5,
+// частотно-настроенные порождающие системы) в build/sec4/. Как и снимки эталонов,
+// это ГЕНЕРАТОР ЧИСЕЛ, а не проверка: критериев PASS/FAIL у него нет, поэтому в
+// `test`, `fastTest`, `slowTest` и `scipyVerify` он не входит.
+// Число узлов составной квадратуры задаётся `-Dsec4.quad` (по умолчанию 8);
+// удвоение узлов служит контролем устойчивости приводимых в статье величин.
+tasks.register<Test>("sec4Tables") {
+    group = "verification"
+    description = "Сгенерировать таблицы §5--6 статьи в build/sec4/ (-Dsec4.quad=8|16)"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("verification.Sec4VerificationTool") }
+    outputs.upToDateWhen { false }
+    // Числа сравниваются между прогонами, поэтому бэкенд фиксируется, как и у снимков.
+    systemProperty("numerics.backend", numericsBackend)
+    providers.systemProperty("sec4.quad").orNull?.let { systemProperty("sec4.quad", it) }
+}
+
 tasks.register<Test>("dumpVerificationArtifacts") {
     group = "verification"
     description = "Выгрузить внутренние артефакты в build/verification/ для сверки со SciPy"
