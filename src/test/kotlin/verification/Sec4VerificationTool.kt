@@ -253,6 +253,8 @@ class Sec4VerificationTool {
                     "iterKulkarni" -> solver.iteratedKulkarni().eval
                     "nystrom" -> solver.nystrom().eval
                     "iterNystrom" -> solver.iteratedNystrom().eval
+                    "combinedNystrom" -> solver.combinedNystrom().eval
+                    "iterCombinedNystrom" -> solver.iteratedCombinedNystrom().eval
                     else -> error("схема $s")
                 }, g)
             }
@@ -297,6 +299,8 @@ class Sec4VerificationTool {
                     "iterKulkarni" -> solver.iteratedKulkarni().eval
                     "nystrom" -> solver.nystrom().eval
                     "iterNystrom" -> solver.iteratedNystrom().eval
+                    "combinedNystrom" -> solver.combinedNystrom().eval
+                    "iterCombinedNystrom" -> solver.iteratedCombinedNystrom().eval
                     else -> error("схема $s")
                 }, g)
             }
@@ -565,6 +569,7 @@ class Sec4VerificationTool {
 
     private val four = listOf("base", "sloan", "kulkarni", "iterKulkarni")
     private val ny = listOf("nystrom", "iterNystrom")
+    private val nyc = listOf("combinedNystrom", "iterCombinedNystrom")
 
     @Test
     fun sec4HealthChecks() {
@@ -584,6 +589,8 @@ class Sec4VerificationTool {
             listOf("B" to "theta", "B" to "xi1", "H" to "xi1"), four)
         fredTable("tab:h4-m1", m1, "uniform", listOf(8, 16, 32, 64),
             listOf("B" to "theta", "B" to "xit1", "H" to "xit1"), ny)
+        fredTable("tab:h4c-m1", m1, "uniform", listOf(4, 8, 16, 32),
+            listOf("B" to "theta", "B" to "xit1", "H" to "xit1"), nyc)
         dump("m1")
     }
 
@@ -606,6 +613,10 @@ class Sec4VerificationTool {
             listOf("B" to "theta", "T30.0" to "xi1", "T30.0" to "theta"), four)
         voltTable("tab:h4-m3", m3, "uniform", listOf(16, 32, 64, 128),
             listOf("B" to "theta", "B" to "xit1", "T30.0" to "xit1"), ny)
+        voltTable("tab:h4c-m3", m3, "uniform", listOf(16, 32, 64, 128),
+            listOf("B" to "theta", "B" to "xit1", "T30.0" to "xit1"), nyc)
+        voltTable("tab:nystrom-theta-c", m3, "uniform", listOf(16, 32, 64),
+            listOf("B" to "theta", "T30.0" to "theta", "H" to "theta"), nyc)
         dump("m3")
     }
 
