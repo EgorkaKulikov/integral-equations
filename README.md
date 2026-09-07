@@ -1,6 +1,6 @@
 <div align="center">
 
-# Numerical-Algorithms
+# integral-equations
 
 **Численное решение линейных и нелинейных интегральных уравнений
 методом сплайн-коллокации на минимальных сплайнах**
@@ -35,15 +35,36 @@
 сверяются с внешними источниками — SciPy/NumPy, аналитически точными решениями и
 опубликованными таблицами.
 
+Проект — прикладной слой поверх двух библиотек, подключаемых как Maven-артефакты:
+
+| Библиотека | Артефакт | Что даёт |
+|---|---|---|
+| [`numerical-core`](https://github.com/EgorkaKulikov/numerical-core) | `io.github.egorkakulikov:numerical-core` | квадратура Гаусса–Лежандра, плотная линейная алгебра с бэкендами, обусловленность, `NumericsContext`, параллельная сборка |
+| [`minimal-splines`](https://github.com/EgorkaKulikov/minimal-splines) | `io.github.egorkakulikov:minimal-splines` | сетки с кратными узлами, порождающие системы, базис минимальных сплайнов, аппроксимационные функционалы, `errorEh` |
+
+Направление зависимостей строго одностороннее: `numerical-core ← minimal-splines ← integral-equations`.
+Здесь **нет** кода сплайнов и общей численной инфраструктуры — только решатели,
+модельные задачи, демонстрации и сквозная численная верификация. Адреса репозиториев
+библиотек предварительные.
+
 ## 🚀 Быстрый старт
 
-Нужен только **JDK 21+**; Gradle подтягивается wrapper'ом.
+Нужен только **JDK 21+**; Gradle подтягивается wrapper'ом. Библиотеки берутся из
+`mavenLocal()` (или из репозитория, заданного свойством `numericsRepositoryUrl`), поэтому
+до первой сборки их нужно опубликовать локально:
 
 ```bash
-git clone <адрес репозитория>
-cd Numerical-Algorithms
+git clone <адрес numerical-core>   && (cd numerical-core   && ./gradlew publishToMavenLocal)
+git clone <адрес minimal-splines>  && (cd minimal-splines  && ./gradlew publishToMavenLocal)
+git clone <адрес integral-equations>
+cd integral-equations
 ./gradlew fastTest      # быстрая проверка, единицы секунд
 ```
+
+Версии библиотек закреплены в `gradle.properties` (`numericalCoreVersion`,
+`minimalSplinesVersion`); задача `verifyArtifactDependencies` (входит в `check`)
+проверяет, что обе присутствуют на classpath **только как jar-артефакты**, а не как
+исходники соседних каталогов.
 
 ```bash
 ./gradlew runFredholm   # таблицы сходимости для уравнения Фредгольма
@@ -61,12 +82,15 @@ cd Numerical-Algorithms
 Решение уравнения Фредгольма второго рода и оценка погрешности:
 
 ```kotlin
-import numerics.*
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.errorEh
+import numerics.GaussLegendre
 import problems.fredholm.FredholmProblem
 import problems.fredholm.secondKindSolver
 import solvers.fredholm.FredholmOperator
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import splines.functionals.ProjFunctionals
+import splines.metrics.errorEh
 
 fun main() {
     val problem = FredholmProblem.F2          // K(t,s) = 1/(1+t+s), u*(t) = 1/(t+1)
@@ -163,7 +187,7 @@ fun main() {
 > ядра оставлены нулевыми, результат будет неверным. Такое несоответствие выявляется
 > тестами, а недоступные пути явно отвергаются с диагностикой.
 
-**Выход.** Единый для всех трёх решателей объект `numerics.SolutionFunc`:
+**Выход.** Единый для всех трёх решателей объект `solvers.core.SolutionFunc`:
 
 | Поле | Смысл |
 |---|---|
@@ -214,17 +238,15 @@ if (!solution.converged) {
 
 <br>
 
-Вычислительное ядро не зависит от ввода-вывода, модельных задач и средств отображения.
+Решатели не зависят от ввода-вывода, модельных задач и средств отображения. Сетки,
+сплайны, функционалы и численная инфраструктура приходят из библиотек `minimal-splines`
+(пакеты `splines.*`) и `numerical-core` (пакет `numerics.*`).
 
 ```
-src/main/kotlin/          вычислительное ядро (библиотека)
-├── numerics/             сетки, квадратура, минимальные сплайны, линейная алгебра,
-│   │                     NumericsContext, ParallelAssembly, SolutionFunc
-│   ├── functionals/      семейства аппроксимационных функционалов
-│   └── backend/          подключаемые бэкенды линейной алгебры
-└── solvers/
-    ├── core/             общее ядро линейных решателей второго рода
-    └── fredholm/, volterra/, uryson/
+src/main/kotlin/solvers/  решатели (этот репозиторий)
+├── core/                 общее ядро линейных решателей второго рода, SolutionFunc,
+│                         единый контракт сходимости reportConvergence
+└── fredholm/, volterra/, uryson/
 
 src/problems/kotlin/      каталог модельных задач (фикстуры)
 ├── fredholm/, volterra/, uryson/
@@ -234,10 +256,10 @@ src/test/kotlin/          тесты
 ├── verification/         НЕЗАВИСИМАЯ верификация (SciPy, аналитика, публикация)
 ├── convergence/          контракт сходимости и порядки сходимости
 ├── characterization/     фиксация численного поведения (защита от регрессий)
-├── regression/           тесты исправленных дефектов
-├── healthchecks/         проверки корректности ядра и решателей
-├── numerics/             модульные тесты ядра (+ functionals/, backend/)
-└── solvers/              тесты решателей (fredholm/, volterra/, uryson/)
+├── regression/           тесты исправленных дефектов решателей
+├── healthchecks/         проверки корректности решателей
+└── solvers/              тесты решателей (core/, fredholm/, volterra/, uryson/);
+                          в core/ — проводка NumericsContext через решатели
 
 tools/verify_with_scipy.py    скрипт внешней сверки со SciPy/NumPy
 tools/requirements-verify.txt закреплённые версии SciPy/NumPy
@@ -397,10 +419,12 @@ reference) по отдельным операциям; эти числа в до
 ./gradlew koverHtmlReport  # покрытие: build/reports/kover/html/index.html
 ```
 
-Проверки разделены тегами JUnit: `fastTest` (289 тестов, секунды), `slowTest`
+Проверки разделены тегами JUnit: `fastTest` (130 тестов, секунды), `slowTest`
 (23 теста, ~8.5 мин), `characterizationTest` (гейт численной нейтральности против
 1366 эталонных значений с допуском 1e-9), `convergenceOrderTest` (168 сочетаний
-«схема × базис × семейство»), `scipyVerify` (внешняя сверка).
+«схема × базис × семейство»), `scipyVerify` (внешняя сверка). Модульные тесты
+квадратуры, линейной алгебры, сплайнов и функционалов живут в репозиториях
+соответствующих библиотек; здесь остались тесты решателей и сквозные гейты.
 
 > [!IMPORTANT]
 > Гейты с тегом `machine` (два характеризационных класса и сверка F1 с публикацией)
@@ -432,11 +456,12 @@ reference) по отдельным операциям; эти числа в до
 
 | Файл | Назначение |
 |---|---|
-| [`docs/REFERENCES.md`](docs/REFERENCES.md) | 24 публикации с DOI и статусом каждого метода |
+| [`docs/REFERENCES.md`](docs/REFERENCES.md) | источники схем решения, регуляризации и верификации; источники сплайнов и функционалов — в `minimal-splines/docs/REFERENCES.md` |
 | [`docs/TESTING.md`](docs/TESTING.md) | задачи Gradle, состав `check`, категории тестов, CI |
-| [`docs/HPC.md`](docs/HPC.md) | нативный BLAS, параллельная сборка матриц, подключаемые бэкенды |
-| [`docs/ACCURACY.md`](docs/ACCURACY.md) | **границы достижимой точности**: обратная против прямой ошибки, граница по `alpha` для F1 |
+| [`docs/HPC.md`](docs/HPC.md) | бенчмарк решателя и его условия; бэкенды и параллельная сборка описаны в `numerical-core/docs/HPC.md` |
+| [`docs/ACCURACY.md`](docs/ACCURACY.md) | **границы достижимой точности** уравнений первого рода: граница по `alpha` для F1; общая теория обратной/прямой ошибки — в `numerical-core/docs/ACCURACY.md` |
 | [`docs/baseline-changes.md`](docs/baseline-changes.md) | **протокол правки численных эталонов** и история их изменений |
+| [`docs/REPOSITORY_SPLIT_PLAN.md`](docs/REPOSITORY_SPLIT_PLAN.md) | план и обоснование разделения на три репозитория (канонический экземпляр) |
 
 Основные источники методов: минимальные сплайны — Демьянович (1994) и Makarov (2012);
 функционалы де Бура–Фикса — Kulikov, Makarov (2019); проекционные функционалы —

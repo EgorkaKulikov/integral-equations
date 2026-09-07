@@ -141,3 +141,21 @@ Internal: `Degeneracy.kt`, `MinimalSplineBasis.computeA`.
 3. очистка пакетов/API;
 4. миграция тестов;
 5. документация и CI.
+
+## 11. Фактический результат
+
+Разделение выполнено по плану; отличия от разделов 3–4 зафиксированы ниже.
+
+| Что | План | Факт | Причина |
+|---|---|---|---|
+| `orders`, `constCh` (из `numerics.functionals.Metrics`) | `splines.metrics` | `numerical-core`, файл `numerics.ConvergenceRates` | `Reliability.reliableConstCh` (core) зависит от `constCh`; обе функции работают с готовыми числами погрешностей и о сетке не знают. В `splines.metrics` остались только `errorEh` и `DEFAULT_CONTROL_REFINEMENT` |
+| `healthchecks.SplineCoreHealthCheckTest` | minimal-splines, пакет не оговорён | пакет `splines` (`splines.SplineCoreHealthCheckTest`) | в библиотеке нет отдельного слоя `healthchecks`; тест инвариантов живёт рядом с базисом |
+| `numerics.NumericsContextWiringTest` (остаток) | integral-equations | `solvers.core.NumericsContextWiringTest`; части `defaultContextIsSharedInstance`/`contextEqualityIsByValue` — в core (`numerics.NumericsContextTest`) | тест проверяет проводку контекста через решатели, а не пакет `numerics` |
+| `numerics.DefensiveCopyTest` (остаток) | integral-equations | `solvers.uryson.SplineSpaceDefensiveCopyTest`; квадратурные тесты — в core (`numerics.QuadratureDefensiveCopyTest`) | оставшиеся проверки касаются только `SplineSpace` решателя Урысона |
+| диагностика активного бэкенда в CI | не планировалась | добавлен `solvers.core.ActiveBackendDiagnosticTest` | `numerics.backend.BackendSpiTest`, на который опирался шаг CI «Диагностика активного бэкенда», ушёл в `numerical-core`; нужен тест в этом репозитории, утверждающий, что активен `MultikCpuBackend` |
+| `regression.DefectRegressionTest` | integral-equations | без дефектов 4 и 5 — они в core (`numerics.LinearAlgebraRegressionTest`) | оба теста используют только `ReferenceLinearAlgebra` |
+| `MetricsTest` | minimal-splines | тесты `orders`/`constCh` — в core (`numerics.ConvergenceRatesTest`), тесты `errorEh` — в `splines.metrics.MetricsTest` | вслед за переносом функций |
+
+Численная нейтральность подтверждена: `characterizationTest` 5/5 и
+`extraCharacterizationTest` 1/1 зелёные против неизменённых эталонов; снимки
+`captureBaseline`/`captureExtraBaseline` до и после разделения совпадают побитово.
