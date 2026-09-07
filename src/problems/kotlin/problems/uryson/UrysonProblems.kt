@@ -154,20 +154,33 @@ fun firstKindSolver(
 private const val NOISE_NODES_PER_INTERVAL = 4
 
 /**
+ * Норма, в которой задаётся уровень шума `delta` для [noisyRightHandSide].
+ *
+ *  * [L2] — `||xi||_{L^2(a,b)} = delta` (прежнее поведение, используется golden-тестами);
+ *  * [SUP] — `||xi||_infty = max_t |xi(t)| = delta` — согласована с условием (VII)
+ *    статьи (шум задан в `C[a,b]`). Для кусочно-линейного профиля максимум модуля
+ *    достигается в контрольном узле, поэтому вычисляется точно, без квадратуры.
+ */
+enum class NoiseNorm { L2, SUP }
+
+/**
  * Строит зашумлённую правую часть `f^delta = f + xi` с заданной нормой шума
- * `||xi||_{L^2} = delta`.
+ * `||xi|| = delta` в норме [norm] (по умолчанию `L^2`).
  *
  * Шум моделируется кусочно-линейным профилем со случайными значениями в контрольных
  * узлах, отмасштабированным точно под требуемый уровень `delta`.
  *
  * ВОСПРОИЗВОДИМОСТЬ: генератор инициализируется ЯВНО передаваемым [seed], поэтому
  * результат полностью детерминирован. Скрытого источника случайности здесь нет.
+ * Профиль (узлы и случайные значения) при данном `seed` ОДИНАКОВ для обеих норм —
+ * различается лишь масштабный множитель.
  *
  * @param exactRhs точная правая часть `f`.
  * @param grid сетка, задающая отрезок.
- * @param quad квадратура для вычисления нормы шума.
- * @param delta требуемая норма возмущения в `L^2`; при нуле возвращается исходная функция.
+ * @param quad квадратура для вычисления `L^2`-нормы шума (при [NoiseNorm.SUP] не используется).
+ * @param delta требуемая норма возмущения; при нуле возвращается исходная функция.
  * @param seed зерно генератора псевдослучайных чисел.
+ * @param norm норма, в которой задан `delta`.
  */
 fun noisyRightHandSide(
     exactRhs: (Double) -> Double,
@@ -175,6 +188,7 @@ fun noisyRightHandSide(
     quad: GaussLegendre,
     delta: Double,
     seed: Long,
+    norm: NoiseNorm = NoiseNorm.L2,
 ): (Double) -> Double {
     if (delta == 0.0) return exactRhs
     val random = kotlin.random.Random(seed)
@@ -189,8 +203,12 @@ fun noisyRightHandSide(
         val w = ((t - left) / (right - left)).coerceIn(0.0, 1.0)
         noiseValues[k] * (1 - w) + noiseValues[k + 1] * w
     }
-    val l2Norm = Math.sqrt(quad.integrate(noiseNodes) { t -> noiseProfile(t) * noiseProfile(t) })
-    val scale = if (l2Norm > 0) delta / l2Norm else 0.0
+    val profileNorm = when (norm) {
+        NoiseNorm.L2 -> Math.sqrt(quad.integrate(noiseNodes) { t -> noiseProfile(t) * noiseProfile(t) })
+        // Кусочно-линейная функция достигает максимума модуля в узле.
+        NoiseNorm.SUP -> noiseValues.maxOf { Math.abs(it) }
+    }
+    val scale = if (profileNorm > 0) delta / profileNorm else 0.0
     return { t -> exactRhs(t) + scale * noiseProfile(t) }
 }
 
@@ -198,8 +216,9 @@ fun noisyRightHandSide(
  * Возвращает вектор `theta_j(f^delta)` зашумлённых данных для задачи первого рода —
  * входные данные метода [UrysonFirstKindSolver.solveMorozov].
  *
- * @param delta уровень шума в норме `L^2`.
+ * @param delta уровень шума в норме [norm] (по умолчанию `L^2`).
  * @param seed зерно генератора; фиксируется явно ради воспроизводимости.
+ * @param norm норма, в которой задан `delta` (см. [NoiseNorm]).
  */
 fun noisyThetaCoefficients(
     problem: UrysonProblem,
@@ -209,7 +228,8 @@ fun noisyThetaCoefficients(
     quad: GaussLegendre,
     delta: Double,
     seed: Long,
+    norm: NoiseNorm = NoiseNorm.L2,
 ): DoubleArray {
-    val noisy = noisyRightHandSide({ t -> problem.rhsExact(t, op) }, grid, quad, delta, seed)
+    val noisy = noisyRightHandSide({ t -> problem.rhsExact(t, op) }, grid, quad, delta, seed, norm)
     return solver.thetaOf(noisy)
 }
