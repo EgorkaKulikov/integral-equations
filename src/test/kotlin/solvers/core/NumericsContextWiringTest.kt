@@ -1,8 +1,13 @@
-package numerics
+package solvers.core
 
+import numerics.GaussLegendre
+import numerics.NumericsContext
 import numerics.backend.MultikCpuBackend
 import numerics.backend.ReferenceBackend
-import numerics.functionals.ProjFunctionals
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import splines.functionals.ProjFunctionals
 import org.junit.jupiter.api.Tag
 import problems.fredholm.FredholmProblem
 import problems.uryson.UrysonProblem
@@ -20,7 +25,7 @@ import kotlin.test.assertTrue
  *
  * Мотивация. Контекст проходит через пять классов ([solvers.core.SecondKindSolverCore],
  * оба решателя второго рода, `UrysonSolver`/`CollocationCore`/`SplineSpace`,
- * [numerics.functionals.FunctionalFamily]), и до появления этих тестов НИ ОДИН тест не
+ * [splines.functionals.FunctionalFamily]), и до появления этих тестов НИ ОДИН тест не
  * строил решатель с НЕдефолтным контекстом. Поэтому ошибка проводки — например, если бы
  * где-то внутри остался `NumericsContext.default()` вместо переданного значения —
  * не проявлялась бы никак: все прогоны шли на одном и том же дефолтном бэкенде.
@@ -29,6 +34,9 @@ import kotlin.test.assertTrue
  * `K(t,s) = 1/(1+t+s)`, гладкое решение). На уравнениях ПЕРВОГО рода смена бэкенда
  * штатно даёт расхождение до 5.7e-2 из-за плохой обусловленности — там сравнение
  * бэкендов проверяло бы обусловленность задачи, а не проводку контекста.
+ *
+ * Контракт самого [NumericsContext] как значения (разделяемый экземпляр по умолчанию,
+ * равенство по значению) проверяется в библиотеке `numerical-core` (`NumericsContextTest`).
  */
 @Tag("fast")
 class NumericsContextWiringTest {
@@ -116,22 +124,7 @@ class NumericsContextWiringTest {
         }
     }
 
-    /** Контекст по умолчанию — РАЗДЕЛЯЕМЫЙ экземпляр, а не новый объект на каждый вызов. */
-    @Test
-    fun defaultContextIsSharedInstance() {
-        assertSame(
-            NumericsContext.default(), NumericsContext.default(),
-            "NumericsContext.default() обязан отдавать один и тот же объект: иначе дефолтное " +
-                "значение параметра аллоцировало бы объект на каждое построение решателя.",
-        )
-    }
 
-    /** Равенство контекстов — ПО ЗНАЧЕНИЮ: два одинаково настроенных контекста совместимы. */
-    @Test
-    fun contextEqualityIsByValue() {
-        assertEquals(NumericsContext(backend = ReferenceBackend), NumericsContext(backend = ReferenceBackend))
-        assertTrue(NumericsContext(parallel = false) != NumericsContext(parallel = true))
-    }
 
     /**
      * НЕГАТИВНЫЙ: решатель и семейство функционалов с РАЗНЫМИ контекстами — громкий отказ.

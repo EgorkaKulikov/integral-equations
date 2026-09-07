@@ -1,9 +1,9 @@
 package solvers.volterra
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
 import org.junit.jupiter.api.Tag
 import problems.volterra.VolterraProblem
 import java.util.concurrent.Callable

@@ -2,17 +2,17 @@ package solvers.uryson
 
 import kotlin.math.abs
 import numerics.GaussLegendre
-import numerics.Grid
+import splines.Grid
 import numerics.LinearAlgebra
-import numerics.MinimalSplineBasis
+import splines.MinimalSplineBasis
 import numerics.NumericsContext
 import numerics.ParallelAssembly
-import numerics.SolutionFunc
-import numerics.functionals.ApproxFunctional
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.SupportPoints
-import numerics.functionals.ValueFunctional
-import numerics.reportConvergence
+import solvers.core.SolutionFunc
+import splines.functionals.ApproxFunctional
+import splines.functionals.ProjFunctionals
+import splines.functionals.SupportPoints
+import splines.functionals.ValueFunctional
+import solvers.core.reportConvergence
 
 /**
  * Применяет функционал к функции значений, явно передавая нулевые производные.
@@ -974,7 +974,7 @@ class UrysonFirstKindSolver(
      * Расширение типа [funcs] до общего `FunctionalFamily` ПОТРЕБУЕТ пересмотра
      * этой оценки: для семейств с производными (xi) `cChi()` оценкой усиления
      * шума не является и ведёт себя по `h` качественно противоположно (см. KDoc
-     * `numerics.functionals.FunctionalFamily.cChi` и `numerics.functionals.DerivFunctional`).
+     * `splines.functionals.FunctionalFamily.cChi` и `numerics.functionals.DerivFunctional`).
      *
      * @param thetaFDelta вектор `theta_j(f^delta)` зашумлённых данных.
      * @param delta уровень шума в норме `L^2`; при `delta = 0` путь проходится целиком.

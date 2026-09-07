@@ -1,9 +1,9 @@
 package solvers.fredholm
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
 import org.junit.jupiter.api.Tag
 import kotlin.test.Test
 import kotlin.test.assertTrue

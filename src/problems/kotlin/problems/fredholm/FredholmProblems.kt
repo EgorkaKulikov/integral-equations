@@ -1,7 +1,7 @@
 package problems.fredholm
 
-import numerics.MinimalSplineBasis
-import numerics.functionals.FunctionalFamily
+import splines.MinimalSplineBasis
+import splines.functionals.FunctionalFamily
 import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmFirstKindSolver
 import solvers.fredholm.FredholmOperator
@@ -18,7 +18,7 @@ import solvers.fredholm.KernelF
  *  - уравнение II рода: `f = u* - K u*`;
  *  - уравнение I рода:  `f = K u*`.
  *
- * Область интегрирования задаётся не здесь, а сеткой [numerics.Grid], передаваемой
+ * Область интегрирования задаётся не здесь, а сеткой [splines.Grid], передаваемой
  * в оператор: задача описывает только ядро и решение.
  *
  * @param name краткое имя задачи, используемое в таблицах и сообщениях тестов.

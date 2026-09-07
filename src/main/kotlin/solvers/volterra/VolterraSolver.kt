@@ -3,7 +3,11 @@ package solvers.volterra
 import java.util.concurrent.atomic.AtomicReferenceArray
 import kotlin.math.abs
 import numerics.*
-import numerics.functionals.*
+import splines.*
+import solvers.core.SolutionFunc
+import solvers.core.reportConvergence
+import splines.functionals.*
+import splines.metrics.*
 import solvers.core.ImageTriple
 import solvers.core.IterationStopCriterion
 import solvers.core.RhsWithDerivatives
@@ -320,7 +324,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
  * @param throwOnDivergence поведение ИТЕРАЦИОННЫХ схем ([kulkarni] для
  *        квазиинтерполянтов, [combinedNystrom]) при недостижении сходимости:
  *        `true` (по умолчанию) — исключение, `false` — результат с
- *        `converged = false` и достигнутой невязкой в [numerics.SolutionFunc.residual].
+ *        `converged = false` и достигнутой невязкой в [solvers.core.SolutionFunc.residual].
  *        На прямые схемы не влияет.
  */
 class VolterraSecondKindSolver(

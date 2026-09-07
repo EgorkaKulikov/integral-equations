@@ -1,12 +1,12 @@
 package healthchecks
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
+import splines.GeneratingSystem
+import splines.Grid
 import numerics.LinearAlgebra
-import numerics.MinimalSplineBasis
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.errorEh
+import splines.MinimalSplineBasis
+import splines.functionals.ProjFunctionals
+import splines.metrics.errorEh
 import org.junit.jupiter.api.Tag
 import problems.uryson.UrysonProblem
 import problems.uryson.firstKindSolver

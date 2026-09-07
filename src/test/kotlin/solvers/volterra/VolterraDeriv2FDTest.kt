@@ -5,9 +5,9 @@ import problems.volterra.VolterraProblem
 import problems.volterra.firstKindSolver
 import problems.volterra.secondKindSolver
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
 import kotlin.test.Test
 import kotlin.test.assertTrue
 

@@ -1,15 +1,15 @@
 package demo.bench
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
 import numerics.NumericsContext
 import numerics.backend.Backends
 import numerics.backend.LinAlgBackend
 import numerics.backend.MultikCpuBackend
 import numerics.backend.ReferenceBackend
-import numerics.functionals.ProjFunctionals
+import splines.functionals.ProjFunctionals
 import problems.fredholm.FredholmProblem
 import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator

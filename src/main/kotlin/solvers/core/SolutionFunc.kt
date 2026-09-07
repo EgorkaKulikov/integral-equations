@@ -1,4 +1,4 @@
-package numerics
+package solvers.core
 
 import java.util.logging.Logger
 

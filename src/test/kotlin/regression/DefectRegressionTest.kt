@@ -1,13 +1,12 @@
 package regression
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
-import numerics.ReferenceLinearAlgebra
-import numerics.functionals.DeBoorFixFunctionals
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.errorEh
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import splines.functionals.DeBoorFixFunctionals
+import splines.functionals.ProjFunctionals
+import splines.metrics.errorEh
 import org.junit.jupiter.api.Tag
 import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmSecondKindSolver
@@ -23,6 +22,9 @@ import kotlin.test.assertTrue
  * Каждый тест назван по дефекту и снабжён описанием: в чём была ошибка, почему она
  * не проявлялась в существующих тестах и что именно проверяется теперь. Все эти
  * тесты ПАДАЮТ на коде до исправления.
+ *
+ * Дефекты 4 и 5 относятся к слою линейной алгебры и проверяются в библиотеке
+ * `numerical-core` (`LinearAlgebraRegressionTest`); нумерация здесь сохранена.
  */
 @Tag("fast")
 class DefectRegressionTest {
@@ -209,54 +211,7 @@ class DefectRegressionTest {
         }
     }
 
-    /**
-     * ДЕФЕКТ 4. Порог вырожденности в эталонной линейной алгебре был абсолютным
-     * (1e-300) и фактически проверял лишь строгий машинный ноль: практически
-     * вырожденная матрица решалась молча и возвращала бессмысленный результат.
-     *
-     * Теперь порог относителен норме матрицы, поэтому вырожденность распознаётся
-     * независимо от масштаба данных.
-     */
-    @Test
-    fun defect4_singularityDetectedRegardlessOfScale() {
-        // Точно вырожденная матрица (вторая строка кратна первой) в разных масштабах.
-        for (scale in listOf(1.0, 1e6, 1e-6)) {
-            val singular = arrayOf(
-                doubleArrayOf(1.0 * scale, 2.0 * scale),
-                doubleArrayOf(2.0 * scale, 4.0 * scale),
-            )
-            assertFailsWith<IllegalStateException>("Масштаб $scale: вырожденность должна распознаваться") {
-                ReferenceLinearAlgebra.solve(singular, doubleArrayOf(1.0 * scale, 2.0 * scale))
-            }
-        }
-        // Невырожденная матрица того же масштаба обязана решаться штатно.
-        for (scale in listOf(1.0, 1e6, 1e-6)) {
-            val regular = arrayOf(
-                doubleArrayOf(1.0 * scale, 2.0 * scale),
-                doubleArrayOf(3.0 * scale, 4.0 * scale),
-            )
-            val solution = ReferenceLinearAlgebra.solve(regular, doubleArrayOf(1.0 * scale, 1.0 * scale))
-            assertTrue(solution.all { it.isFinite() }, "Масштаб $scale: решение должно быть конечным")
-        }
-    }
 
-    /**
-     * ДЕФЕКТ 5. Бэкенды линейной алгебры расходились на нечисловом входе:
-     * multik/OpenBLAS бросал `IllegalStateException`, а эталонная реализация молча
-     * возвращала вектор из NaN. Наблюдаемое поведение обязано совпадать.
-     */
-    @Test
-    fun defect5_backendsAgreeOnNonFiniteInput() {
-        val withNaN = arrayOf(
-            doubleArrayOf(Double.NaN, 1.0),
-            doubleArrayOf(1.0, 1.0),
-        )
-        assertFailsWith<IllegalStateException>(
-            "Эталонная реализация обязана сигнализировать об ошибке так же, как нативный бэкенд",
-        ) {
-            ReferenceLinearAlgebra.solve(withNaN, doubleArrayOf(1.0, 1.0))
-        }
-    }
 
     /**
      * ДЕФЕКТ 6. Схема Nyström для уравнения Урысона стартовала с ТОЧНОГО решения

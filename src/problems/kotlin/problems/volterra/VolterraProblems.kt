@@ -1,7 +1,7 @@
 package problems.volterra
 
-import numerics.MinimalSplineBasis
-import numerics.functionals.FunctionalFamily
+import splines.MinimalSplineBasis
+import splines.functionals.FunctionalFamily
 import solvers.core.RhsWithDerivatives
 import solvers.volterra.KernelV
 import solvers.volterra.VolterraFirstKindSolver
@@ -20,7 +20,7 @@ import solvers.volterra.VolterraSecondKindSolver
  *
  * где `(V u)(t) = \int_a^t K(t,s) u(s) ds` — оператор с ПЕРЕМЕННЫМ верхним пределом.
  *
- * Область интегрирования задаётся не здесь, а сеткой [numerics.Grid], передаваемой
+ * Область интегрирования задаётся не здесь, а сеткой [splines.Grid], передаваемой
  * в оператор: задача описывает только ядро и решение.
  *
  * @param name краткое имя задачи, используемое в таблицах и сообщениях тестов.

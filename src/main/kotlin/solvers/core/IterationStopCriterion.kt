@@ -44,7 +44,7 @@ internal class IterationStopCriterion(private val tolerance: Double) {
 
     /**
      * Последнее КОНЕЧНОЕ значение критерия останова — то, что уходит в
-     * [numerics.SolutionFunc.residual].
+     * [solvers.core.SolutionFunc.residual].
      *
      * Именно конечное, а не просто последнее: при расходимости с переполнением
      * последним значением оказывается `Inf` или `NaN`, и такая «невязка» ничего

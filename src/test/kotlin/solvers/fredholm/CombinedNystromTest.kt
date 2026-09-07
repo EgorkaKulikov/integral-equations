@@ -1,12 +1,12 @@
 package solvers.fredholm
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
-import numerics.SolutionFunc
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.errorEh
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import solvers.core.SolutionFunc
+import splines.functionals.ProjFunctionals
+import splines.metrics.errorEh
 import org.junit.jupiter.api.Tag
 import kotlin.math.ln
 import kotlin.test.Test
@@ -139,7 +139,7 @@ class CombinedNystromTest {
         val problem = FredholmProblem.F2
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val funcs = numerics.functionals.DeBoorFixFunctionals(basis, 1)
+        val funcs = splines.functionals.DeBoorFixFunctionals(basis, 1)
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         val solver = FredholmSecondKindSolver(
             basis, funcs, op, 1.0,

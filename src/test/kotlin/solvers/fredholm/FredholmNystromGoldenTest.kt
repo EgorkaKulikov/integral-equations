@@ -1,10 +1,10 @@
 package solvers.fredholm
 
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.errorEh
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import splines.functionals.ProjFunctionals
+import splines.metrics.errorEh
 import org.junit.jupiter.api.Tag
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -53,7 +53,7 @@ class FredholmNystromGoldenTest {
     @Test fun nystrom_xi_unsupported() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val funcs = numerics.functionals.DeBoorFixFunctionals(basis)
+        val funcs = splines.functionals.DeBoorFixFunctionals(basis)
         val op = FredholmOperator(FredholmProblem.F2.kernel, grid, numerics.GaussLegendre(8))
         val s = FredholmSecondKindSolver(basis, funcs, op, 1.0,
             solvers.core.RhsWithDerivatives(
@@ -64,7 +64,7 @@ class FredholmNystromGoldenTest {
     private fun xiTildeSolver(p: FredholmProblem, n: Int, r: Int): Pair<FredholmSecondKindSolver, Grid> {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val funcs = numerics.functionals.DiscreteDeBoorFixFunctionals(basis, r)
+        val funcs = splines.functionals.DiscreteDeBoorFixFunctionals(basis, r)
         val op = FredholmOperator(p.kernel, grid, numerics.GaussLegendre(8))
         return FredholmSecondKindSolver(basis, funcs, op, 1.0,
             solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })) to grid
@@ -87,7 +87,7 @@ class FredholmNystromGoldenTest {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         for (r in 1..2) {
-            val funcs = numerics.functionals.DiscreteDeBoorFixFunctionals(basis, r)
+            val funcs = splines.functionals.DiscreteDeBoorFixFunctionals(basis, r)
             assertTrue(!funcs.usesDerivative, "xitilde<$r> must be value-only")
             val f = { t: Double -> Math.sin(t) + t * t }
             for (j in -2..grid.n - 1) {

@@ -2,7 +2,11 @@ package solvers.core
 
 import kotlin.math.abs
 import numerics.*
-import numerics.functionals.*
+import splines.*
+import solvers.core.SolutionFunc
+import solvers.core.reportConvergence
+import splines.functionals.*
+import splines.metrics.*
 import solvers.core.SecondKindDefaults.KULKARNI_QUASI_MAX_ITERATIONS
 import solvers.core.SecondKindDefaults.KULKARNI_QUASI_TOLERANCE
 

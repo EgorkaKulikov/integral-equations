@@ -1,15 +1,15 @@
 package characterization
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
-import numerics.SolutionFunc
-import numerics.functionals.AveragingFunctionals
-import numerics.functionals.FunctionalFamily
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.ThreePointFunctionals
-import numerics.functionals.errorEh
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import solvers.core.SolutionFunc
+import splines.functionals.AveragingFunctionals
+import splines.functionals.FunctionalFamily
+import splines.functionals.ProjFunctionals
+import splines.functionals.ThreePointFunctionals
+import splines.metrics.errorEh
 import java.util.Locale
 
 /**

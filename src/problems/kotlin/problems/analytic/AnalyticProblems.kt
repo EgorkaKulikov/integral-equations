@@ -1,7 +1,7 @@
 package problems.analytic
 
-import numerics.MinimalSplineBasis
-import numerics.functionals.FunctionalFamily
+import splines.MinimalSplineBasis
+import splines.functionals.FunctionalFamily
 import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver

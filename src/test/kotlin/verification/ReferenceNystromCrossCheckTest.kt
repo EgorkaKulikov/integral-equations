@@ -1,10 +1,10 @@
 package verification
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
-import numerics.functionals.ProjFunctionals
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import splines.functionals.ProjFunctionals
 import org.junit.jupiter.api.Tag
 import problems.fredholm.FredholmProblem
 import solvers.core.RhsWithDerivatives

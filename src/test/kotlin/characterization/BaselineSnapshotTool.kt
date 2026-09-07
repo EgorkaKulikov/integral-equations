@@ -1,15 +1,15 @@
 package characterization
 
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
-import numerics.functionals.AveragingFunctionals
-import numerics.functionals.DeBoorFixFunctionals
-import numerics.functionals.DiscreteDeBoorFixFunctionals
-import numerics.functionals.FunctionalFamily
-import numerics.functionals.ThreePointFunctionals
-import numerics.functionals.errorEh
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import splines.functionals.AveragingFunctionals
+import splines.functionals.DeBoorFixFunctionals
+import splines.functionals.DiscreteDeBoorFixFunctionals
+import splines.functionals.FunctionalFamily
+import splines.functionals.ThreePointFunctionals
+import splines.metrics.errorEh
 import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmSecondKindSolver
 import solvers.volterra.VolterraSecondKindSolver
@@ -37,7 +37,7 @@ import kotlin.test.Test
 class BaselineSnapshotTool {
 
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
-        "theta" -> numerics.functionals.ProjFunctionals(basis)
+        "theta" -> splines.functionals.ProjFunctionals(basis)
         "xi0" -> DeBoorFixFunctionals(basis, 0)
         "xi1" -> DeBoorFixFunctionals(basis, 1)
         "xi2" -> DeBoorFixFunctionals(basis, 2)
@@ -161,7 +161,7 @@ class BaselineSnapshotTool {
                 for (n in listOf(8, 16)) {
                     val grid = Grid.uniform(n)
                     val basis = MinimalSplineBasis(system, grid)
-                    val funcs = numerics.functionals.ProjFunctionals(basis)
+                    val funcs = splines.functionals.ProjFunctionals(basis)
                     val space = solvers.uryson.SplineSpace(basis, GaussLegendre(8))
                     val op = solvers.uryson.UrysohnOperator(problem.kernel, grid, GaussLegendre(8))
                     val solver = problems.uryson.secondKindSolver(problem, basis, funcs, space, op)
@@ -182,7 +182,7 @@ class BaselineSnapshotTool {
         for (n in listOf(8, 16)) {
             val grid = Grid.uniform(n)
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-            val funcs = numerics.functionals.ProjFunctionals(basis)
+            val funcs = splines.functionals.ProjFunctionals(basis)
 
             val fp = problems.fredholm.FredholmProblem.F1
             val fop = solvers.fredholm.FredholmOperator(fp.kernel, grid, GaussLegendre(8))

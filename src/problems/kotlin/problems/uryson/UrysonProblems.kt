@@ -1,10 +1,10 @@
 package problems.uryson
 
 import numerics.GaussLegendre
-import numerics.Grid
-import numerics.MinimalSplineBasis
+import splines.Grid
+import splines.MinimalSplineBasis
 import numerics.NumericsContext
-import numerics.functionals.ProjFunctionals
+import splines.functionals.ProjFunctionals
 import solvers.uryson.Kernel
 import solvers.uryson.SplineSpace
 import solvers.uryson.UrysohnOperator

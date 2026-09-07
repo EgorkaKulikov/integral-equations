@@ -2,7 +2,11 @@ package solvers.fredholm
 
 import kotlin.math.abs
 import numerics.*
-import numerics.functionals.*
+import splines.*
+import solvers.core.SolutionFunc
+import solvers.core.reportConvergence
+import splines.functionals.*
+import splines.metrics.*
 import solvers.core.ImageTriple
 import solvers.core.IterationStopCriterion
 import solvers.core.RhsWithDerivatives

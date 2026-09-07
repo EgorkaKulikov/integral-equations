@@ -2,12 +2,12 @@ package demo.uryson
 
 import demo.format.Fmt
 import numerics.GaussLegendre
-import numerics.GeneratingSystem
-import numerics.Grid
-import numerics.MinimalSplineBasis
-import numerics.functionals.ProjFunctionals
-import numerics.functionals.errorEh
-import numerics.functionals.orders
+import splines.GeneratingSystem
+import splines.Grid
+import splines.MinimalSplineBasis
+import splines.functionals.ProjFunctionals
+import splines.metrics.errorEh
+import numerics.orders
 import problems.uryson.UrysonProblem
 import problems.uryson.firstKindSolver
 import problems.uryson.noisyThetaCoefficients
