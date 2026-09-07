@@ -4,7 +4,7 @@
 # `numerical-core` и `minimal-splines` (см. gradle.properties). Пока у библиотек нет
 # удалённого реестра Maven, каждый job сначала клонирует их репозитории и публикует в
 # mavenLocal раннера (composite action `.github/actions/publish-libraries`); адреса
-# репозиториев — в `env` ниже и ПРЕДВАРИТЕЛЬНЫ. С появлением реестра шаг публикации
+# репозиториев — в `env` ниже. С появлением реестра шаг публикации
 # заменяется на `-PnumericsRepositoryUrl=<url>` в каждом вызове Gradle. Задача
 # `verifyArtifactDependencies` (входит в `check`) гарантирует, что библиотеки на classpath
 # присутствуют только как jar, а не как исходники соседних каталогов.
@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Репозитории библиотек (адреса предварительные) и ветки/теги, из которых они
+  # Репозитории библиотек и ветки/теги, из которых они
   # публикуются в mavenLocal раннера. Версии артефактов задаёт gradle.properties.
   NUMERICAL_CORE_REPO: https://github.com/EgorkaKulikov/numerical-core
   NUMERICAL_CORE_REF: main

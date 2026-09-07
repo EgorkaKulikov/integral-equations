@@ -24,8 +24,8 @@
 кратными узлами и всех семейств аппроксимационных функционалов (`theta`, `xi`, `xitilde`,
 `mu`, `lambda`) живёт в репозитории `minimal-splines`; там же — таблицы
 «элемент → реализация → источник → статус» для этих объектов:
-[`minimal-splines/docs/REFERENCES.md`](https://github.com/EgorkaKulikov/minimal-splines/blob/main/docs/REFERENCES.md)
-(адрес репозитория предварительный). Источники, на которые опираются эти таблицы:
+[`minimal-splines/docs/REFERENCES.md`](https://github.com/EgorkaKulikov/minimal-splines/blob/main/docs/REFERENCES.md).
+Источники, на которые опираются эти таблицы:
 [Демьянович 1994], [Makarov 2012], [Kosogorov, Makarov 2017], [Kulikov, Makarov 2019a],
 [Kulikov, Makarov 2019b], [Kulikov, Makarov 2020], [Kulikov, Makarov 2022],
 [Kulikov, Makarov 2025]. Библиографические записи сохранены и в списке литературы ниже,

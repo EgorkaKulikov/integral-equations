@@ -170,7 +170,7 @@ classpath не является каталогом или файлом из `bui
 
 В CI библиотеки не берутся из удалённого реестра (он пока не определён): каждый job
 сначала клонирует репозитории `EgorkaKulikov/numerical-core` и
-`EgorkaKulikov/minimal-splines` (адреса предварительные, вынесены в `env` workflow) и
+`EgorkaKulikov/minimal-splines` (адреса вынесены в `env` workflow) и
 выполняет в них `./gradlew publishToMavenLocal`, после чего собирает этот проект против
 `~/.m2`. При появлении реестра шаг клонирования заменяется на
 `-PnumericsRepositoryUrl=...`.

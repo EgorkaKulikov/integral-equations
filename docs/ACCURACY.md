@@ -15,8 +15,8 @@
 Общая теория — обратная и прямая ошибка плотного решателя, диагностика
 `LinearAlgebra.solveDiagnosed`, типы `ForwardError` и `ConditionEstimate`, два пути
 оценки `cond` — принадлежит библиотеке `numerical-core` и изложена полностью в
-[`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md) (адрес репозитория
-предварительный). Здесь эти разделы сведены к резюме; предмет настоящего документа —
+[`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md).
+Здесь эти разделы сведены к резюме; предмет настоящего документа —
 уравнения **первого рода**, прежде всего задача F1 и её параметр регуляризации `alpha`.
 
 ---

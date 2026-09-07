@@ -20,7 +20,7 @@
 `numerics.backend.LinAlgBackend`/`Backends` с автоматическим откатом на
 `ReferenceBackend` и точкой расширения под GPU). Их устройство, гарантии семантики и
 выбор бэкенда свойством `-Dnumerics.backend=multik|reference` описаны в
-[`numerical-core/docs/HPC.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/HPC.md) (адрес репозитория предварительный).
+[`numerical-core/docs/HPC.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/HPC.md).
 
 Здесь, в решателях, параллельная сборка подключена в горячих местах:
 `matrixM`/`matrixM2` (Fredholm, Volterra), B-матрица и якобианы Ньютона/Кулкарни
