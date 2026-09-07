@@ -400,8 +400,10 @@ class CollocationCore(
  * Решатели нелинейного уравнения Урысона ВТОРОГО рода
  * `x(t) - lambda \int_a^b K(t,s,x(s)) ds = f(t)`.
  *
- * Реализованы четыре схемы: базовая коллокация, итерация Слоана, модификация
- * Кулкарни и сплайн-метод Nyström. Источники перечислены в `docs/REFERENCES.md`.
+ * Реализованы схемы: базовая коллокация, итерация Слоана, модификация Кулкарни и её
+ * итерированный вариант, простой сплайн-метод Nyström, а также комбинированный метод
+ * Nyström `P_theta L + (I - P_theta) L^N_h` и его итерированный вариант.
+ * Источники перечислены в `docs/REFERENCES.md`.
  *
  * Решатель не знает о модельных задачах: правая часть передаётся функцией [rhs],
  * а множитель — параметром [lambda]. Готовые фабрики для модельных задач находятся
@@ -783,6 +785,39 @@ class UrysonSecondKindSolver(
             converged = run.converged,
             iterations = run.performedSteps,
             residual = run.residual,
+        )
+    }
+
+    /**
+     * КОМБИНИРОВАННЫЙ метод Nyström: `u = f + lambda L_n u`,
+     * `L_n = P_theta L + (I - P_theta) L^N_h` — точный оператор на образе проектора,
+     * квадратура на его дополнении. Именно к этому оператору (а не к простому [nystrom])
+     * относятся оценки суперсходимости для полиномиальных квазиинтерполянтов
+     * (Remogna–Sbibih–Tahrichi, Mathematics 11 (2023), Art. 3236; см. `docs/REFERENCES.md`).
+     *
+     * Система решается методом Ньютона с аналитическим якобианом по значениям решения
+     * в опорных точках функционалов и в узлах квадратуры; подробности — [CombinedNystromSolver].
+     */
+    fun combinedNystrom(): SolutionFunc = CombinedNystromSolver(this).combined()
+
+    /**
+     * Итерированный комбинированный Nyström: `\hat u^N_h = f + lambda L u^N_h`, где `u^N_h` —
+     * решение [combinedNystrom]; однократное применение точного оператора без новой системы.
+     */
+    fun iteratedNystrom(): SolutionFunc = CombinedNystromSolver(this).iterated()
+
+    /**
+     * Итерированный метод Кулкарни: `\hat u^K_h = f + lambda L u^K_h`, где `u^K_h` — решение
+     * [kulkarni]; аналог итерации Слоана, применённой к приближению Кулкарни.
+     */
+    fun iteratedKulkarni(): SolutionFunc {
+        val k = kulkarni()
+        val uNodes = DoubleArray(op.gNode.size) { k.eval(op.gNode[it]) }
+        return SolutionFunc(
+            eval = { t -> rhs(t) + lambda * op.applyNodes(t, uNodes) },
+            converged = k.converged,
+            iterations = k.iterations,
+            residual = k.residual,
         )
     }
 }
