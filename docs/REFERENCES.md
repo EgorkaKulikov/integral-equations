@@ -79,11 +79,14 @@
 | Ньютон с аналитическим якобианом `B(c)_{j,i} = theta_j(U'(x_h) omega_i)` | `CollocationCore.bMatrix` | [Atkinson 1997] | Подтверждено |
 | Схема Кулкарни (квази-Ньютон с предобуславливателем) | `UrysonSecondKindSolver.kulkarni` | [Kulkarni 2003], [Dagnino, Dallefrate, Remogna 2019] | Подтверждено |
 | Сплайн-Nyström для Урысона | `UrysonSecondKindSolver.nystrom` | [Remogna, Sbibih, Tahrichi 2023] | Подтверждено |
+| Комбинированный Nyström для Урысона `L_n = P_theta L + (I - P_theta) L^N_h`, Ньютон с аналитическим якобианом | `UrysonSecondKindSolver.combinedNystrom`, `CombinedNystromSolver` | [Remogna, Sbibih, Tahrichi 2023] | Подтверждено: именно к этому оператору относятся оценки суперсходимости источника; сверен с `FredholmSecondKindSolver.combinedNystrom` на линейном ядре (`CombinedNystromTest`) |
+| Итерированный комбинированный Nyström `u = f + lambda L u^N_h` | `UrysonSecondKindSolver.iteratedNystrom` | [Sloan 1976] | Адаптация: однократное применение точного оператора к приближению комбинированного Nyström |
+| Итерированный Кулкарни `u = f + lambda L u^K_h` | `UrysonSecondKindSolver.iteratedKulkarni` | [Sloan 1976], [Kulkarni 2003] | Адаптация: итерация Слоана, применённая к приближению Кулкарни для нелинейного оператора |
 | Регуляризация Тихонова, стабилизатор `R_h` в норме `W^{1,2}` | `SplineSpace.gramR` | [Тихонов, Арсенин 1977], [Engl, Hanke, Neubauer 1996] | Подтверждено |
 | Гаусс–Ньютон для регуляризованной задачи | `UrysonFirstKindSolver.solveFixedAlpha` | [Engl, Hanke, Neubauer 1996] | Подтверждено (знак в знак) |
 | Принцип невязки Морозова | `UrysonFirstKindSolver.solveMorozov` | [Engl, Hanke, Neubauer 1996], разд. 4.3 | Подтверждено |
 | Гомотопия по убывающему `alpha` с тёплым стартом | `solveMorozov` | — | Деталь реализации |
-| Модель шума (кусочно-линейный профиль) | `noisyThetaF` | — | Деталь реализации; детерминированность и масштабирование в `L^2` соответствуют постановке |
+| Модель шума (кусочно-линейный профиль), нормировка `NoiseNorm { L2, SUP }` | `noisyRightHandSide`, `noisyThetaCoefficients` | — | Деталь реализации; детерминированность (явный `seed`) и масштабирование под заданную норму соответствуют постановке |
 
 ---
 

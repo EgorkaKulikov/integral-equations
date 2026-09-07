@@ -159,3 +159,19 @@ Internal: `Degeneracy.kt`, `MinimalSplineBasis.computeA`.
 Численная нейтральность подтверждена: `characterizationTest` 5/5 и
 `extraCharacterizationTest` 1/1 зелёные против неизменённых эталонов; снимки
 `captureBaseline`/`captureExtraBaseline` до и после разделения совпадают побитово.
+
+## 12. Синхронизация с исходным репозиторием после split
+
+Исходный `Numerical-Algorithms` продолжает жить; изменения переносятся сюда
+`git cherry-pick -x` из remote `mono` (`https://github.com/EgorkaKulikov/Numerical-Algorithms.git`)
+с последующей перезаписью импортов `numerics.{Grid,…}` → `splines.*`,
+`numerics.functionals.*` → `splines.functionals.*`/`splines.metrics.*`,
+`numerics.SolutionFunc` → `solvers.core.SolutionFunc` (скрипт-помощник: см. историю коммита
+синхронизации). Изменения, затрагивающие `src/main/kotlin/numerics/**` исходного репозитория,
+переносятся в `numerical-core`/`minimal-splines` с публикацией новой версии артефакта и
+обновлением `gradle.properties` здесь.
+
+| Дата | Диапазон в mono | Перенесено | Затронутые репо |
+|---|---|---|---|
+| 2026-09-07 | `9a71ec9..edc9eeb` (4 коммита ветки `feat/uryson-unify-new01`) | комбинированный/итерированный Nyström и итерированный Кулкарни для Урысона, `NoiseNorm { L2, SUP }`, `CombinedNystromTest`, демо-таблицы в формате new-01 | только `integral-equations`; библиотеки не затронуты (upstream не менял `numerics/`) |
+
