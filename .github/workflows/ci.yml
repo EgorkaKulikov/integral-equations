@@ -1,4 +1,13 @@
-# Непрерывная интеграция проекта numerical-algorithms.
+# Непрерывная интеграция проекта integral-equations.
+#
+# ЗАВИСИМОСТИ-АРТЕФАКТЫ. Проект собирается против опубликованных библиотек
+# `numerical-core` и `minimal-splines` (см. gradle.properties). Пока у библиотек нет
+# удалённого реестра Maven, каждый job сначала клонирует их репозитории и публикует в
+# mavenLocal раннера (composite action `.github/actions/publish-libraries`); адреса
+# репозиториев — в `env` ниже и ПРЕДВАРИТЕЛЬНЫ. С появлением реестра шаг публикации
+# заменяется на `-PnumericsRepositoryUrl=<url>` в каждом вызове Gradle. Задача
+# `verifyArtifactDependencies` (входит в `check`) гарантирует, что библиотеки на classpath
+# присутствуют только как jar, а не как исходники соседних каталогов.
 #
 # Разделение на job'ы повторяет разделение тестов по тегам в build.gradle.kts
 # и сделано по одной причине: обратная связь на каждый PR обязана быть быстрой.
@@ -15,7 +24,7 @@
 # порядок суммирования, и на плохо обусловленных задачах F1 расхождение выходит
 # далеко за допуск. Эти гейты — ЛОКАЛЬНЫЕ, они входят в `./gradlew check`/`build`,
 # прогон которого требуется перед отправкой изменений (правило 6 README).
-# Что CI продолжает проверять: 289 быстрых тестов, 9 тестов сверки со SciPy,
+# Что CI продолжает проверять: 129 быстрых тестов, 9 тестов сверки со SciPy,
 # 168 сочетаний порядка сходимости и 613 из 655 опубликованных значений
 # (всё, кроме 42 ключей F1).
 name: CI
@@ -34,6 +43,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Репозитории библиотек (адреса предварительные) и ветки/теги, из которых они
+  # публикуются в mavenLocal раннера. Версии артефактов задаёт gradle.properties.
+  NUMERICAL_CORE_REPO: https://github.com/EgorkaKulikov/numerical-core
+  NUMERICAL_CORE_REF: main
+  MINIMAL_SPLINES_REPO: https://github.com/EgorkaKulikov/minimal-splines
+  MINIMAL_SPLINES_REF: main
+
 jobs:
   fast:
     name: Быстрый набор тестов и покрытие
@@ -51,6 +68,9 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+        uses: ./.github/actions/publish-libraries
+
       # ДИАГНОСТИКА БЭКЕНДА — обязательно ПЕРВЫМ прогоном тестов.
       #
       # Зачем. `Backends.select` при недоступности нативного OpenBLAS МОЛЧА
@@ -59,12 +79,12 @@ jobs:
       # при допуске 1e-9. Без этого шага такой откат выглядел бы как «рефакторинг
       # испортил числа», и разбирательство ушло бы не туда.
       #
-      # Как это работает. `BackendSpiTest.multikCpuBackendIsAvailableHere` УТВЕРЖДАЕТ
-      # и доступность `MultikCpuBackend`, и то, что он выбран активным. Если нативная
-      # библиотека не поднялась — падает именно этот тест с внятным сообщением.
-      # Отдельный тест ради диагностики не изобретаем: нужный уже есть.
+      # Как это работает. `ActiveBackendDiagnosticTest` УТВЕРЖДАЕТ и доступность
+      # `MultikCpuBackend`, и то, что он выбран активным. Если нативная библиотека не
+      # поднялась — падает именно этот тест с внятным сообщением. (Раньше эту роль играл
+      # `numerics.backend.BackendSpiTest`; после выделения numerical-core он живёт там.)
       - name: Диагностика активного бэкенда линейной алгебры
-        run: ./gradlew fastTest --tests 'numerics.backend.BackendSpiTest' --info -PmachineDependentGates=false
+        run: ./gradlew fastTest --tests 'solvers.core.ActiveBackendDiagnosticTest' --info -PmachineDependentGates=false
 
       # Компиляция sourceSet'ов `demo` и `problems` включена намеренно: `fastTest`
       # тянет только `problems` (он в classpath тестов), а `demo` — нет, поэтому
@@ -101,6 +121,9 @@ jobs:
 
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
+
+      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+        uses: ./.github/actions/publish-libraries
 
       # ГЕЙТ E_h ПРОТИВ ЭТАЛОНА ЗДЕСЬ НЕ ГОНЯЕТСЯ — и это НЕ ослабление проверок.
       # `EhCharacterizationTest` сверяет 1366 значений с допуском 1e-9 против эталона,
@@ -149,6 +172,9 @@ jobs:
 
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
+
+      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+        uses: ./.github/actions/publish-libraries
 
       # Ключ кэша — хеш файла требований: смена пиннинга обязана приводить к
       # переустановке окружения, иначе сверка шла бы на старых версиях SciPy.
@@ -224,6 +250,9 @@ jobs:
 
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
+
+      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+        uses: ./.github/actions/publish-libraries
 
       # 23 теста тега `slow` за ОДИН запуск. Главное здесь и ни в одном другом job'е:
       # `PublishedValuesTest` — сверка с ВНЕШНИМ источником правды, не замкнутая
