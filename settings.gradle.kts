@@ -1,1 +1,1 @@
-rootProject.name = "numerical-algorithms"
+rootProject.name = "integral-equations"

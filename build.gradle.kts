@@ -12,13 +12,19 @@ plugins {
 
 repositories {
     mavenCentral()
+    // Библиотеки numerical-core и minimal-splines подключаются как ОПУБЛИКОВАННЫЕ
+    // артефакты Maven, а не как исходники соседних репозиториев (никаких
+    // `project(":...")` и `../other-repo/src`). Локальная разработка:
+    // `./gradlew publishToMavenLocal` в каждой библиотеке, затем сборка здесь.
+    // Удалённый репозиторий — через свойство `numericsRepositoryUrl`.
+    mavenLocal()
+    providers.gradleProperty("numericsRepositoryUrl").orNull?.let { maven(url = uri(it)) }
 }
 
 // --- Разделение исходных кодов по назначению -------------------------------
-// main     — вычислительное ядро: только численные методы, без ввода-вывода,
-//            без модельных задач и без точек входа.
-// problems — каталог модельных задач (фикстуры): нужен и демонстрациям, и тестам,
-//            но НЕ является частью библиотеки.
+// main     — решатели интегральных уравнений (Фредгольм, Вольтерра, Урысон) и их
+//            общее ядро; без ввода-вывода, без модельных задач и без точек входа.
+// problems — каталог модельных задач (фикстуры): нужен и демонстрациям, и тестам.
 // demo     — печать таблиц сходимости, точки входа main(), бенчмарк.
 sourceSets {
     val main by getting
@@ -46,10 +52,15 @@ configurations {
     named("testImplementation") { extendsFrom(configurations.implementation.get()) }
 }
 
+val numericalCoreVersion: String by project
+val minimalSplinesVersion: String by project
+
 dependencies {
-    // Linear-algebra backend: multik with native OpenBLAS (multik-default).
-    implementation("org.jetbrains.kotlinx:multik-core:0.2.3")
-    implementation("org.jetbrains.kotlinx:multik-default:0.2.3")
+    // Обе библиотеки — прямые зависимости: решатели используют и сплайны, и
+    // квадратуру/линейную алгебру напрямую. minimal-splines тянет numerical-core
+    // транзитивно (api), но явное объявление фиксирует версию и намерение.
+    implementation("io.github.egorkakulikov:numerical-core:$numericalCoreVersion")
+    implementation("io.github.egorkakulikov:minimal-splines:$minimalSplinesVersion")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
@@ -58,6 +69,30 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
+}
+
+// --- Проверка независимости от исходников соседних репозиториев -----------------
+// Обе библиотеки обязаны присутствовать на classpath компиляции ТОЛЬКО как jar-артефакты.
+// Случайная `project(":...")`/`files("../minimal-splines/build/...")` зависимость
+// провалит задачу. Входит в `check`.
+tasks.register("verifyArtifactDependencies") {
+    group = "verification"
+    description = "Убедиться, что numerical-core и minimal-splines подключены как артефакты"
+    val classpath = configurations.compileClasspath
+    doLast {
+        val files = classpath.get().files
+        val offenders = files.filter { f ->
+            !f.name.endsWith(".jar") ||
+                f.path.contains("${File.separator}numerical-core${File.separator}build${File.separator}") ||
+                f.path.contains("${File.separator}minimal-splines${File.separator}build${File.separator}")
+        }
+        check(offenders.isEmpty()) { "Зависимости обязаны быть jar-артефактами из репозитория Maven, найдено: $offenders" }
+        for (lib in listOf("numerical-core", "minimal-splines")) {
+            val hits = files.filter { it.name.startsWith("$lib-") && it.name.endsWith(".jar") }
+            check(hits.size == 1) { "Ожидался ровно один артефакт $lib на classpath, найдено: $hits" }
+            logger.lifecycle("$lib подключён как артефакт: ${hits.single().name}")
+        }
+    }
 }
 
 application {
@@ -439,7 +474,7 @@ tasks.named("check") {
     // проверке (исключён из `check`, закомментирован в CI) — то есть были зелёными
     // только потому, что не запускались. См. KDoc выше о цене (~9 мин) и о том,
     // почему включение сделано явным `dependsOn`, а не через источники Kover.
-    dependsOn("fastTest", "characterizationTest", "extraCharacterizationTest", "slowTest")
+    dependsOn("fastTest", "characterizationTest", "extraCharacterizationTest", "slowTest", "verifyArtifactDependencies")
 }
 
 tasks.register<Test>("fastTest") {

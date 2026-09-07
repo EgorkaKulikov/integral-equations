@@ -1,13 +1,13 @@
 .gradle/
 build/
-# Ignore stray jars but keep the Gradle wrapper jar
+# Сторонние jar не хранятся; jar wrapper'а Gradle — исключение
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
-/.tasks/
-# Виртуальное окружение для разовой внешней сверки со SciPy (см. tools/verify_with_scipy.py)
-/.venv-verify/
-# Кэш Kotlin-плагина (журналы сессий и ошибок сборки) — создаётся автоматически
+# Кэш Kotlin-плагина
 /.kotlin/
-# Перенаправленный вывод разовых прогонов в корне проекта — артефакты отладки, не исходный код
+/.idea/
+/.tasks/
 /*-out.txt
 /*-err.txt
+# Виртуальное окружение для внешней сверки со SciPy (см. tools/verify_with_scipy.py)
+/.venv-verify/
