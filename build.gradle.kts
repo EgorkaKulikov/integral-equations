@@ -763,8 +763,12 @@ kover {
             //   extraCharacterizationTest — то же;
             //   convergenceOrderTest      — то же (быстрый поднабор уже в fastTest);
             //   scipyVerify               — требует Python, в сборке его быть не обязано;
-            //   captureBaseline, captureExtraBaseline, dumpVerificationArtifacts — генераторы
-            //                               данных, а не проверки.
+            //   captureBaseline, captureExtraBaseline, dumpVerificationArtifacts, sec4Tables —
+            //                               генераторы данных, а не проверки. `sec4Tables` здесь
+            //                               ОБЯЗАТЕЛЕН: без него `koverXmlReport` тянул его в job
+            //                               `fast` CI (~18 мин генерации таблиц статьи), и job
+            //                               падал по таймауту 20 мин — так было и в исходном
+            //                               монорепозитории после появления этой задачи.
             disabledForTestTasks.addAll(
                 "test",
                 "slowTest",
@@ -775,6 +779,7 @@ kover {
                 "captureBaseline",
                 "captureExtraBaseline",
                 "dumpVerificationArtifacts",
+                "sec4Tables",
             )
         }
     }
