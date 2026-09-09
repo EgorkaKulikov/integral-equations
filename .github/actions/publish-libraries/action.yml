@@ -1,30 +1,26 @@
-# Публикует библиотеки numerical-core и minimal-splines в mavenLocal раннера.
+# Публикует библиотеку minimal-splines в mavenLocal раннера.
 #
-# Нужна до появления удалённого реестра Maven: проект собирается ТОЛЬКО против
-# артефактов (см. verifyArtifactDependencies в build.gradle.kts), и раннер должен
-# откуда-то их взять. Клонируются ровно те ref'ы, что указаны в env workflow;
-# версии артефактов, которые ожидает сборка, задаёт gradle.properties — при
-# несовпадении Gradle упадёт на разрешении зависимостей, а не соберёт «что нашёл».
-name: Publish numerical libraries to mavenLocal
-description: Клонирует numerical-core и minimal-splines и публикует их в ~/.m2 раннера
+# numerical-core сюда больше не клонируется: он берётся из GitHub Packages
+# (см. repositories в build.gradle.kts) при наличии GITHUB_TOKEN в окружении шагов Gradle.
+# minimal-splines в удалённый реестр пока не публикуется, поэтому проект собирается
+# ТОЛЬКО против артефактов (см. verifyArtifactDependencies в build.gradle.kts), и раннер
+# должен собрать его из клона ref'а, указанного в env workflow. Сборке minimal-splines
+# тоже нужен numerical-core из GitHub Packages — токен передаётся тем же окружением.
+# Версии артефактов, которые ожидает сборка, задаёт gradle.properties — при несовпадении
+# Gradle упадёт на разрешении зависимостей, а не соберёт «что нашёл».
+name: Publish minimal-splines to mavenLocal
+description: Клонирует minimal-splines и публикует его в ~/.m2 раннера
 runs:
   using: composite
   steps:
-    - name: numerical-core -> mavenLocal
-      shell: bash
-      run: |
-        set -euo pipefail
-        git clone --depth 1 --branch "$NUMERICAL_CORE_REF" "$NUMERICAL_CORE_REPO" /tmp/numerical-core
-        (cd /tmp/numerical-core && ./gradlew publishToMavenLocal --no-daemon -q)
     - name: minimal-splines -> mavenLocal
       shell: bash
       run: |
         set -euo pipefail
         git clone --depth 1 --branch "$MINIMAL_SPLINES_REF" "$MINIMAL_SPLINES_REPO" /tmp/minimal-splines
         (cd /tmp/minimal-splines && ./gradlew publishToMavenLocal --no-daemon -q)
-    - name: Проверка наличия артефактов
+    - name: Проверка наличия артефакта
       shell: bash
       run: |
         set -euo pipefail
-        ls ~/.m2/repository/io/github/egorkakulikov/numerical-core/*/numerical-core-*.jar
         ls ~/.m2/repository/io/github/egorkakulikov/minimal-splines/*/minimal-splines-*.jar
