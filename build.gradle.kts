@@ -153,7 +153,7 @@ val scipyPython: String = if (System.getProperty("os.name").startsWith("Windows"
 //
 // Внешнее `-Dnumerics.backend=...` УВАЖАЕТСЯ и перекрывает значение по умолчанию:
 // этап 2.2 спека требует гонять `fastTest` НА ОБОИХ бэкендах.
-val numericsBackend: String = System.getProperty("numerics.backend") ?: "multik"
+val numericsBackend: String = System.getProperty("numerics.backend") ?: "auto"
 
 // --- Машинно-зависимые гейты (тег `machine`) --------------------------------
 //

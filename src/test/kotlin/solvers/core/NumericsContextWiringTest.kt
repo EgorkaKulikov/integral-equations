@@ -2,8 +2,7 @@ package solvers.core
 
 import numerics.GaussLegendre
 import numerics.NumericsContext
-import numerics.backend.MultikCpuBackend
-import numerics.backend.ReferenceBackend
+import numerics.backend.Backends
 import splines.GeneratingSystem
 import splines.Grid
 import splines.MinimalSplineBasis
@@ -73,8 +72,8 @@ class NumericsContextWiringTest {
      */
     @Test
     fun solverAgreesAcrossBackends() {
-        val multik = solver(NumericsContext(backend = MultikCpuBackend)).base()
-        val reference = solver(NumericsContext(backend = ReferenceBackend)).base()
+        val multik = solver(NumericsContext(backend = Backends.native())).base()
+        val reference = solver(NumericsContext(backend = Backends.java())).base()
         for (t in samplePoints) {
             val a = multik.eval(t)
             val b = reference.eval(t)
@@ -96,8 +95,8 @@ class NumericsContextWiringTest {
      */
     @Test
     fun differentBackendsTakeDifferentComputationPaths() {
-        val multik = solver(NumericsContext(backend = MultikCpuBackend)).base()
-        val reference = solver(NumericsContext(backend = ReferenceBackend)).base()
+        val multik = solver(NumericsContext(backend = Backends.native())).base()
+        val reference = solver(NumericsContext(backend = Backends.java())).base()
         val anyBitwiseDifference = samplePoints.any { t -> multik.eval(t) != reference.eval(t) }
         assertTrue(
             anyBitwiseDifference,
@@ -139,18 +138,18 @@ class NumericsContextWiringTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         // Семейство построено на reference, решатель просят считать на multik.
-        val funcs = ProjFunctionals(basis, NumericsContext(backend = ReferenceBackend))
+        val funcs = ProjFunctionals(basis, NumericsContext(backend = Backends.java()))
         val ex = assertFailsWith<IllegalArgumentException> {
             FredholmSecondKindSolver(
                 basis, funcs, op, 1.0,
                 RhsWithDerivatives({ t -> problem.rhsExact(t, op) }, { t -> problem.rhsExactDeriv(t, op) }),
-                ctx = NumericsContext(backend = MultikCpuBackend),
+                ctx = NumericsContext(backend = Backends.native()),
             )
         }
         val message = ex.message!!
         assertTrue(message.contains("funcs"), "Сообщение обязано называть зависимость: $message")
         assertTrue(
-            message.contains(ReferenceBackend.name) && message.contains(MultikCpuBackend.name),
+            message.contains(Backends.java().name) && message.contains(Backends.native().name),
             "Сообщение обязано называть ОБА бэкенда, чтобы расхождение было видно: $message",
         )
     }
@@ -176,8 +175,8 @@ class NumericsContextWiringTest {
     fun matchingContextsAreAccepted() {
         for (ctx in listOf(
             NumericsContext.default(),
-            NumericsContext(backend = ReferenceBackend),
-            NumericsContext(backend = MultikCpuBackend, parallel = false),
+            NumericsContext(backend = Backends.java()),
+            NumericsContext(backend = Backends.native(), parallel = false),
         )) {
             val solution = solver(ctx, n = 8).base()
             assertTrue(solution.eval(0.5).isFinite(), "ctx=${ctx.describe()}: решение обязано быть числом")
@@ -203,8 +202,8 @@ class NumericsContextWiringTest {
             return problems.uryson.secondKindSolver(UrysonProblem.A, basis, funcs, space, op, ctx = ctx)
                 .base().eval
         }
-        val multik = solve(NumericsContext(backend = MultikCpuBackend))
-        val reference = solve(NumericsContext(backend = ReferenceBackend))
+        val multik = solve(NumericsContext(backend = Backends.native()))
+        val reference = solve(NumericsContext(backend = Backends.java()))
         for (t in samplePoints) {
             val a = multik(t)
             val b = reference(t)
@@ -226,11 +225,11 @@ class NumericsContextWiringTest {
     fun mismatchedSplineSpaceContextFailsLoudly() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        val ctx = NumericsContext(backend = MultikCpuBackend)
+        val ctx = NumericsContext(backend = Backends.native())
         val funcs = ProjFunctionals(basis, ctx)
         // space построен на ДРУГОМ бэкенде, чем решатель и семейство.
         val space = solvers.uryson.SplineSpace(
-            basis, GaussLegendre(8), NumericsContext(backend = ReferenceBackend),
+            basis, GaussLegendre(8), NumericsContext(backend = Backends.java()),
         )
         val op = solvers.uryson.UrysohnOperator(UrysonProblem.A.kernel, grid, GaussLegendre(8))
         val ex = assertFailsWith<IllegalArgumentException> {
