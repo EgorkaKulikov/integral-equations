@@ -11,13 +11,28 @@ plugins {
 }
 
 repositories {
-    mavenCentral()
     // Библиотеки numerical-core и minimal-splines подключаются как ОПУБЛИКОВАННЫЕ
     // артефакты Maven, а не как исходники соседних репозиториев (никаких
-    // `project(":...")` и `../other-repo/src`). Локальная разработка:
-    // `./gradlew publishToMavenLocal` в каждой библиотеке, затем сборка здесь.
-    // Удалённый репозиторий — через свойство `numericsRepositoryUrl`.
+    // `project(":...")` и `../other-repo/src`). Порядок: mavenLocal первым — локальная
+    // сборка (`./gradlew publishToMavenLocal` в каждой библиотеке) имеет приоритет; затем
+    // GitHub Packages, откуда CI берёт numerical-core (minimal-splines в удалённый реестр
+    // пока не публикуется и берётся только из mavenLocal). GitHub Packages требует
+    // аутентификацию даже на чтение: GITHUB_ACTOR/GITHUB_TOKEN в окружении (в GitHub
+    // Actions — встроенный токен) или gpr.user/gpr.token в ~/.gradle/gradle.properties
+    // (токен с read:packages). Фильтр content ограничивает репозиторий группой библиотек,
+    // чтобы Gradle не ходил в GitHub Packages за остальными зависимостями.
     mavenLocal()
+    maven {
+        name = "GitHubPackagesNumericalCore"
+        url = uri("https://maven.pkg.github.com/EgorkaKulikov/numerical-core")
+        credentials {
+            username = providers.environmentVariable("GITHUB_ACTOR").orNull ?: providers.gradleProperty("gpr.user").orNull ?: ""
+            password = providers.environmentVariable("GITHUB_TOKEN").orNull ?: providers.gradleProperty("gpr.token").orNull ?: ""
+        }
+        content { includeGroup("io.github.egorkakulikov") }
+    }
+    mavenCentral()
+    // Дополнительный реестр — через свойство `numericsRepositoryUrl`.
     providers.gradleProperty("numericsRepositoryUrl").orNull?.let { maven(url = uri(it)) }
 }
 
@@ -142,18 +157,18 @@ val scipyPython: String = if (System.getProperty("os.name").startsWith("Windows"
 // --- Фиксация бэкенда линейной алгебры в тестах -----------------------------
 // Обоснование (по факту, не по осторожности). Эталон `baseline-eh.tsv` снят на
 // бэкенде multik/OpenBLAS, и он К НЕМУ ПРИВЯЗАН: прогон
-// `-Dnumerics.backend=reference` даёт 4/4 падения `EhCharacterizationTest` с
+// `-Dnumerics.backend=java` даёт 4/4 падения `EhCharacterizationTest` с
 // расхождением до 5.7e-2 (худший ключ `F1.B.theta.n8.sloan`) при допуске 1e-9 —
 // в 5·10^7 раз больше. Причина: F1 — уравнение первого рода, плохо
 // обусловленное, и разные реализации LU расходятся на нём закономерно.
 //
 // Одновременно `Backends.select` при недоступности нативной библиотеки МОЛЧА
-// откатывается на `ReferenceBackend`. Без явного выбора такой откат на другой
+// откатывается на чистый Java-бэкенд (`java`). Без явного выбора такой откат на другой
 // машине или в CI выглядел бы как «рефакторинг испортил числа».
 //
 // Внешнее `-Dnumerics.backend=...` УВАЖАЕТСЯ и перекрывает значение по умолчанию:
 // этап 2.2 спека требует гонять `fastTest` НА ОБОИХ бэкендах.
-val numericsBackend: String = System.getProperty("numerics.backend") ?: "multik"
+val numericsBackend: String = System.getProperty("numerics.backend") ?: "auto"
 
 // --- Машинно-зависимые гейты (тег `machine`) --------------------------------
 //
@@ -176,7 +191,7 @@ val numericsBackend: String = System.getProperty("numerics.backend") ?: "multik"
 //
 // РЕШЕНИЕ: разделение ПО ПЕРЕНОСИМОСТИ. Измерено, что машинно-зависимая
 // поверхность УЗКАЯ: 298 тестов (job'ы `fast` и `scipy`) ЗЕЛЁНЫЕ на чужой
-// архитектуре, а при ПОЛНОЙ замене реализации LU (`-Dnumerics.backend=reference`,
+// архитектуре, а при ПОЛНОЙ замене реализации LU (`-Dnumerics.backend=java`,
 // возмущение грубее смены архитектуры) 644 из 655 опубликованных значений
 // остаются в допуске. Непереносимы только два характеризационных класса и ОДИН
 // метод `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (F1, 11 расхождений

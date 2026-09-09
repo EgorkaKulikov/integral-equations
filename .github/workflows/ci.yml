@@ -1,11 +1,11 @@
 # Непрерывная интеграция проекта integral-equations.
 #
 # ЗАВИСИМОСТИ-АРТЕФАКТЫ. Проект собирается против опубликованных библиотек
-# `numerical-core` и `minimal-splines` (см. gradle.properties). Пока у библиотек нет
-# удалённого реестра Maven, каждый job сначала клонирует их репозитории и публикует в
-# mavenLocal раннера (composite action `.github/actions/publish-libraries`); адреса
-# репозиториев — в `env` ниже. С появлением реестра шаг публикации
-# заменяется на `-PnumericsRepositoryUrl=<url>` в каждом вызове Gradle. Задача
+# `numerical-core` и `minimal-splines` (см. gradle.properties). numerical-core берётся из
+# GitHub Packages (репозиторий объявлен в build.gradle.kts; чтение требует токена, поэтому
+# в `env` ниже — встроенный GITHUB_TOKEN и разрешение `packages: read`). У minimal-splines
+# удалённого реестра пока нет, поэтому каждый job сначала клонирует его и публикует в
+# mavenLocal раннера (composite action `.github/actions/publish-libraries`). Задача
 # `verifyArtifactDependencies` (входит в `check`) гарантирует, что библиотеки на classpath
 # присутствуют только как jar, а не как исходники соседних каталогов.
 #
@@ -43,11 +43,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  packages: read
+
 env:
-  # Репозитории библиотек и ветки/теги, из которых они
-  # публикуются в mavenLocal раннера. Версии артефактов задаёт gradle.properties.
-  NUMERICAL_CORE_REPO: https://github.com/EgorkaKulikov/numerical-core
-  NUMERICAL_CORE_REF: main
+  # Учётные данные для чтения numerical-core из GitHub Packages (GITHUB_ACTOR выставляет раннер).
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Репозиторий minimal-splines и ветка/тег, из которых он публикуется в mavenLocal
+  # раннера. Версии артефактов задаёт gradle.properties.
   MINIMAL_SPLINES_REPO: https://github.com/EgorkaKulikov/minimal-splines
   MINIMAL_SPLINES_REF: main
 
@@ -68,19 +72,19 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+      - name: Публикация minimal-splines в mavenLocal
         uses: ./.github/actions/publish-libraries
 
       # ДИАГНОСТИКА БЭКЕНДА — обязательно ПЕРВЫМ прогоном тестов.
       #
-      # Зачем. `Backends.select` при недоступности нативного OpenBLAS МОЛЧА
-      # откатывается на `ReferenceBackend`, а эталон `baseline-eh.tsv` привязан к
-      # multik: на reference гейт характеризации падает 4/4 с расхождением до 5.7e-2
-      # при допуске 1e-9. Без этого шага такой откат выглядел бы как «рефакторинг
+      # Зачем. `Backends.default()` в режиме `auto` при недоступности нативного
+      # BLAS/LAPACK МОЛЧА откатывается на чисто-Java реализацию (F2J), а эталон
+      # `baseline-eh.tsv` привязан к нативному LAPACK: на другой реализации LU гейт
+      # характеризации падает на ключах F1 с расхождением до 5.7e-2 при допуске 1e-9. Без этого шага такой откат выглядел бы как «рефакторинг
       # испортил числа», и разбирательство ушло бы не туда.
       #
       # Как это работает. `ActiveBackendDiagnosticTest` УТВЕРЖДАЕТ и доступность
-      # `MultikCpuBackend`, и то, что он выбран активным. Если нативная библиотека не
+      # нативного бэкенда (`Backends.isNativeAvailable()`), и то, что он выбран активным. Если нативная библиотека не
       # поднялась — падает именно этот тест с внятным сообщением. (Раньше эту роль играл
       # `numerics.backend.BackendSpiTest`; после выделения numerical-core он живёт там.)
       - name: Диагностика активного бэкенда линейной алгебры
@@ -122,7 +126,7 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+      - name: Публикация minimal-splines в mavenLocal
         uses: ./.github/actions/publish-libraries
 
       # ГЕЙТ E_h ПРОТИВ ЭТАЛОНА ЗДЕСЬ НЕ ГОНЯЕТСЯ — и это НЕ ослабление проверок.
@@ -173,7 +177,7 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+      - name: Публикация minimal-splines в mavenLocal
         uses: ./.github/actions/publish-libraries
 
       # Ключ кэша — хеш файла требований: смена пиннинга обязана приводить к
@@ -251,7 +255,7 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Публикация библиотек numerical-core и minimal-splines в mavenLocal
+      - name: Публикация minimal-splines в mavenLocal
         uses: ./.github/actions/publish-libraries
 
       # 23 теста тега `slow` за ОДИН запуск. Главное здесь и ни в одном другом job'е:

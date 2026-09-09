@@ -48,9 +48,12 @@
 
 ## 🚀 Быстрый старт
 
-Нужен только **JDK 21+**; Gradle подтягивается wrapper'ом. Библиотеки берутся из
-`mavenLocal()` (или из репозитория, заданного свойством `numericsRepositoryUrl`), поэтому
-до первой сборки их нужно опубликовать локально:
+Нужен только **JDK 21+**; Gradle подтягивается wrapper'ом. `numerical-core` берётся из
+GitHub Packages (нужен токен с `read:packages`: `gpr.user`/`gpr.token` в
+`~/.gradle/gradle.properties` или переменные `GITHUB_ACTOR`/`GITHUB_TOKEN`) либо из
+`mavenLocal()` после `publishToMavenLocal`; `minimal-splines` — только из `mavenLocal()`
+(или из репозитория, заданного свойством `numericsRepositoryUrl`). Поэтому до первой
+сборки библиотеки нужно опубликовать локально:
 
 ```bash
 git clone <адрес numerical-core>   && (cd numerical-core   && ./gradlew publishToMavenLocal)

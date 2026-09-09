@@ -4,11 +4,10 @@ import numerics.GaussLegendre
 import splines.GeneratingSystem
 import splines.Grid
 import splines.MinimalSplineBasis
+import numerics.LinearAlgebra
 import numerics.NumericsContext
 import numerics.backend.Backends
 import numerics.backend.LinAlgBackend
-import numerics.backend.MultikCpuBackend
-import numerics.backend.ReferenceBackend
 import splines.functionals.ProjFunctionals
 import problems.fredholm.FredholmProblem
 import solvers.core.RhsWithDerivatives
@@ -252,15 +251,15 @@ private fun runBackendComparison(config: BenchmarkConfig) {
         }
 
         val operations = linkedMapOf<String, (LinAlgBackend) -> Double>(
-            "matVec" to { backend -> backend.matVec(a, x)[0] },
-            "matMat" to { backend -> backend.matMat(a, b)[0][0] },
-            "addScaled" to { backend -> backend.addScaled(a, b, 1.5)[0][0] },
-            "solve" to { backend -> backend.solve(solvable, x)[0] },
+            "matVec" to { backend -> LinearAlgebra.matVec(a, x, backend)[0] },
+            "matMat" to { backend -> LinearAlgebra.matMat(a, b, backend)[0][0] },
+            "addScaled" to { backend -> LinearAlgebra.addScaled(a, b, 1.5, backend)[0][0] },
+            "solve" to { backend -> LinearAlgebra.solve(solvable, x, backend)[0] },
         )
 
         for ((operationName, operation) in operations) {
             val timings = LinkedHashMap<String, Measurement>()
-            for (backend in listOf<LinAlgBackend>(MultikCpuBackend, ReferenceBackend)) {
+            for (backend in listOf<LinAlgBackend>(Backends.native(), Backends.java())) {
                 // matMat и solve кубичны: на 1024 повторы сокращаются, чтобы бенчмарк
                 // завершался за разумное время даже на медленном JVM-бэкенде.
                 val heavy = operationName == "matMat" || operationName == "solve"
@@ -272,8 +271,8 @@ private fun runBackendComparison(config: BenchmarkConfig) {
                     System.nanoTime() - start
                 }
             }
-            val multik = timings.getValue(MultikCpuBackend.name)
-            val reference = timings.getValue(ReferenceBackend.name)
+            val multik = timings.getValue(Backends.native().name)
+            val reference = timings.getValue(Backends.java().name)
             val ratio = multik.median / reference.median
             println(
                 "%6d %10s %14.4f %14.4f %10.2f".format(

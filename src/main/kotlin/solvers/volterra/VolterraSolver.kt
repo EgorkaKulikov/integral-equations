@@ -82,6 +82,9 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
 
     /** (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds для произвольной u(s). */
     fun apply(t: Double, u: (Double) -> Double): Double {
+        // numerical-core 1.0.0 отвергает нечисловые точки разбиения исключением; контракт
+        // оператора — распространять NaN аргумента, как это делает кэшированный путь.
+        if (t.isNaN()) return Double.NaN
         if (t <= a) return 0.0
         return quad.integrate(subBreakpoints(t)) { s -> kernel.k(t, s) * u(s) }
     }
@@ -276,7 +279,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
     fun applyDeriv(t: Double, u: (Double) -> Double): Double {
         if (t < a) return 0.0
         val boundary = kernel.k(t, t) * u(t)
-        val integral = if (t <= a) 0.0 else quad.integrate(subBreakpoints(t)) { s -> kernel.kT(t, s) * u(s) }
+        val integral = if (t.isNaN()) Double.NaN else if (t <= a) 0.0 else quad.integrate(subBreakpoints(t)) { s -> kernel.kT(t, s) * u(s) }
         return boundary + integral
     }
 
@@ -303,7 +306,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
         val kd = kernel.k(t, t)
         val diag = 2.0 * kernel.kT(t, t) + kernel.kS(t, t)
         val boundary = diag * u(t) + kd * uD(t)
-        val integral = if (t <= a) 0.0 else quad.integrate(subBreakpoints(t)) { s -> kernel.kTT(t, s) * u(s) }
+        val integral = if (t.isNaN()) Double.NaN else if (t <= a) 0.0 else quad.integrate(subBreakpoints(t)) { s -> kernel.kTT(t, s) * u(s) }
         return boundary + integral
     }
 }

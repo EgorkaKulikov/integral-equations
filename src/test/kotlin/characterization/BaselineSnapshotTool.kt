@@ -36,16 +36,7 @@ import kotlin.test.Test
  */
 class BaselineSnapshotTool {
 
-    private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
-        "theta" -> splines.functionals.ProjFunctionals(basis)
-        "xi0" -> DeBoorFixFunctionals(basis, 0)
-        "xi1" -> DeBoorFixFunctionals(basis, 1)
-        "xi2" -> DeBoorFixFunctionals(basis, 2)
-        "xitilde1" -> DiscreteDeBoorFixFunctionals(basis, 1)
-        "xitilde2" -> DiscreteDeBoorFixFunctionals(basis, 2)
-        "mu" -> AveragingFunctionals(basis)
-        else -> ThreePointFunctionals(basis)
-    }
+    private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = familyFor(name, basis)
 
     /**
      * Пишет пару «ключ-значение» в файл `build/baseline/<поток>.tsv`.
@@ -221,6 +212,18 @@ class BaselineSnapshotTool {
     }
 
     companion object {
+        /** Семейство функционалов по имени ключа эталона; общее с [F1ConditioningTest]. */
+        internal fun familyFor(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
+            "theta" -> splines.functionals.ProjFunctionals(basis)
+            "xi0" -> DeBoorFixFunctionals(basis, 0)
+            "xi1" -> DeBoorFixFunctionals(basis, 1)
+            "xi2" -> DeBoorFixFunctionals(basis, 2)
+            "xitilde1" -> DiscreteDeBoorFixFunctionals(basis, 1)
+            "xitilde2" -> DiscreteDeBoorFixFunctionals(basis, 2)
+            "mu" -> AveragingFunctionals(basis)
+            else -> ThreePointFunctionals(basis)
+        }
+
         /**
          * РАСШИРЕННОЕ ПОКРЫТИЕ F1 в характеризационном эталоне (этап 8.6).
          *
