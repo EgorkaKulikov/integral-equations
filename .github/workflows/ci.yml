@@ -60,8 +60,19 @@ jobs:
     name: Быстрый набор тестов и покрытие
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
+      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      OPENBLAS_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v7
+
+      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
+      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
+      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
+      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
+      - name: Системная BLAS/LAPACK (OpenBLAS)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
       - name: Установка JDK 21
         uses: actions/setup-java@v5
@@ -110,12 +121,23 @@ jobs:
   characterization:
     name: Гейты численной нейтральности и порядка сходимости
     runs-on: ubuntu-latest
+    env:
+      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
+      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      OPENBLAS_NUM_THREADS: 4
     # Замеры на машине разработчика: `characterizationTest` 5 тестов ~27 с,
     # `extraCharacterizationTest` ~19 с, `convergenceOrderTest` 1.5-2 мин — итого ~2.5 мин.
     # Запас многократный — на холодный старт JVM и непрогретый кэш Gradle на раннере.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+
+      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
+      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
+      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
+      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
+      - name: Системная BLAS/LAPACK (OpenBLAS)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
       - name: Установка JDK 21
         uses: actions/setup-java@v5
@@ -165,8 +187,19 @@ jobs:
     name: Внешняя сверка со SciPy
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
+      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      OPENBLAS_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v7
+
+      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
+      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
+      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
+      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
+      - name: Системная BLAS/LAPACK (OpenBLAS)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
       - name: Установка JDK 21
         uses: actions/setup-java@v5
@@ -243,8 +276,19 @@ jobs:
     name: Медленный набор тестов (сверка с публикацией)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
+      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      OPENBLAS_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v7
+
+      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
+      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
+      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
+      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
+      - name: Системная BLAS/LAPACK (OpenBLAS)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
       - name: Установка JDK 21
         uses: actions/setup-java@v5

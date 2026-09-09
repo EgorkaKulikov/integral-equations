@@ -405,6 +405,13 @@ tasks.test {
     systemProperty("numerics.backend", numericsBackend)
 }
 
+// Стек тестовой JVM. Нативный LAPACK (OpenBLAS в CI на ubuntu) в многопоточном dgetrf
+// кладёт на стек вызывающего потока большие рабочие массивы; при стандартном -Xss
+// это SIGSEGV/SIGBUS без stack trace (exit 139). В CI дополнительно OPENBLAS_NUM_THREADS=4.
+tasks.withType<Test>().configureEach {
+    jvmArgs("-Xss8m")
+}
+
 /**
  * СОСТАВ `check` (и следом — `build`): `fastTest` + `characterizationTest` +
  * `extraCharacterizationTest` + `slowTest` (плюс `koverVerify`, добавленный плагином).
