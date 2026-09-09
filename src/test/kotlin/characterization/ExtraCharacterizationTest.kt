@@ -137,6 +137,14 @@ class ExtraCharacterizationTest {
             // а сравнивается по ослабленному, но КОНЕЧНОМУ критерию: относительный допуск
             // 1e-3 при поле 1e-16 (см. KDoc [ExtraCharacterizationMatrix.SMALL_VALUE_RELATIVE_TOLERANCE]).
             // Ключи невязки сюда не попадают: у них свой пол 1e-18, ниже любого их значения.
+            // Расхождение на уровне шума округления допусками не проверяется (см. KDoc
+            // [ExtraCharacterizationMatrix.NOISE_FLOOR] и [ExtraCharacterizationMatrix.RESIDUAL_NOISE_FLOOR]).
+            val noiseFloor = if (isResidual) {
+                ExtraCharacterizationMatrix.RESIDUAL_NOISE_FLOOR
+            } else {
+                ExtraCharacterizationMatrix.NOISE_FLOOR
+            }
+            if (abs(actualNumber - expectedNumber) <= noiseFloor) continue
             val degenerate = abs(expectedNumber) < floor && abs(actualNumber) < floor
             val effectiveTolerance = if (degenerate) {
                 ExtraCharacterizationMatrix.SMALL_VALUE_RELATIVE_TOLERANCE

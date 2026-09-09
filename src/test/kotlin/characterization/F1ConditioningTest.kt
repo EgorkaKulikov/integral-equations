@@ -15,6 +15,8 @@ import solvers.fredholm.FredholmSecondKindSolver
 import splines.GeneratingSystem
 import splines.Grid
 import splines.MinimalSplineBasis
+import java.io.File
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.test.Test
@@ -34,7 +36,8 @@ import kotlin.test.assertTrue
  *
  * Система строится ТЕМ ЖЕ кодом, что и в [FredholmFirstKindSolver]: внутренний
  * [FredholmSecondKindSolver] с `c_L = -1/alpha` и правой частью `f/alpha` (см. поле
- * `inner` решателя первого рода). Тест печатает таблицу и утверждает только то, что
+ * `inner` решателя первого рода). Тест пишет таблицу в `build/reports/f1-conditioning.tsv`
+ * (источник чисел для записей в `docs/baseline-changes.md`) и утверждает только то, что
  * решение вообще получено с обратной ошибкой уровня машинной точности — то есть LU
  * устойчив, а всё различие между реализациями объясняется числом обусловленности.
  */
@@ -80,15 +83,23 @@ class F1ConditioningTest {
                 }
             }
         }
-        println("F1: backend=${Backends.describe()}")
-        println("система семейство   n        cond_1        omega   cond*max(omega,1e-16)    ||c||inf    ||u||inf")
-        for (r in rows) {
-            println(
-                "%-7s %-9s %3d  %12.4e  %11.4e  %20.4e  %10.4e  %10.4e".format(
-                    r.system.name, r.family, r.n, r.cond, r.omega, r.bound, r.coeffNormInf, r.solutionNormInf,
-                ),
-            )
-        }
+        // Таблица идёт в файл, а не в stdout: 27 строк на каждый прогон засоряют отчёт Gradle.
+        val report = File("build/reports").apply { mkdirs() }.resolve("f1-conditioning.tsv")
+        report.writeText(
+            buildString {
+                append("# F1: backend=${Backends.describe()}\n")
+                append("система\tсемейство\tn\tcond_1\tomega\tcond*max(omega,1e-16)\t||c||inf\t||u||inf\n")
+                for (r in rows) {
+                    append(
+                        "%s\t%s\t%d\t%.6e\t%.6e\t%.6e\t%.6e\t%.6e\n".format(
+                            Locale.ROOT,
+                            r.system.name, r.family, r.n, r.cond, r.omega, r.bound, r.coeffNormInf, r.solutionNormInf,
+                        ),
+                    )
+                }
+            },
+        )
+        println("F1: backend=${Backends.describe()}, таблица обусловленности — ${report.path}")
         val worstOmega = rows.maxOf { it.omega }
         val minCond = rows.minOf { it.cond }
         val maxCond = rows.maxOf { it.cond }
