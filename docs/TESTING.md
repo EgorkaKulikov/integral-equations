@@ -158,8 +158,8 @@ macOS aarch64 (записано в шапках файлов) и сверяют�
 ## Зависимости-артефакты
 
 Библиотеки `numerical-core` (пакет `numerics.*`) и `minimal-splines` (пакеты
-`splines.*`) подключены **только как Maven-артефакты** из `mavenLocal()` либо из
-репозитория, заданного свойством `-PnumericsRepositoryUrl=...`; версии закреплены в
+`splines.*`) подключены **только как Maven-артефакты** из `mavenLocal()`, из GitHub Packages
+либо из репозитория, заданного свойством `-PnumericsRepositoryUrl=...`; версии закреплены в
 `gradle.properties` (`numericalCoreVersion`, `minimalSplinesVersion`). Никаких
 `project(":...")` и `files("../…")` — иначе три репозитория остались бы монорепозиторием.
 
@@ -168,12 +168,10 @@ macOS aarch64 (записано в шапках файлов) и сверяют�
 classpath не является каталогом или файлом из `build/` соседнего репозитория. Случайная
 зависимость от исходников соседа проваливает `check`.
 
-В CI библиотеки не берутся из удалённого реестра (он пока не определён): каждый job
-сначала клонирует репозитории `EgorkaKulikov/numerical-core` и
-`EgorkaKulikov/minimal-splines` (адреса вынесены в `env` workflow) и
-выполняет в них `./gradlew publishToMavenLocal`, после чего собирает этот проект против
-`~/.m2`. При появлении реестра шаг клонирования заменяется на
-`-PnumericsRepositoryUrl=...`.
+В CI обе библиотеки берутся из GitHub Packages (реестры `EgorkaKulikov/numerical-core` и
+`EgorkaKulikov/minimal-splines`, объявлены в `build.gradle.kts`): workflow передаёт встроенный
+`GITHUB_TOKEN` с разрешением `packages: read`, клонирования и локальной публикации соседних
+репозиториев нет.
 
 ## Служебные задачи
 

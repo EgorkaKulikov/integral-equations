@@ -4,6 +4,7 @@ import kotlin.math.abs
 import numerics.*
 import splines.*
 import solvers.core.SolutionFunc
+import solvers.core.SupportPoints
 import solvers.core.reportConvergence
 import splines.functionals.*
 import splines.metrics.*

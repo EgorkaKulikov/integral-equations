@@ -15,8 +15,8 @@ repositories {
     // артефакты Maven, а не как исходники соседних репозиториев (никаких
     // `project(":...")` и `../other-repo/src`). Порядок: mavenLocal первым — локальная
     // сборка (`./gradlew publishToMavenLocal` в каждой библиотеке) имеет приоритет; затем
-    // GitHub Packages, откуда CI берёт numerical-core (minimal-splines в удалённый реестр
-    // пока не публикуется и берётся только из mavenLocal). GitHub Packages требует
+    // GitHub Packages — по одному реестру на библиотеку (numerical-core и minimal-splines
+    // публикуются в реестры своих репозиториев). GitHub Packages требует
     // аутентификацию даже на чтение: GITHUB_ACTOR/GITHUB_TOKEN в окружении (в GitHub
     // Actions — встроенный токен) или gpr.user/gpr.token в ~/.gradle/gradle.properties
     // (токен с read:packages). Фильтр content ограничивает репозиторий группой библиотек,
@@ -25,6 +25,15 @@ repositories {
     maven {
         name = "GitHubPackagesNumericalCore"
         url = uri("https://maven.pkg.github.com/EgorkaKulikov/numerical-core")
+        credentials {
+            username = providers.environmentVariable("GITHUB_ACTOR").orNull ?: providers.gradleProperty("gpr.user").orNull ?: ""
+            password = providers.environmentVariable("GITHUB_TOKEN").orNull ?: providers.gradleProperty("gpr.token").orNull ?: ""
+        }
+        content { includeGroup("io.github.egorkakulikov") }
+    }
+    maven {
+        name = "GitHubPackagesMinimalSplines"
+        url = uri("https://maven.pkg.github.com/EgorkaKulikov/minimal-splines")
         credentials {
             username = providers.environmentVariable("GITHUB_ACTOR").orNull ?: providers.gradleProperty("gpr.user").orNull ?: ""
             password = providers.environmentVariable("GITHUB_TOKEN").orNull ?: providers.gradleProperty("gpr.token").orNull ?: ""

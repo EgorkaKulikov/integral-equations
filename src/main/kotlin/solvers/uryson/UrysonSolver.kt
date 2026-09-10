@@ -10,7 +10,7 @@ import numerics.ParallelAssembly
 import solvers.core.SolutionFunc
 import splines.functionals.ApproxFunctional
 import splines.functionals.ProjFunctionals
-import splines.functionals.SupportPoints
+import solvers.core.SupportPoints
 import splines.functionals.ValueFunctional
 import solvers.core.reportConvergence
 
