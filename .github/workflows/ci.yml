@@ -1,11 +1,9 @@
 # Непрерывная интеграция проекта integral-equations.
 #
 # ЗАВИСИМОСТИ-АРТЕФАКТЫ. Проект собирается против опубликованных библиотек
-# `numerical-core` и `minimal-splines` (см. gradle.properties). numerical-core берётся из
-# GitHub Packages (репозиторий объявлен в build.gradle.kts; чтение требует токена, поэтому
-# в `env` ниже — встроенный GITHUB_TOKEN и разрешение `packages: read`). У minimal-splines
-# удалённого реестра пока нет, поэтому каждый job сначала клонирует его и публикует в
-# mavenLocal раннера (composite action `.github/actions/publish-libraries`). Задача
+# `numerical-core` и `minimal-splines` (см. gradle.properties). Обе берутся из GitHub Packages
+# (по одному реестру на библиотеку, объявлены в build.gradle.kts; чтение требует токена,
+# поэтому в `env` ниже — встроенный GITHUB_TOKEN и разрешение `packages: read`). Задача
 # `verifyArtifactDependencies` (входит в `check`) гарантирует, что библиотеки на classpath
 # присутствуют только как jar, а не как исходники соседних каталогов.
 #
@@ -48,12 +46,9 @@ permissions:
   packages: read
 
 env:
-  # Учётные данные для чтения numerical-core из GitHub Packages (GITHUB_ACTOR выставляет раннер).
+  # Учётные данные для чтения numerical-core и minimal-splines из GitHub Packages
+  # (GITHUB_ACTOR выставляет раннер). Версии артефактов задаёт gradle.properties.
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # Репозиторий minimal-splines и ветка/тег, из которых он публикуется в mavenLocal
-  # раннера. Версии артефактов задаёт gradle.properties.
-  MINIMAL_SPLINES_REPO: https://github.com/EgorkaKulikov/minimal-splines
-  MINIMAL_SPLINES_REF: main
 
 jobs:
   fast:
@@ -82,9 +77,6 @@ jobs:
 
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
-
-      - name: Публикация minimal-splines в mavenLocal
-        uses: ./.github/actions/publish-libraries
 
       # ДИАГНОСТИКА БЭКЕНДА — обязательно ПЕРВЫМ прогоном тестов.
       #
@@ -148,9 +140,6 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Публикация minimal-splines в mavenLocal
-        uses: ./.github/actions/publish-libraries
-
       # ГЕЙТ E_h ПРОТИВ ЭТАЛОНА ЗДЕСЬ НЕ ГОНЯЕТСЯ — и это НЕ ослабление проверок.
       # `EhCharacterizationTest` сверяет 1366 значений с допуском 1e-9 против эталона,
       # снятого на macOS aarch64. На ubuntu x86_64 он был КРАСНЫМ С ПЕРВОГО ПРОГОНА
@@ -209,9 +198,6 @@ jobs:
 
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
-
-      - name: Публикация minimal-splines в mavenLocal
-        uses: ./.github/actions/publish-libraries
 
       # Ключ кэша — хеш файла требований: смена пиннинга обязана приводить к
       # переустановке окружения, иначе сверка шла бы на старых версиях SciPy.
@@ -298,9 +284,6 @@ jobs:
 
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
-
-      - name: Публикация minimal-splines в mavenLocal
-        uses: ./.github/actions/publish-libraries
 
       # 23 теста тега `slow` за ОДИН запуск. Главное здесь и ни в одном другом job'е:
       # `PublishedValuesTest` — сверка с ВНЕШНИМ источником правды, не замкнутая
