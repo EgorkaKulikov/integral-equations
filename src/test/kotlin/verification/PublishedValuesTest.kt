@@ -53,6 +53,17 @@ import kotlin.test.fail
  * ошибки `2·cond₁·ω·‖u‖∞` ([F1_LU_PATH_DEVIATION_BOUND]), измеренной
  * `characterization.F1ConditioningTest`; обоснование — `docs/baseline-changes.md`.
  *
+ * УТОЧНЕНИЕ (2026-09-10, minimal-splines 1.0.0). Базис минимальных сплайнов вычисляется
+ * в локальных координатах интервала (`cond(M̃_k) ≈ 13…21` вместо `10³…10⁴` в 0.1.0).
+ * Для задач с точным решением в `span φ` (F2exp и V2exp с базисом H, V2win с базисом T)
+ * опубликованные `E_h ~ 10⁻¹²…10⁻¹⁰` оказались погрешностью обращения матриц
+ * аппроксимационного соотношения реализацией 0.1.0, а не погрешностью метода: 17 ключей
+ * [KNOWN_CONDITIONING_ARTIFACTS] проверяются машинным уровнем
+ * [CONDITIONING_ARTIFACT_MACHINE_LEVEL], а не сравнением с публикацией. Ещё 6 ключей F1
+ * вышли за 2 % (2.29–8.69 %) в пределах той же границы `2·cond₁·ω·‖u‖∞` и добавлены в
+ * [KNOWN_LU_PATH_DEVIATIONS] (17 → 23). Допуск 2 % не менялся; обоснование —
+ * `docs/baseline-changes.md` (запись от 2026-09-10).
+ *
  * Чего широкий допуск НЕ делает: он НЕ заменяет гейт численной неизменности.
  * Мелкие регрессии в F1 ловит `characterization.EhCharacterizationTest` с допуском
  * 1e-9, чьё покрытие F1 расширено в том же этапе ИМЕННО в качестве компенсации
@@ -164,14 +175,63 @@ class PublishedValuesTest {
          * пройдёт и по 2 %, ничего не сломав; если разойдётся ключ НЕ из списка — тест
          * упадёт, как и должен. Измерение — `characterization.F1ConditioningTest`,
          * обоснование — `docs/baseline-changes.md` (запись от 2026-09-09).
+         *
+         * Дополнение (2026-09-10, minimal-splines 1.0.0): базис в локальных координатах
+         * возмущает коэффициенты F1-систем на `cond·10⁻¹²·‖u‖`, и ещё 6 ключей вышли за
+         * допуск на 2.29–8.69 % (максимум |Δ| = 5.8e-6 при границе 3.8e-5; на 1.0.0 измерено
+         * `ω ≤ 4.6e-16`, граница с `ω = 3.0e-16` сохранена как более строгая). Итого 23 ключа.
          */
         val KNOWN_LU_PATH_DEVIATIONS = setOf(
+            // numerical-core 1.0.0 (2026-09-09): 17 ключей.
             "F.F1.B.xi1.n16.sloan.Eh", "F.F1.B.xi1.n32.base.Eh", "F.F1.B.xi1.n32.sloan.Eh",
             "F.F1.B.xi2.n32.sloan.Eh", "F.F1.H.theta.n32.sloan.Eh", "F.F1.H.xi1.n16.base.Eh",
             "F.F1.H.xi1.n16.sloan.Eh", "F.F1.H.xi1.n32.base.Eh", "F.F1.H.xi1.n32.sloan.Eh",
             "F.F1.H.xi2.n32.base.Eh", "F.F1.H.xi2.n32.sloan.Eh", "F.F1.T.xi1.n32.base.Eh",
             "F.F1.T.xi1.n32.sloan.Eh", "F.F1.T.xi2.n16.base.Eh", "F.F1.T.xi2.n16.sloan.Eh",
             "F.F1.T.xi2.n32.base.Eh", "F.F1.T.xi2.n32.sloan.Eh",
+            // minimal-splines 1.0.0 (2026-09-10): 6 ключей, 2.29–8.69 %.
+            "F.F1.B.xi2.n8.sloan.Eh", "F.F1.B.xi2.n16.sloan.Eh", "F.F1.B.xi2.n32.base.Eh",
+            "F.F1.H.theta.n8.sloan.Eh", "F.F1.H.xi1.n8.sloan.Eh", "F.F1.T.xi1.n16.sloan.Eh",
+        )
+
+        /**
+         * Машинный уровень `E_h` для ключей [KNOWN_CONDITIONING_ARTIFACTS]: `1e-14`, то есть
+         * порядка `10·ε·‖u‖∞` (`ε = 2.2e-16`, `‖u‖∞ ≤ e`). Фактические значения на
+         * minimal-splines 1.0.0 — `8.9e-16…5.1e-15` (запас в два раза на различие
+         * реализаций BLAS и архитектур CPU; `EhCharacterizationTest` держит те же ключи с
+         * полом `6e-13`, так что сдвиг внутри запаса здесь не был бы регрессией).
+         */
+        const val CONDITIONING_ARTIFACT_MACHINE_LEVEL = 1e-14
+
+        /**
+         * Ключи, опубликованные значения которых — артефакт обусловленности реализации
+         * базиса minimal-splines 0.1.0, а не погрешность метода.
+         *
+         * Задачи F2exp и V2exp с базисом H и V2win с базисом T имеют точное решение в
+         * `span φ` порождающей системы; метод на нём точен по построению. Опубликованные
+         * значения (`7.2·10⁻¹²`, `1.7·10⁻¹¹`, `1.1·10⁻¹⁰` для `F2exp.H.theta` при
+         * `n = 16/32/64` и аналогичные для остальных 14 ключей, всего `1.1e-12…1.4e-10`)
+         * получены реализацией базиса в глобальных координатах порождающей системы и
+         * отражают погрешность обращения матриц аппроксимационного соотношения
+         * (`cond ~ 10³…10⁴`, рост `~n²`), а не погрешность метода. В текущей реализации
+         * (локальные координаты интервала, `cond ≈ 21`) `E_h` на этих ключах не превышает
+         * `6·10⁻¹⁵`. Для них вместо сравнения с публикацией проверяется
+         * `E_h ≤ CONDITIONING_ARTIFACT_MACHINE_LEVEL`.
+         *
+         * Список ЯВНЫЙ: остальные ключи тех же таблиц с опубликованным значением ниже
+         * [NOISE_FLOOR] исключаются из сверки как шум по общему правилу, а ключи с
+         * решением вне `span φ` (базисы B и T для exp-задач, H для V2win) сверяются
+         * с публикацией допуском 2 %. Обоснование — `docs/baseline-changes.md`
+         * (запись от 2026-09-10) и minimal-splines `docs/ТОЧНОСТЬ.md`.
+         */
+        val KNOWN_CONDITIONING_ARTIFACTS = setOf(
+            "F.F2exp.H.theta.n16.base.Eh", "F.F2exp.H.theta.n32.base.Eh", "F.F2exp.H.theta.n64.base.Eh",
+            "F.F2exp.H.xi1.n8.base.Eh", "F.F2exp.H.xi1.n16.base.Eh", "F.F2exp.H.xi1.n32.base.Eh",
+            "F.F2exp.H.xi1.n64.base.Eh",
+            "V.V2exp.H.theta.n16.base.Eh", "V.V2exp.H.theta.n32.base.Eh", "V.V2exp.H.theta.n64.base.Eh",
+            "V.V2exp.H.xi1.n16.base.Eh", "V.V2exp.H.xi1.n32.base.Eh", "V.V2exp.H.xi1.n64.base.Eh",
+            "V.V2win.T.theta.n32.base.Eh", "V.V2win.T.theta.n64.base.Eh",
+            "V.V2win.T.xi1.n32.base.Eh", "V.V2win.T.xi1.n64.base.Eh",
         )
 
         /**
@@ -315,6 +375,7 @@ class PublishedValuesTest {
         var checked = 0
         var skippedAsNoise = 0
         var knownDeviations = 0
+        var knownArtifacts = 0
         val missing = mutableListOf<String>()
     }
 
@@ -352,6 +413,23 @@ class PublishedValuesTest {
             return
         }
         verification.checked++
+        // Опубликованное значение — артефакт обусловленности базиса 0.1.0; проверяется
+        // машинный уровень, а не совпадение (см. KNOWN_CONDITIONING_ARTIFACTS).
+        if (key in KNOWN_CONDITIONING_ARTIFACTS) {
+            if (actual <= CONDITIONING_ARTIFACT_MACHINE_LEVEL) {
+                verification.knownArtifacts++
+            } else {
+                verification.mismatches += buildString {
+                    append(key)
+                    append(": опубликовано=").append(expected.value)
+                    append(" (артефакт обусловленности базиса 0.1.0), вычислено=").append(actual)
+                    append(", ожидался машинный уровень <= ").append(CONDITIONING_ARTIFACT_MACHINE_LEVEL)
+                    append(" [источник: ").append(expected.sourceFile)
+                    append(", ").append(expected.location).append("]")
+                }
+            }
+            return
+        }
         val relative = abs(actual - expected.value) / abs(expected.value)
         val tolerance = toleranceFor(expected)
         if (relative > tolerance) {
@@ -416,7 +494,8 @@ class PublishedValuesTest {
         )
         println(
             "$title: сверено ${verification.checked}, исключено как шум ${verification.skippedAsNoise}, " +
-                "известных расхождений путей LU ${verification.knownDeviations}",
+                "известных расхождений путей LU ${verification.knownDeviations}, " +
+                "артефактов обусловленности базиса 0.1.0 ${verification.knownArtifacts}",
         )
         // Защита от вырождения: тест не должен молча деградировать до пустышки,
         // если ключи теста и эталона разойдутся. Границы взяты из фактического прогона.
