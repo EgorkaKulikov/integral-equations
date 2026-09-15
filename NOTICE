@@ -1,0 +1,6 @@
+integral-equations
+Copyright 2026 Egor Kulikov
+
+This software is distributed under the Apache License 2.0 (see LICENSE).
+It uses the minimal-splines and numerical-core libraries (Apache License 2.0),
+which access BLAS/LAPACK through dev.ludovic.netlib (MIT License).
