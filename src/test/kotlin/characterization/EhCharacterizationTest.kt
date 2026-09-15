@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Tag
 import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmSecondKindSolver
 import solvers.volterra.VolterraSecondKindSolver
-import kotlin.math.abs
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -29,74 +29,39 @@ import kotlin.test.fail
  * Эталон хранится в `src/test/resources/characterization/baseline-eh.tsv` и снят
  * инструментом [BaselineSnapshotTool] на исходном состоянии репозитория.
  *
- * Допуск [RELATIVE_TOLERANCE] = 1e-9 (относительный) выбран так, чтобы:
- *  - пропускать несущественные различия последних битов, возможные из-за иного
- *    порядка суммирования при параллельной сборке матриц;
- *  - ловить любое реальное изменение алгоритма (оно меняет результат на много
- *    порядков больше).
+ * РЕЖИМ СРАВНЕНИЯ БЕРЁТСЯ ИЗ ДАННЫХ — третья колонка эталона (`класс`), а не из
+ * констант этого класса. Классы и их измеренное обоснование — [BaselineClass];
+ * разбор и сравнение — [BaselineFormat]; вычисление колонки — `./gradlew classifyBaseline`.
+ * Коротко: `portable` — отн. 1e-9 при поле 6e-13 (ловит любое изменение алгоритма,
+ * прощает последние биты при ином порядке суммирования), `sensitive` — граница
+ * `2*cond*max(omega,eps)*||u||inf`, ВЫЧИСЛЯЕМАЯ в прогоне ([F1SystemConditioning]).
  *
  * ВАЖНО: если изменение алгоритма ОБОСНОВАНО (исправление ошибки), эталон следует
- * пересnimать осознанно, зафиксировав старое и новое значения в отчёте, а не
+ * пересматривать осознанно, зафиксировав старое и новое значения в отчёте, а не
  * «подгонять» допуск.
  *
- * ТЕГ `machine` — ЭТАЛОН ПРИВЯЗАН К МАШИНЕ, НА КОТОРОЙ СНЯТ.
- * Шапка `baseline-eh.tsv` фиксирует окружение снятия: multik/OpenBLAS, JDK 21,
- * macOS aarch64. На другой архитектуре CPU нативный BLAS выбирает другие ядра
- * (NEON против AVX), а с ними — другой порядок блочного суммирования. Разница
- * возникает в последних битах, но допуск здесь 1e-9, и на плохо обусловленных
- * задачах F1 (`cond(I - M) ~ 1e10`) она усиливается на много порядков: у схемы
- * `sloan` два слагаемых порядка 1.38e10 сокращаются до O(1), и три математически
- * эквивалентных порядка суммирования дают `E_h` с разбросом 4.3-39.9 %
- * (измерено, см. `docs/baseline-changes.md`).
- *
- * Поэтому тест — ЛОКАЛЬНЫЙ гейт (он же в `./gradlew check`), а в CI на чужой
- * архитектуре он исключается флагом `-PmachineDependentGates=false`. Сверка
- * эталона на другом железе не делает гейт строже — она делает его вечно красным,
- * а красный гейт перестают читать. Подробности — `docs/TESTING.md`.
+ * ТЕГА `machine` БОЛЬШЕ НЕТ — и это результат ИЗМЕРЕНИЯ, а не смягчения требований.
+ * Снятие обеих матриц на `-Dnumerics.backend=java` (netlib F2J) и на `native`
+ * (netlib + Apple Accelerate) показало: из 1366 ключей текущий гейт валили ровно 52,
+ * ВСЕ `F1.*`; у остальных 1312 расхождение путей LU не превышает 1.0e-14 при поле
+ * 6e-13 — запас 60x. Ключи F1 выделены в класс `sensitive` и сверяются с границей,
+ * вычисляемой на том же бэкенде, поэтому гейт зелёный на ОБОИХ путях LU и гоняется
+ * в CI (ubuntu/OpenBLAS — третий независимый путь). Подробности — `docs/TESTING.md`
+ * и `docs/baseline-changes.md`.
  */
 @Tag("slow")
-@Tag("machine")
 class EhCharacterizationTest {
 
     private companion object {
-        /** Относительный допуск сравнения с эталоном. */
-        const val RELATIVE_TOLERANCE = 1e-9
-
-        /**
-         * Абсолютный «пол» сравнения: расхождение |actual − expected| не выше него —
-         * шум округления, относительным допуском не проверяется.
-         *
-         * Значение — `10³·ε·‖u‖∞` при `‖u‖∞ ≈ e` (решения задач эталона имеют порядок
-         * `e^t` на `[0,1]`): `E_h = max|u − u_h|` есть разность величин порядка `e`, и
-         * накопленная ошибка округления при её вычислении (сборка `u_h` из `O(n)`
-         * слагаемых, LU-разложение, квадратуры) составляет десятки–сотни `ε·‖u‖`.
-         * Отклонения ниже этого уровня не отличимы от шума и не являются изменением
-         * метода. Измерено при смене реализации LAPACK (numerical-core 1.0.0:
-         * multik/OpenBLAS → netlib с системной библиотекой): 442 из 1312 не-F1 ключей
-         * сдвинулись, максимум `4.0e-15` абс. (`≈ 7·ε·‖u‖`) — на два порядка ниже пола;
-         * при прежнем поле `1e-11` (применялся лишь к паре «оба значения ниже пола»)
-         * 93 из них падали с отн. расхождением до `3.2e-5` при `E_h ≈ 1e-11`: допуск
-         * `1e-9` требовал там абсолютного согласия `1e-20`, то есть побитовой
-         * воспроизводимости LU.
-         *
-         * Чего пол НЕ делает: ключи F1 (`alpha = 1e-10`, `cond₁ ≈ 2·10¹⁰`) при той же
-         * смене LAPACK сдвинулись на `4e-8 … 4e-4` абс. — на 4–9 порядков выше пола, и
-         * гейт их ловит; их пересъём оформлен отдельно (`docs/baseline-changes.md`,
-         * запись от 2026-09-09).
-         */
-        const val ABSOLUTE_FLOOR = 6e-13
+        /** Путь ресурса эталона; общий с инструментом снятия и сторожевым тестом. */
+        const val RESOURCE_PATH = "/characterization/baseline-eh.tsv"
     }
 
-    /** Пара «ключ эталона -> зафиксированное значение E_h». */
-    private val baseline: Map<String, Double> by lazy {
-        val resource = javaClass.getResourceAsStream("/characterization/baseline-eh.tsv")
-            ?: fail("Не найден файл эталона /characterization/baseline-eh.tsv")
-        resource.bufferedReader().useLines { lines ->
-            lines.mapNotNull { line ->
-                val parts = line.trim().split('\t')
-                if (parts.size == 2) parts[0] to parts[1].toDouble() else null
-            }.toMap()
-        }
+    /** Пара «ключ эталона -> зафиксированное значение и класс сравнения». */
+    private val baseline: Map<String, BaselineEntry> by lazy {
+        val resource = javaClass.getResourceAsStream(RESOURCE_PATH)
+            ?: fail("Не найден файл эталона $RESOURCE_PATH")
+        resource.bufferedReader().useLines { BaselineFormat.parse(it, RESOURCE_PATH) }
     }
 
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
@@ -108,19 +73,16 @@ class EhCharacterizationTest {
         else -> ThreePointFunctionals(basis)
     }
 
-    /** Сверяет вычисленное значение с эталоном по ключу. */
+    /** Сверяет вычисленное значение с эталоном по правилу КЛАССА этого ключа. */
     private fun check(key: String, actual: Double, mismatches: MutableList<String>) {
         val expected = baseline[key] ?: run {
             mismatches += "$key: отсутствует в эталоне (вычислено $actual)"
             return
         }
-        val difference = abs(actual - expected)
-        // Расхождение на уровне шума округления (см. KDoc [ABSOLUTE_FLOOR]) — не изменение метода.
-        if (difference <= ABSOLUTE_FLOOR) return
-        val relative = difference / maxOf(abs(expected), ABSOLUTE_FLOOR)
-        if (relative > RELATIVE_TOLERANCE) {
-            mismatches += "$key: эталон=$expected, получено=$actual, отн.расхождение=$relative"
-        }
+        // Значение приводится к тому же представлению, в котором оно хранится (17 цифр,
+        // round-trip для double): иначе сравнение зависело бы от способа печати.
+        val formatted = String.format(Locale.ROOT, "%.17g", actual)
+        BaselineFormat.compare(key, expected, formatted)?.let { mismatches += it }
     }
 
     private fun reportIfAny(mismatches: List<String>) {
@@ -293,7 +255,8 @@ class EhCharacterizationTest {
      * дискретизацией — порядок сходимости ≈ 0, и сама величина к качеству
      * квадратуры малочувствительна.
      *
-     * Здесь же допуск [RELATIVE_TOLERANCE] = 1e-9, и та же мутация ловится
+     * Здесь же правило класса `sensitive` — граница `2*cond*max(omega,eps)*||u||inf`
+     * порядка 3.8e-5 при значениях `E_h ~ 8e-5`, и та же мутация ловится
      * немедленно. Состав покрытия — НАДМНОЖЕСТВО того, что сверяется с
      * публикацией, поэтому ни одна ослабленная там величина не остаётся без
      * строгого гейта. Перечисление сочетаний взято из [BaselineSnapshotTool.F1_COVERAGE]

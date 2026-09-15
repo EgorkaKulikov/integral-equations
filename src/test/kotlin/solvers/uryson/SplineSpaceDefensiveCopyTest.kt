@@ -70,18 +70,19 @@ class SplineSpaceDefensiveCopyTest {
     /**
      * `SplineSpace.gramR` — ГЛУБОКАЯ копия.
      *
-     * Проверяется именно запись ВНУТРЬ строки (`g[0][0]`), а не подмена строки целиком:
-     * поверхностный `copyOf()` защитил бы только от второго и молча пропустил первое.
+     * После перехода на [DenseMatrix] строк-массивов нет: значения лежат в одном
+     * плоском буфере, и `copy()` копирует их целиком. Проверка сохранена дословно —
+     * запись в элемент копии не должна быть видна ни через геттер, ни через omegaReg.
      */
     @Test fun spaceGramRReturnsDeepCopy() {
         val space = space()
         val g = space.gramR
-        val original = g[0][0]
+        val original = g[0, 0]
         val regBefore = space.omegaReg(DoubleArray(space.dim) { 1.0 })
 
-        g[0][0] = original + 1e9
+        g[0, 0] = original + 1e9
 
-        assertEquals(original, space.gramR[0][0], 0.0, "gramR изменилась: копия оказалась поверхностной")
+        assertEquals(original, space.gramR[0, 0], 0.0, "gramR изменилась: копия оказалась поверхностной")
         assertEquals(
             regBefore, space.omegaReg(DoubleArray(space.dim) { 1.0 }), 0.0,
             "omegaReg изменилась после мутации копии gramR",
@@ -93,8 +94,8 @@ class SplineSpaceDefensiveCopyTest {
         val space = space()
         assertTrue(space.weights !== space.weights, "weights: возвращается один и тот же массив")
         assertTrue(space.wInt !== space.wInt, "wInt: возвращается один и тот же массив")
-        assertTrue(space.gramR !== space.gramR, "gramR: возвращается один и тот же массив")
-        assertTrue(space.gramR[0] !== space.gramR[0], "gramR: строки не копируются (поверхностная копия)")
+        assertTrue(space.gramR !== space.gramR, "gramR: возвращается одна и та же матрица")
+        assertTrue(space.gramR.data !== space.gramR.data, "gramR: буфер значений не копируется")
 
         val quad = GaussLegendre(8)
         assertTrue(quad.refNodesWeights().first !== quad.refNodesWeights().first, "refNodes: массив не копируется")
@@ -106,7 +107,7 @@ class SplineSpaceDefensiveCopyTest {
         val space = space()
         assertEquals(space.dim, space.weights.size)
         assertEquals(space.dim, space.wInt.size)
-        assertEquals(space.dim, space.gramR.size)
+        assertEquals(space.dim, space.gramR.rows)
         // Сумма весов = длина отрезка: содержательный инвариант, а не только размер.
         assertEquals(1.0, space.weights.sum(), 1e-12)
         assertEquals(space.weightsSum(), space.weights.sum(), 0.0)
@@ -114,7 +115,7 @@ class SplineSpaceDefensiveCopyTest {
         // геттер глубоко копирует, и вызов внутри цикла давал бы dim^2 копий матрицы.
         val gram = space.gramR
         for (i in 0 until space.dim) for (j in 0 until space.dim) {
-            assertEquals(gram[i][j], gram[j][i], 1e-12)
+            assertEquals(gram[i, j], gram[j, i], 1e-12)
         }
     }
 }

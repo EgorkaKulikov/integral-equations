@@ -1,24 +1,11 @@
 package characterization
 
-import numerics.Conditioning
-import numerics.DenseMatrix
-import numerics.GaussLegendre
-import numerics.LinearAlgebra
-import numerics.NumericsContext
 import numerics.backend.Backends
 import org.junit.jupiter.api.Tag
-import problems.fredholm.FredholmProblem
-import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmFirstKindSolver
-import solvers.fredholm.FredholmOperator
-import solvers.fredholm.FredholmSecondKindSolver
 import splines.GeneratingSystem
-import splines.Grid
-import splines.MinimalSplineBasis
 import java.io.File
 import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.max
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -51,35 +38,14 @@ class F1ConditioningTest {
 
     @Test
     fun f1SystemsAreSolvedBackwardStablyAndConditionIsReported() {
-        val fp = FredholmProblem.F1
-        val alpha = FredholmFirstKindSolver.DEFAULT_REGULARIZATION
-        val cL = -1.0 / alpha
-        val ctx = NumericsContext.default()
         val rows = ArrayList<Row>()
         for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
             for (family in listOf("theta", "xi1", "xi2")) {
                 for (n in listOf(8, 16, 32)) {
-                    val grid = Grid.uniform(n)
-                    val basis = MinimalSplineBasis(system, grid)
-                    val funcs = BaselineSnapshotTool.familyFor(family, basis)
-                    val op = FredholmOperator(fp.kernel, grid, GaussLegendre(8))
-                    val inner = FredholmSecondKindSolver(
-                        basis, funcs, op, cL,
-                        RhsWithDerivatives(
-                            { t -> fp.rhsExact(t, op) / alpha },
-                            { t -> fp.rhsExactDeriv(t, op) / alpha },
-                            { t -> fp.rhsExactDeriv2(t, op) / alpha },
-                        ),
-                        true, ctx,
-                    )
-                    val a = inner.baseMatrix()
-                    val b = inner.vectorG()
-                    val x = LinearAlgebra.solve(a, b, ctx.backend)
-                    val dense = DenseMatrix.fromRows(a)
-                    val cond = Conditioning.conditionEstimate(dense, ctx).condInf
-                    val omega = Conditioning.relativeBackwardError(dense, b, x)
-                    val uNorm = grid.breakpoints.maxOf { t -> abs(fp.exact(t)) }
-                    rows.add(Row(system, family, n, cond, omega, cond * max(omega, 1e-16), x.maxOf { abs(it) }, uNorm))
+                    // Та же механика, что и у класса `sensitive` характеризационного гейта:
+                    // единственная реализация — [F1SystemConditioning], тест её потребитель.
+                    val m = F1SystemConditioning.measure(system, family, n)
+                    rows.add(Row(system, family, n, m.cond, m.omega, m.bound, m.coeffNormInf, m.uNorm))
                 }
             }
         }

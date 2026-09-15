@@ -1,1406 +1,1405 @@
 # ХАРАКТЕРИЗАЦИОННЫЙ ЭТАЛОН E_h (снимок собственного поведения реализации).
 #
-# Сверяется тестом characterization.EhCharacterizationTest с относительным допуском
-# 1e-9. Формат строки:  ключ <TAB> значение (12 значащих цифр).
-# Строки без символа табуляции (в том числе эти комментарии) парсером ИГНОРИРУЮТСЯ.
+# Сверяется тестом characterization.EhCharacterizationTest.
+# ФОРМАТ СТРОКИ:  ключ <TAB> значение <TAB> класс.
+#   значение — 17 значащих цифр (%.17g): это МИНИМУМ, при котором десятичная запись
+#              double восстанавливается побитово; при 12 цифрах сама запись эталона
+#              вносила погрешность хранения ~1e-12 — грубее измеренного расхождения
+#              реализаций BLAS (<= 1.0e-14 на не-F1 ключах);
+#   класс    — режим сравнения, ВЫЧИСЛЕННЫЙ инструментом `./gradlew classifyBaseline`
+#              по двум снимкам (-Dnumerics.backend=java против native). Рукой он не
+#              проставляется: рукописный список повторил бы «что сегодня падает».
+#     portable  — отн. 1e-9 при поле 6e-13 = 10^3*eps*||u||inf. Расхождение путей LU
+#                 на этих ключах <= 1.0e-14, то есть запас 60x;
+#     sensitive — |dlt| <= 2*cond_1*max(omega,eps)*||u||inf, где cond и omega ВЫЧИСЛЯЮТСЯ
+#                 в том же прогоне и на том же бэкенде (characterization.F1SystemConditioning).
+#                 Константу здесь хранить нельзя: она вернула бы привязку к машине;
+#     exact     — строгое совпадение строк (целочисленные счётчики итераций);
+#     residual  — отн. 1e-3 при шуме 6e-15.
+# Строки, начинающиеся с #, и пустые — комментарии. ЛЮБАЯ иная строка обязана
+# разбиваться ровно на три колонки, иначе разбор ПАДАЕТ (прежний парсер молча
+# считал такую строку комментарием, и ключ становился «отсутствующим в эталоне»).
 #
 # ОКРУЖЕНИЕ СНЯТИЯ (существенно: числа к нему привязаны).
-#   бэкенд линейной алгебры : multik  (multik-default 0.2.3, нативный OpenBLAS)
+#   бэкенд линейной алгебры : netlib + системная LAPACK (Apple Accelerate), -Dnumerics.backend=native
+#   библиотеки              : numerical-core 1.1.0, minimal-splines 1.1.0
 #   JDK                     : 21 (jvmToolchain(21))
 #   платформа               : macOS aarch64 (Apple silicon)
-# Прогон с -Dnumerics.backend=reference даёт 4/4 падения этого гейта с расхождением
-# до 5.7e-2 на ключе F1.B.theta.n8.sloan — то есть эталон бэкенд-зависим ПО ФАКТУ,
-# а не из осторожности. Обоснование фиксации бэкенда в тестовых задачах — build.gradle.kts.
+# ПЕРЕНОСИМОСТЬ ПРОВЕРЕНА: гейт зелёный и на `native`, и на `java` (другой путь LU).
+# Ровно поэтому тег `machine` с гейта снят, и он гоняется в CI на ubuntu/OpenBLAS.
 #
 # КЛЮЧИ F1.*.sloan ПРИВЯЗАНЫ К ПОРЯДКУ СУММИРОВАНИЯ, а не только к бэкенду.
 # F1 — уравнение первого рода, решаемое регуляризацией Вазваза с alpha = 1e-10, то есть
 # c_L = -1/alpha = -1e10. Решение Слоана есть fEff(t) + c_L*applyNodes(t, .), где ОБА
-# слагаемых имеют порядок 1.38e10, а их сумма — порядок 2.7 (измерено, этап 8.6):
-# катастрофическое сокращение в 5e9 раз, теряется около 9.7 из 16 значащих цифр.
-# Замер: три МАТЕМАТИЧЕСКИ ЭКВИВАЛЕНТНЫХ порядка суммирования той же формулы (прямой,
-# обратный, компенсированный Кэхэна—Неймана) дают E_h, различающиеся на 4.3–39.9 %
-# (медиана 28 %) — больше, чем расхождение с публикацией и чем расхождение бэкендов.
-# СЛЕДСТВИЕ ДЛЯ РЕФАКТОРИНГА: любая перестановка цикла суммирования в
-# FredholmOperator.applyNodes (обратный обход, блочное или параллельное суммирование,
-# компенсированное сложение) сломает этот гейт на ключах F1.*.sloan, НЕ ИЗМЕНИВ
-# МАТЕМАТИКИ. Это свойство задачи, а не дефект — но и заглушать его нельзя: требуется
-# осознанный пересъём с записью в docs/baseline-changes.md.
-#
-# ПЕРЕСЪЁМ 2026-09-09 (numerical-core 1.0.0): ключи F1.* сняты заново на бэкенде netlib
-# (системная LAPACK, Apple Accelerate); остальные 1312 значений — прежние (multik/OpenBLAS),
-# их расхождение с новым бэкендом <= 4e-15 абс. и поглощается полом гейта 6e-13 = 10^3*eps*||u||.
-# Обоснование пересъёма F1 (cond_1 ~ 2e10, отклонения в пределах cond*omega) — в истории ниже.
-#
-# ПЕРЕСЪЁМ 2026-09-10 (minimal-splines 1.0.0, базис в локальных координатах интервала):
-# 105 ключей сняты заново — 54 F1.* (в границе cond*omega*||u||), 29 ключей F2exp.H/V2exp.H/U.B.H
-# (E_h упало с ~1e-12 до машинного уровня: прежние значения — погрешность обращения матриц
-# аппроксимационного соотношения в 0.1.0, точное решение лежит в span phi), 22 ключа H/T при n=16
-# (сдвиг 7e-13..2.7e-12 — шум базиса 0.1.0). Остальные 1261 значение — прежние.
+# слагаемых имеют порядок 1.38e10, а их сумма — порядок 2.7: сокращение в 5e9 раз,
+# теряется около 9.7 из 16 значащих цифр. Три МАТЕМАТИЧЕСКИ ЭКВИВАЛЕНТНЫХ порядка
+# суммирования дают E_h, различающиеся на 4.3–39.9 % (медиана 28 %). Именно эти ключи
+# и получили класс sensitive — их сверка идёт с вычисляемой границей, а не с допуском.
 #
 # ИСТОРИЯ ИЗМЕНЕНИЙ ЭТАЛОНА: docs/baseline-changes.md.
-F.F2.B.lambda.n16.base	1.40955442488e-05
-F.F2.B.lambda.n16.iterKulkarni	3.97459842816e-13
-F.F2.B.lambda.n16.iterNystrom	2.27279091014e-06
-F.F2.B.lambda.n16.kulkarni	4.13802325738e-12
-F.F2.B.lambda.n16.nystrom	5.29174463315e-06
-F.F2.B.lambda.n16.sloan	1.23892814607e-06
-F.F2.B.lambda.n8.base	0.000120194914688
-F.F2.B.lambda.n8.iterKulkarni	5.48221468222e-11
-F.F2.B.lambda.n8.iterNystrom	3.11506114580e-05
-F.F2.B.lambda.n8.kulkarni	4.03013622474e-10
-F.F2.B.lambda.n8.nystrom	7.20435004051e-05
-F.F2.B.lambda.n8.sloan	1.66856675676e-05
-F.F2.B.mu.n16.base	2.05058592693e-05
-F.F2.B.mu.n16.iterKulkarni	1.98729921408e-14
-F.F2.B.mu.n16.iterNystrom	8.66539573985e-07
-F.F2.B.mu.n16.kulkarni	7.51743112204e-12
-F.F2.B.mu.n16.nystrom	2.01415860812e-06
-F.F2.B.mu.n16.sloan	1.02430528393e-07
-F.F2.B.mu.n8.base	0.000140281218726
-F.F2.B.mu.n8.iterKulkarni	8.20965517789e-12
-F.F2.B.mu.n8.iterNystrom	1.14410251160e-05
-F.F2.B.mu.n8.kulkarni	6.06978467488e-10
-F.F2.B.mu.n8.nystrom	2.63810184704e-05
-F.F2.B.mu.n8.sloan	1.30161952239e-06
-F.F2.B.theta.n16.base	1.24635326952e-05
-F.F2.B.theta.n16.iterKulkarni	7.77156117238e-15
-F.F2.B.theta.n16.iterNystrom	5.06304462133e-07
-F.F2.B.theta.n16.kulkarni	4.73621142305e-13
-F.F2.B.theta.n16.nystrom	1.19931959874e-06
-F.F2.B.theta.n16.sloan	2.49667056917e-07
-F.F2.B.theta.n8.base	0.000101434526554
-F.F2.B.theta.n8.iterKulkarni	2.98783220387e-12
-F.F2.B.theta.n8.iterNystrom	9.48761854258e-06
-F.F2.B.theta.n8.kulkarni	7.74970088102e-11
-F.F2.B.theta.n8.nystrom	2.22845591245e-05
-F.F2.B.theta.n8.sloan	4.80755831989e-06
-F.F2.B.xi0.n16.base	0.000714740025563
-F.F2.B.xi0.n16.iterKulkarni	1.97346882169e-08
-F.F2.B.xi0.n16.kulkarni	4.90615237325e-08
-F.F2.B.xi0.n16.sloan	0.000269430747095
-F.F2.B.xi0.n8.base	0.00519248794754
-F.F2.B.xi0.n8.iterKulkarni	1.05623959534e-06
-F.F2.B.xi0.n8.kulkarni	2.43625880836e-06
-F.F2.B.xi0.n8.sloan	0.00211085129029
-F.F2.B.xi1.n16.base	9.16019077730e-05
-F.F2.B.xi1.n16.iterKulkarni	2.66925370696e-10
-F.F2.B.xi1.n16.kulkarni	7.67984675853e-10
-F.F2.B.xi1.n16.sloan	2.99312802298e-05
-F.F2.B.xi1.n8.base	0.000667238096412
-F.F2.B.xi1.n8.iterKulkarni	1.55826354042e-08
-F.F2.B.xi1.n8.kulkarni	4.19269726715e-08
-F.F2.B.xi1.n8.sloan	0.000234382201948
-F.F2.B.xi2.n16.base	7.49431847614e-05
-F.F2.B.xi2.n16.iterKulkarni	2.06892836196e-10
-F.F2.B.xi2.n16.kulkarni	5.66758973086e-10
-F.F2.B.xi2.n16.sloan	2.60345901641e-05
-F.F2.B.xi2.n8.base	0.000450499225638
-F.F2.B.xi2.n8.iterKulkarni	9.75620517707e-09
-F.F2.B.xi2.n8.kulkarni	2.36163609779e-08
-F.F2.B.xi2.n8.sloan	0.000180269956014
-F.F2.H.lambda.n16.base	1.18693788584e-05
-F.F2.H.lambda.n16.iterKulkarni	3.07753822426e-13
-F.F2.H.lambda.n16.iterNystrom	2.05198888570e-06
-F.F2.H.lambda.n16.kulkarni	2.87281309852e-12
-F.F2.H.lambda.n16.nystrom	4.83045314126e-06
-F.F2.H.lambda.n16.sloan	1.07941739858e-06
-F.F2.H.lambda.n8.base	0.000100984915142
-F.F2.H.lambda.n8.iterKulkarni	3.91462418037e-11
-F.F2.H.lambda.n8.iterNystrom	2.79454656276e-05
-F.F2.H.lambda.n8.kulkarni	2.67141198051e-10
-F.F2.H.lambda.n8.nystrom	6.53611380836e-05
-F.F2.H.lambda.n8.sloan	1.44133283078e-05
-F.F2.H.mu.n16.base	1.67247279627e-05
-F.F2.H.mu.n16.iterKulkarni	1.21014309684e-14
-F.F2.H.mu.n16.iterNystrom	7.81605626332e-07
-F.F2.H.mu.n16.kulkarni	5.06761299590e-12
-F.F2.H.mu.n16.nystrom	1.83693611300e-06
-F.F2.H.mu.n16.sloan	1.26616159335e-07
-F.F2.H.mu.n8.base	0.000112036991029
-F.F2.H.mu.n8.iterKulkarni	5.55122614543e-12
-F.F2.H.mu.n8.iterNystrom	1.02500846364e-05
-F.F2.H.mu.n8.kulkarni	3.93142851607e-10
-F.F2.H.mu.n8.nystrom	2.39046219241e-05
-F.F2.H.mu.n8.sloan	1.63234771233e-06
-F.F2.H.theta.n16.base	1.04315373002e-05
-F.F2.H.theta.n16.iterKulkarni	7.54951656745e-15
-F.F2.H.theta.n16.iterNystrom	4.63026941122e-07
-F.F2.H.theta.n16.kulkarni	3.56825680115e-13
-F.F2.H.theta.n16.nystrom	1.10784036211e-06
-F.F2.H.theta.n16.sloan	2.26968320138e-07
-F.F2.H.theta.n8.base	8.47132957036e-05
-F.F2.H.theta.n8.iterKulkarni	2.62789789929e-12
-F.F2.H.theta.n8.iterNystrom	8.62556578884e-06
-F.F2.H.theta.n8.kulkarni	5.51182433028e-11
-F.F2.H.theta.n8.nystrom	2.04682884501e-05
-F.F2.H.theta.n8.sloan	4.30945735963e-06
-F.F2.H.xi0.n16.base	0.000567955646566
-F.F2.H.xi0.n16.iterKulkarni	9.57485024600e-09
-F.F2.H.xi0.n16.kulkarni	2.64979652664e-08
-F.F2.H.xi0.n16.sloan	0.000199896377596
-F.F2.H.xi0.n8.base	0.00412414922905
-F.F2.H.xi0.n8.iterKulkarni	4.99133596454e-07
-F.F2.H.xi0.n8.kulkarni	1.26515571874e-06
-F.F2.H.xi0.n8.sloan	0.00158808438680
-F.F2.H.xi1.n16.base	7.28212436505e-05
-F.F2.H.xi1.n16.iterKulkarni	1.31224586752e-10
-F.F2.H.xi1.n16.kulkarni	4.24651647180e-10
-F.F2.H.xi1.n16.sloan	2.19670774131e-05
-F.F2.H.xi1.n8.base	0.000525306136608
-F.F2.H.xi1.n8.iterKulkarni	7.52282536265e-09
-F.F2.H.xi1.n8.kulkarni	2.24706026009e-08
-F.F2.H.xi1.n8.sloan	0.000172401069734
-F.F2.H.xi2.n16.base	5.77889689766e-05
-F.F2.H.xi2.n16.iterKulkarni	9.58155776942e-11
-F.F2.H.xi2.n16.kulkarni	2.94311575111e-10
-F.F2.H.xi2.n16.sloan	1.85736875487e-05
-F.F2.H.xi2.n8.base	0.000332841854975
-F.F2.H.xi2.n8.iterKulkarni	4.21518475680e-09
-F.F2.H.xi2.n8.kulkarni	1.11763331923e-08
-F.F2.H.xi2.n8.sloan	0.000125583993738
-F.F2.T.lambda.n16.base	1.63277338139e-05
-F.F2.T.lambda.n16.iterKulkarni	5.02264896340e-13
-F.F2.T.lambda.n16.iterNystrom	2.49383828255e-06
-F.F2.T.lambda.n16.kulkarni	5.63504798379e-12
-F.F2.T.lambda.n16.nystrom	5.75354869925e-06
-F.F2.T.lambda.n16.sloan	1.39862718318e-06
-F.F2.T.lambda.n8.base	0.000139456262797
-F.F2.T.lambda.n8.iterKulkarni	7.33675342701e-11
-F.F2.T.lambda.n8.iterNystrom	3.43699996652e-05
-F.F2.T.lambda.n8.kulkarni	5.66316327166e-10
-F.F2.T.lambda.n8.nystrom	7.87555507198e-05
-F.F2.T.lambda.n8.sloan	1.89688418126e-05
-F.F2.T.mu.n16.base	2.42895829545e-05
-F.F2.T.mu.n16.iterKulkarni	3.58602036954e-14
-F.F2.T.mu.n16.iterNystrom	9.51532850402e-07
-F.F2.T.mu.n16.kulkarni	1.04605213380e-11
-F.F2.T.mu.n16.nystrom	2.19150490544e-06
-F.F2.T.mu.n16.sloan	8.80040146312e-08
-F.F2.T.mu.n8.base	0.000168626460206
-F.F2.T.mu.n8.iterKulkarni	1.07774900115e-11
-F.F2.T.mu.n8.iterNystrom	1.26352862271e-05
-F.F2.T.mu.n8.kulkarni	8.70203575865e-10
-F.F2.T.mu.n8.nystrom	2.88643187074e-05
-F.F2.T.mu.n8.sloan	1.11008553250e-06
-F.F2.T.theta.n16.base	1.44960416839e-05
-F.F2.T.theta.n16.iterKulkarni	7.66053886991e-15
-F.F2.T.theta.n16.iterNystrom	5.49584291853e-07
-F.F2.T.theta.n16.kulkarni	6.03517236186e-13
-F.F2.T.theta.n16.nystrom	1.29080523914e-06
-F.F2.T.theta.n16.sloan	2.72366485921e-07
-F.F2.T.theta.n8.base	0.000118176473161
-F.F2.T.theta.n8.iterKulkarni	3.38773453734e-12
-F.F2.T.theta.n8.iterNystrom	1.03511595830e-05
-F.F2.T.theta.n8.kulkarni	1.03530406470e-10
-F.F2.T.theta.n8.nystrom	2.41040506903e-05
-F.F2.T.theta.n8.sloan	5.30678661026e-06
-F.F2.T.xi0.n16.base	0.000861656327937
-F.F2.T.xi0.n16.iterKulkarni	3.36135399515e-08
-F.F2.T.xi0.n16.kulkarni	7.91436370884e-08
-F.F2.T.xi0.n16.sloan	0.000338954165294
-F.F2.T.xi0.n8.base	0.00626121251490
-F.F2.T.xi0.n8.iterKulkarni	1.81445310599e-06
-F.F2.T.xi0.n8.kulkarni	4.00127193956e-06
-F.F2.T.xi0.n8.sloan	0.00263346288411
-F.F2.T.xi1.n16.base	0.000110395692223
-F.F2.T.xi1.n16.iterKulkarni	4.52920145833e-10
-F.F2.T.xi1.n16.kulkarni	1.22391308199e-09
-F.F2.T.xi1.n16.sloan	3.79015306110e-05
-F.F2.T.xi1.n8.base	0.000809556778802
-F.F2.T.xi1.n8.iterKulkarni	2.66780653124e-08
-F.F2.T.xi1.n8.kulkarni	6.80163979583e-08
-F.F2.T.xi1.n8.sloan	0.000296546397750
-F.F2.T.xi2.n16.base	9.21098840169e-05
-F.F2.T.xi2.n16.iterKulkarni	3.62719632108e-10
-F.F2.T.xi2.n16.kulkarni	9.37660615818e-10
-F.F2.T.xi2.n16.sloan	3.35012430863e-05
-F.F2.T.xi2.n8.base	0.000568517044432
-F.F2.T.xi2.n8.iterKulkarni	1.77249462885e-08
-F.F2.T.xi2.n8.kulkarni	4.11177110138e-08
-F.F2.T.xi2.n8.sloan	0.000235121757746
-F.F2exp.B.lambda.n16.base	6.95017220753e-06
-F.F2exp.B.lambda.n16.iterKulkarni	2.18047802036e-12
-F.F2exp.B.lambda.n16.iterNystrom	7.67714015915e-07
-F.F2exp.B.lambda.n16.kulkarni	3.63753471788e-12
-F.F2exp.B.lambda.n16.nystrom	2.43304009739e-06
-F.F2exp.B.lambda.n16.sloan	1.72298959766e-06
-F.F2exp.B.lambda.n8.base	6.76503062285e-05
-F.F2exp.B.lambda.n8.iterKulkarni	4.05578015616e-10
-F.F2exp.B.lambda.n8.iterNystrom	9.75968660644e-06
-F.F2exp.B.lambda.n8.kulkarni	6.04480909772e-10
-F.F2exp.B.lambda.n8.nystrom	4.05154242733e-05
-F.F2exp.B.lambda.n8.sloan	2.57874717640e-05
-F.F2exp.B.mu.n16.base	1.00832649141e-05
-F.F2exp.B.mu.n16.iterKulkarni	1.85651494178e-12
-F.F2exp.B.mu.n16.iterNystrom	2.87711320102e-07
-F.F2exp.B.mu.n16.kulkarni	8.54138981765e-12
-F.F2exp.B.mu.n16.nystrom	9.75771598632e-07
-F.F2exp.B.mu.n16.sloan	1.05189331068e-06
-F.F2exp.B.mu.n8.base	7.40024122421e-05
-F.F2exp.B.mu.n8.iterKulkarni	2.82203149737e-10
-F.F2exp.B.mu.n8.iterNystrom	3.41909734525e-06
-F.F2exp.B.mu.n8.kulkarni	1.25091692560e-09
-F.F2exp.B.mu.n8.nystrom	1.62142180784e-05
-F.F2exp.B.mu.n8.sloan	1.48197895937e-05
-F.F2exp.B.theta.n16.base	5.65348559034e-06
-F.F2exp.B.theta.n16.iterKulkarni	5.90638649101e-14
-F.F2exp.B.theta.n16.iterNystrom	2.22576644227e-07
-F.F2exp.B.theta.n16.kulkarni	6.39488462184e-13
-F.F2exp.B.theta.n16.nystrom	4.36572564544e-07
-F.F2exp.B.theta.n16.sloan	3.19303387730e-07
-F.F2exp.B.theta.n8.base	4.90740481802e-05
-F.F2exp.B.theta.n8.iterKulkarni	2.20614637669e-11
-F.F2exp.B.theta.n8.iterNystrom	4.35634828788e-06
-F.F2exp.B.theta.n8.kulkarni	9.87510073713e-11
-F.F2exp.B.theta.n8.nystrom	8.98428288609e-06
-F.F2exp.B.theta.n8.sloan	6.40762646431e-06
-F.F2exp.B.xi0.n16.base	0.00107747238057
-F.F2exp.B.xi0.n16.iterKulkarni	7.68944494745e-08
-F.F2exp.B.xi0.n16.kulkarni	1.09708442553e-07
-F.F2exp.B.xi0.n16.sloan	0.000925661909292
-F.F2exp.B.xi0.n8.base	0.00748700692894
-F.F2exp.B.xi0.n8.iterKulkarni	5.69335806100e-06
-F.F2exp.B.xi0.n8.kulkarni	7.57469036072e-06
-F.F2exp.B.xi0.n8.sloan	0.00635520144258
-F.F2exp.B.xi1.n16.base	0.000132820887656
-F.F2exp.B.xi1.n16.iterKulkarni	7.28896942803e-10
-F.F2exp.B.xi1.n16.kulkarni	1.24568955151e-09
-F.F2exp.B.xi1.n16.sloan	0.000111859206984
-F.F2exp.B.xi1.n8.base	0.00100291108929
-F.F2exp.B.xi1.n8.iterKulkarni	5.00825416694e-08
-F.F2exp.B.xi1.n8.kulkarni	8.02021675739e-08
-F.F2exp.B.xi1.n8.sloan	0.000839037500386
-F.F2exp.B.xi2.n16.base	0.000138998738123
-F.F2exp.B.xi2.n16.iterKulkarni	4.33183711124e-10
-F.F2exp.B.xi2.n16.kulkarni	9.99786919920e-10
-F.F2exp.B.xi2.n16.sloan	0.000117093558022
-F.F2exp.B.xi2.n8.base	0.00109729935393
-F.F2exp.B.xi2.n8.iterKulkarni	1.36043158960e-08
-F.F2exp.B.xi2.n8.kulkarni	4.70286003473e-08
-F.F2exp.B.xi2.n8.sloan	0.000918104737614
-F.F2exp.H.lambda.n16.base	2.22044604925e-15
-F.F2exp.H.lambda.n16.iterKulkarni	5.18252107895e-13
-F.F2exp.H.lambda.n16.iterNystrom	1.76370512350e-06
-F.F2exp.H.lambda.n16.kulkarni	5.98854299483e-13
-F.F2exp.H.lambda.n16.nystrom	3.67790918632e-06
-F.F2exp.H.lambda.n16.sloan	2.44249065418e-13
-F.F2exp.H.lambda.n8.base	5.83089132533e-13
-F.F2exp.H.lambda.n8.iterKulkarni	5.17363929475e-13
-F.F2exp.H.lambda.n8.iterNystrom	2.41838599278e-05
-F.F2exp.H.lambda.n8.kulkarni	5.98188165668e-13
-F.F2exp.H.lambda.n8.nystrom	5.41509406524e-05
-F.F2exp.H.lambda.n8.sloan	6.46149800332e-14
-F.F2exp.H.mu.n16.base	1.55431223448e-15
-F.F2exp.H.mu.n16.iterKulkarni	5.18030063290e-13
-F.F2exp.H.mu.n16.iterNystrom	6.73436634457e-07
-F.F2exp.H.mu.n16.kulkarni	5.98410210273e-13
-F.F2exp.H.mu.n16.nystrom	1.42910113143e-06
-F.F2exp.H.mu.n16.sloan	1.11022302463e-15
-F.F2exp.H.mu.n8.base	2.66453525910e-15
-F.F2exp.H.mu.n8.iterKulkarni	5.17363929475e-13
-F.F2exp.H.mu.n8.iterNystrom	8.86483915119e-06
-F.F2exp.H.mu.n8.kulkarni	5.97966121063e-13
-F.F2exp.H.mu.n8.nystrom	2.05661161454e-05
-F.F2exp.H.mu.n8.sloan	5.03597163970e-13
-F.F2exp.H.theta.n16.base	2.22044604925e-15
-F.F2exp.H.theta.n16.iterKulkarni	8.88178419700e-16
-F.F2exp.H.theta.n16.iterNystrom	4.02474873207e-07
-F.F2exp.H.theta.n16.kulkarni	3.33066907388e-15
-F.F2exp.H.theta.n16.nystrom	6.57420971883e-07
-F.F2exp.H.theta.n16.sloan	1.77635683940e-15
-F.F2exp.H.theta.n8.base	2.66453525910e-15
-F.F2exp.H.theta.n8.iterKulkarni	1.77635683940e-15
-F.F2exp.H.theta.n8.iterNystrom	8.05668197201e-06
-F.F2exp.H.theta.n8.kulkarni	2.66453525910e-15
-F.F2exp.H.theta.n8.nystrom	1.35558622294e-05
-F.F2exp.H.theta.n8.sloan	1.11688436277e-13
-F.F2exp.H.xi0.n16.base	1.55431223448e-15
-F.F2exp.H.xi0.n16.iterKulkarni	1.33226762955e-15
-F.F2exp.H.xi0.n16.kulkarni	2.88657986403e-15
-F.F2exp.H.xi0.n16.sloan	1.55431223448e-15
-F.F2exp.H.xi0.n8.base	1.33226762955e-15
-F.F2exp.H.xi0.n8.iterKulkarni	3.10862446895e-15
-F.F2exp.H.xi0.n8.kulkarni	3.77475828373e-15
-F.F2exp.H.xi0.n8.sloan	4.94271290563e-13
-F.F2exp.H.xi1.n16.base	1.77635683940e-15
-F.F2exp.H.xi1.n16.iterKulkarni	8.88178419700e-16
-F.F2exp.H.xi1.n16.kulkarni	2.66453525910e-15
-F.F2exp.H.xi1.n16.sloan	1.33226762955e-15
-F.F2exp.H.xi1.n8.base	1.33226762955e-15
-F.F2exp.H.xi1.n8.iterKulkarni	8.88178419700e-16
-F.F2exp.H.xi1.n8.kulkarni	1.77635683940e-15
-F.F2exp.H.xi1.n8.sloan	4.98268093452e-13
-F.F2exp.H.xi2.n16.base	1.77635683940e-15
-F.F2exp.H.xi2.n16.iterKulkarni	8.88178419700e-16
-F.F2exp.H.xi2.n16.kulkarni	2.66453525910e-15
-F.F2exp.H.xi2.n16.sloan	1.77635683940e-15
-F.F2exp.H.xi2.n8.base	1.33226762955e-15
-F.F2exp.H.xi2.n8.iterKulkarni	1.11022302463e-15
-F.F2exp.H.xi2.n8.kulkarni	1.77635683940e-15
-F.F2exp.H.xi2.n8.sloan	4.97379915032e-13
-F.F2exp.T.lambda.n16.base	1.39033548723e-05
-F.F2exp.T.lambda.n16.iterKulkarni	3.13926662443e-12
-F.F2exp.T.lambda.n16.iterNystrom	6.90444299067e-07
-F.F2exp.T.lambda.n16.kulkarni	5.41922062780e-12
-F.F2exp.T.lambda.n16.nystrom	3.01506640765e-06
-F.F2exp.T.lambda.n16.sloan	3.44786794737e-06
-F.F2exp.T.lambda.n8.base	0.000135456550782
-F.F2exp.T.lambda.n8.iterKulkarni	6.47669695653e-10
-F.F2exp.T.lambda.n8.iterNystrom	1.25503494388e-05
-F.F2exp.T.lambda.n8.kulkarni	9.64001323212e-10
-F.F2exp.T.lambda.n8.nystrom	4.90090458216e-05
-F.F2exp.T.lambda.n8.sloan	5.16891257984e-05
-F.F2exp.T.mu.n16.base	2.01735661283e-05
-F.F2exp.T.mu.n16.iterKulkarni	2.79110068391e-12
-F.F2exp.T.mu.n16.iterNystrom	2.83513169830e-07
-F.F2exp.T.mu.n16.kulkarni	1.36290978503e-11
-F.F2exp.T.mu.n16.nystrom	1.20052048658e-06
-F.F2exp.T.mu.n16.sloan	2.10474446671e-06
-F.F2exp.T.mu.n8.base	0.000148206693795
-F.F2exp.T.mu.n8.iterKulkarni	4.73815431334e-10
-F.F2exp.T.mu.n8.iterNystrom	5.19728798132e-06
-F.F2exp.T.mu.n8.kulkarni	2.08998551798e-09
-F.F2exp.T.mu.n8.nystrom	1.93933304802e-05
-F.F2exp.T.mu.n8.sloan	2.96920753762e-05
-F.F2exp.T.theta.n16.base	1.13081682747e-05
-F.F2exp.T.theta.n16.iterKulkarni	9.12603326242e-14
-F.F2exp.T.theta.n16.iterNystrom	5.54836203648e-08
-F.F2exp.T.theta.n16.kulkarni	1.01163522004e-12
-F.F2exp.T.theta.n16.nystrom	3.25358961994e-07
-F.F2exp.T.theta.n16.sloan	6.38562519750e-07
-F.F2exp.T.theta.n8.base	9.81990259823e-05
-F.F2exp.T.theta.n8.iterKulkarni	3.46753736835e-11
-F.F2exp.T.theta.n8.iterNystrom	9.53077871291e-07
-F.F2exp.T.theta.n8.kulkarni	1.56998192224e-10
-F.F2exp.T.theta.n8.nystrom	7.31596048942e-06
-F.F2exp.T.theta.n8.sloan	1.28217188768e-05
-F.F2exp.T.xi0.n16.base	0.00215455834600
-F.F2exp.T.xi0.n16.iterKulkarni	1.20857663211e-07
-F.F2exp.T.xi0.n16.kulkarni	1.72029227530e-07
-F.F2exp.T.xi0.n16.sloan	0.00185095751569
-F.F2exp.T.xi0.n8.base	0.0149549552110
-F.F2exp.T.xi0.n8.iterKulkarni	8.97906228814e-06
-F.F2exp.T.xi0.n8.kulkarni	1.19178062274e-05
-F.F2exp.T.xi0.n8.sloan	0.0126925716373
-F.F2exp.T.xi1.n16.base	0.000265742186316
-F.F2exp.T.xi1.n16.iterKulkarni	1.14683817998e-09
-F.F2exp.T.xi1.n16.kulkarni	1.94597005176e-09
-F.F2exp.T.xi1.n16.sloan	0.000223804938926
-F.F2exp.T.xi1.n8.base	0.00200884920555
-F.F2exp.T.xi1.n8.iterKulkarni	7.91406391532e-08
-F.F2exp.T.xi1.n8.kulkarni	1.26771143139e-07
-F.F2exp.T.xi1.n8.sloan	0.00168066834166
-F.F2exp.T.xi2.n16.base	0.000278104152335
-F.F2exp.T.xi2.n16.iterKulkarni	6.88287427053e-10
-F.F2exp.T.xi2.n16.kulkarni	1.56699186959e-09
-F.F2exp.T.xi2.n16.sloan	0.000234278101560
-F.F2exp.T.xi2.n8.base	0.00219801333351
-F.F2exp.T.xi2.n8.iterKulkarni	2.20104903192e-08
-F.F2exp.T.xi2.n8.kulkarni	7.50735607014e-08
-F.F2exp.T.xi2.n8.sloan	0.00183907799052
-F.F2span.B.lambda.n16.base	8.19344592173e-14
-F.F2span.B.lambda.n16.iterKulkarni	9.81437153769e-14
-F.F2span.B.lambda.n16.iterNystrom	7.94175216157e-06
-F.F2span.B.lambda.n16.kulkarni	1.55209178843e-13
-F.F2span.B.lambda.n16.nystrom	1.25636669313e-05
-F.F2span.B.lambda.n16.sloan	1.11022302463e-15
-F.F2span.B.lambda.n8.base	1.93178806285e-14
-F.F2span.B.lambda.n8.iterKulkarni	9.79216707719e-14
-F.F2span.B.lambda.n8.iterNystrom	0.000111777316163
-F.F2span.B.lambda.n8.kulkarni	1.54987134238e-13
-F.F2span.B.lambda.n8.nystrom	0.000176829110526
-F.F2span.B.lambda.n8.sloan	2.22044604925e-16
-F.F2span.B.mu.n16.base	8.17124146124e-14
-F.F2span.B.mu.n16.iterKulkarni	9.80326930744e-14
-F.F2span.B.mu.n16.iterNystrom	3.04853129496e-06
-F.F2span.B.mu.n16.kulkarni	1.55098156540e-13
-F.F2span.B.mu.n16.nystrom	4.82270549895e-06
-F.F2span.B.mu.n16.sloan	1.11022302463e-15
-F.F2span.B.mu.n8.base	1.94289029309e-14
-F.F2span.B.mu.n8.iterKulkarni	9.80326930744e-14
-F.F2span.B.mu.n8.iterNystrom	4.14968927462e-05
-F.F2span.B.mu.n8.kulkarni	1.55098156540e-13
-F.F2span.B.mu.n8.nystrom	6.56471177318e-05
-F.F2span.B.mu.n8.sloan	3.33066907388e-16
-F.F2span.B.theta.n16.base	8.17124146124e-14
-F.F2span.B.theta.n16.iterKulkarni	1.11022302463e-16
-F.F2span.B.theta.n16.iterNystrom	1.64983732998e-06
-F.F2span.B.theta.n16.kulkarni	4.44089209850e-16
-F.F2span.B.theta.n16.nystrom	2.61000422608e-06
-F.F2span.B.theta.n16.sloan	1.22124532709e-15
-F.F2span.B.theta.n8.base	1.90958360236e-14
-F.F2span.B.theta.n8.iterKulkarni	1.11022302463e-16
-F.F2span.B.theta.n8.iterNystrom	3.23075691973e-05
-F.F2span.B.theta.n8.kulkarni	3.33066907388e-16
-F.F2span.B.theta.n8.nystrom	5.11098219257e-05
-F.F2span.B.theta.n8.sloan	2.22044604925e-16
-F.F2span.B.xi0.n16.base	8.19344592173e-14
-F.F2span.B.xi0.n16.iterKulkarni	1.11022302463e-16
-F.F2span.B.xi0.n16.kulkarni	3.33066907388e-16
-F.F2span.B.xi0.n16.sloan	1.22124532709e-15
-F.F2span.B.xi0.n8.base	1.90958360236e-14
-F.F2span.B.xi0.n8.iterKulkarni	1.11022302463e-16
-F.F2span.B.xi0.n8.kulkarni	4.44089209850e-16
-F.F2span.B.xi0.n8.sloan	2.22044604925e-16
-F.F2span.B.xi1.n16.base	8.19344592173e-14
-F.F2span.B.xi1.n16.iterKulkarni	1.11022302463e-16
-F.F2span.B.xi1.n16.kulkarni	4.44089209850e-16
-F.F2span.B.xi1.n16.sloan	1.22124532709e-15
-F.F2span.B.xi1.n8.base	1.93178806285e-14
-F.F2span.B.xi1.n8.iterKulkarni	1.11022302463e-16
-F.F2span.B.xi1.n8.kulkarni	4.44089209850e-16
-F.F2span.B.xi1.n8.sloan	2.22044604925e-16
-F.F2span.B.xi2.n16.base	8.14903700075e-14
-F.F2span.B.xi2.n16.iterKulkarni	1.11022302463e-16
-F.F2span.B.xi2.n16.kulkarni	4.44089209850e-16
-F.F2span.B.xi2.n16.sloan	1.11022302463e-15
-F.F2span.B.xi2.n8.base	1.90958360236e-14
-F.F2span.B.xi2.n8.iterKulkarni	2.22044604925e-16
-F.F2span.B.xi2.n8.kulkarni	4.44089209850e-16
-F.F2span.B.xi2.n8.sloan	2.22044604925e-16
-F.F2span.H.lambda.n16.base	5.01743624581e-06
-F.F2span.H.lambda.n16.iterKulkarni	9.81437153769e-14
-F.F2span.H.lambda.n16.iterNystrom	7.97302969624e-06
-F.F2span.H.lambda.n16.kulkarni	1.55098156540e-13
-F.F2span.H.lambda.n16.nystrom	1.26131472624e-05
-F.F2span.H.lambda.n16.sloan	9.93018832718e-07
-F.F2span.H.lambda.n8.base	4.71067400731e-05
-F.F2span.H.lambda.n8.iterKulkarni	9.79216707719e-14
-F.F2span.H.lambda.n8.iterNystrom	0.000112538399220
-F.F2span.H.lambda.n8.kulkarni	1.54987134238e-13
-F.F2span.H.lambda.n8.nystrom	0.000178033126195
-F.F2span.H.lambda.n8.sloan	1.46341027245e-05
-F.F2span.H.mu.n16.base	6.47306946466e-06
-F.F2span.H.mu.n16.iterKulkarni	9.81437153769e-14
-F.F2span.H.mu.n16.iterNystrom	3.06462573885e-06
-F.F2span.H.mu.n16.kulkarni	1.55209178843e-13
-F.F2span.H.mu.n16.nystrom	4.84816653401e-06
-F.F2span.H.mu.n16.sloan	1.32554795695e-06
-F.F2span.H.mu.n8.base	4.82849325387e-05
-F.F2span.H.mu.n8.iterKulkarni	9.80326930744e-14
-F.F2span.H.mu.n8.iterNystrom	4.19052682207e-05
-F.F2span.H.mu.n8.kulkarni	1.55209178843e-13
-F.F2span.H.mu.n8.nystrom	6.62931582203e-05
-F.F2span.H.mu.n8.sloan	1.96587829744e-05
-F.F2span.H.theta.n16.base	4.23339745592e-06
-F.F2span.H.theta.n16.iterKulkarni	1.11022302463e-16
-F.F2span.H.theta.n16.iterNystrom	1.63414549637e-06
-F.F2span.H.theta.n16.kulkarni	4.44089209850e-16
-F.F2span.H.theta.n16.nystrom	2.58518011087e-06
-F.F2span.H.theta.n16.sloan	2.58554835764e-07
-F.F2span.H.theta.n8.base	3.68766923113e-05
-F.F2span.H.theta.n8.iterKulkarni	1.11022302463e-16
-F.F2span.H.theta.n8.iterNystrom	3.20936944838e-05
-F.F2span.H.theta.n8.kulkarni	5.55111512313e-16
-F.F2span.H.theta.n8.nystrom	5.07714771107e-05
-F.F2span.H.theta.n8.sloan	4.86502101960e-06
-F.F2span.H.xi0.n16.base	0.000305631584818
-F.F2span.H.xi0.n16.iterKulkarni	1.11022302463e-16
-F.F2span.H.xi0.n16.kulkarni	4.44089209850e-16
-F.F2span.H.xi0.n16.sloan	0.000154831522080
-F.F2span.H.xi0.n8.base	0.00191778597970
-F.F2span.H.xi0.n8.iterKulkarni	1.11022302463e-16
-F.F2span.H.xi0.n8.kulkarni	3.33066907388e-16
-F.F2span.H.xi0.n8.sloan	0.000939358348752
-F.F2span.H.xi1.n16.base	4.08169626092e-05
-F.F2span.H.xi1.n16.iterKulkarni	1.11022302463e-16
-F.F2span.H.xi1.n16.kulkarni	4.44089209850e-16
-F.F2span.H.xi1.n16.sloan	2.04044940468e-05
-F.F2span.H.xi1.n8.base	0.000284651063671
-F.F2span.H.xi1.n8.iterKulkarni	1.11022302463e-16
-F.F2span.H.xi1.n8.kulkarni	3.33066907388e-16
-F.F2span.H.xi1.n8.sloan	0.000149201004916
-F.F2span.H.xi2.n16.base	4.49992589232e-05
-F.F2span.H.xi2.n16.iterKulkarni	2.22044604925e-16
-F.F2span.H.xi2.n16.kulkarni	6.66133814775e-16
-F.F2span.H.xi2.n16.sloan	2.33514447570e-05
-F.F2span.H.xi2.n8.base	0.000350877700010
-F.F2span.H.xi2.n8.iterKulkarni	2.22044604925e-16
-F.F2span.H.xi2.n8.kulkarni	3.33066907388e-16
-F.F2span.H.xi2.n8.sloan	0.000192999788114
-F.F2span.T.lambda.n16.base	5.01945467302e-06
-F.F2span.T.lambda.n16.iterKulkarni	3.31401572851e-13
-F.F2span.T.lambda.n16.iterNystrom	7.91044014004e-06
-F.F2span.T.lambda.n16.kulkarni	1.85340631731e-12
-F.F2span.T.lambda.n16.nystrom	1.25141320424e-05
-F.F2span.T.lambda.n16.sloan	9.94036866819e-07
-F.F2span.T.lambda.n8.base	4.72032910387e-05
-F.F2span.T.lambda.n8.iterKulkarni	5.22890619692e-11
-F.F2span.T.lambda.n8.iterNystrom	0.000111012761053
-F.F2span.T.lambda.n8.kulkarni	2.28027707827e-10
-F.F2span.T.lambda.n8.nystrom	0.000175619602150
-F.F2span.T.lambda.n8.sloan	1.46938634645e-05
-F.F2span.T.mu.n16.base	6.47704391987e-06
-F.F2span.T.mu.n16.iterKulkarni	9.03610519742e-13
-F.F2span.T.mu.n16.iterNystrom	3.03242524602e-06
-F.F2span.T.mu.n16.kulkarni	2.86026757834e-12
-F.F2span.T.mu.n16.nystrom	4.79722610458e-06
-F.F2span.T.mu.n16.sloan	1.32698065891e-06
-F.F2span.T.mu.n8.base	4.84011167249e-05
-F.F2span.T.mu.n8.iterKulkarni	1.73963954353e-10
-F.F2span.T.mu.n8.iterNystrom	4.10873520252e-05
-F.F2span.T.mu.n8.kulkarni	3.66265795471e-10
-F.F2span.T.mu.n8.nystrom	6.49992338509e-05
-F.F2span.T.mu.n8.sloan	1.97429398588e-05
-F.F2span.T.theta.n16.base	4.23432194419e-06
-F.F2span.T.theta.n16.iterKulkarni	2.20934381900e-14
-F.F2span.T.theta.n16.iterNystrom	1.66556082548e-06
-F.F2span.T.theta.n16.kulkarni	3.99458244260e-13
-F.F2span.T.theta.n16.nystrom	2.63487842989e-06
-F.F2span.T.theta.n16.sloan	2.58564766598e-07
-F.F2span.T.theta.n8.base	3.69160138112e-05
-F.F2span.T.theta.n8.iterKulkarni	7.28861415666e-12
-F.F2span.T.theta.n8.iterNystrom	3.25236776495e-05
-F.F2span.T.theta.n8.kulkarni	6.44053699261e-11
-F.F2span.T.theta.n8.nystrom	5.14517004634e-05
-F.F2span.T.theta.n8.sloan	4.87107030323e-06
-F.F2span.T.xi0.n16.base	0.000305487798552
-F.F2span.T.xi0.n16.iterKulkarni	1.46571305093e-08
-F.F2span.T.xi0.n16.kulkarni	2.30216656849e-08
-F.F2span.T.xi0.n16.sloan	0.000154750316754
-F.F2span.T.xi0.n8.base	0.00191321449323
-F.F2span.T.xi0.n8.iterKulkarni	5.78346520452e-07
-F.F2span.T.xi0.n8.kulkarni	9.06937919987e-07
-F.F2span.T.xi0.n8.sloan	0.000936752279052
-F.F2span.T.xi1.n16.base	4.08475456293e-05
-F.F2span.T.xi1.n16.iterKulkarni	2.44430142793e-10
-F.F2span.T.xi1.n16.kulkarni	3.92187948783e-10
-F.F2span.T.xi1.n16.sloan	2.04207959880e-05
-F.F2span.T.xi1.n8.base	0.000285520971556
-F.F2span.T.xi1.n8.iterKulkarni	1.33478696984e-08
-F.F2span.T.xi1.n8.kulkarni	2.03168845081e-08
-F.F2span.T.xi1.n8.sloan	0.000149685404237
-F.F2span.T.xi2.n16.base	4.50305872408e-05
-F.F2span.T.xi2.n16.iterKulkarni	2.95186541877e-10
-F.F2span.T.xi2.n16.kulkarni	4.76817585415e-10
-F.F2span.T.xi2.n16.sloan	2.33689600315e-05
-F.F2span.T.xi2.n8.base	0.000351814039400
-F.F2span.T.xi2.n8.iterKulkarni	1.92102348473e-08
-F.F2span.T.xi2.n8.kulkarni	2.99879400201e-08
-F.F2span.T.xi2.n8.sloan	0.000193553548211
-F1.B.theta.n16.base	8.60962320393e-05
-F1.B.theta.n16.sloan	8.81253137566e-05
-F1.B.theta.n32.base	8.01296036799e-05
-F1.B.theta.n32.sloan	8.97970033158e-05
-F1.B.theta.n8.base	0.000101459738311
-F1.B.theta.n8.sloan	0.000100218351624
-F1.B.xi1.n16.base	8.60199329020e-05
-F1.B.xi1.n16.sloan	9.17339013382e-05
-F1.B.xi1.n32.base	7.81691038769e-05
-F1.B.xi1.n32.sloan	8.63066961818e-05
-F1.B.xi1.n8.base	9.96955056962e-05
-F1.B.xi1.n8.sloan	0.000217907940748
-F1.B.xi2.n16.base	8.59585439890e-05
-F1.B.xi2.n16.sloan	9.06816084596e-05
-F1.B.xi2.n32.base	8.26203594260e-05
-F1.B.xi2.n32.sloan	9.01213934474e-05
-F1.B.xi2.n8.base	9.98256920135e-05
-F1.B.xi2.n8.sloan	0.000188125474414
-F1.H.theta.n16.base	8.60359418287e-05
-F1.H.theta.n16.sloan	9.36412499710e-05
-F1.H.theta.n32.base	8.16933890726e-05
-F1.H.theta.n32.sloan	9.39360907131e-05
-F1.H.theta.n8.base	6.42082753504e-05
-F1.H.theta.n8.sloan	6.01640303346e-05
-F1.H.xi1.n16.base	7.17107968136e-05
-F1.H.xi1.n16.sloan	7.73301680299e-05
-F1.H.xi1.n32.base	8.22354344927e-05
-F1.H.xi1.n32.sloan	8.86260984272e-05
-F1.H.xi1.n8.base	5.16482538337e-05
-F1.H.xi1.n8.sloan	6.06906255411e-05
-F1.H.xi2.n16.base	9.13527191115e-05
-F1.H.xi2.n16.sloan	9.17339013382e-05
-F1.H.xi2.n32.base	8.41920877988e-05
-F1.H.xi2.n32.sloan	9.81628415913e-05
-F1.H.xi2.n8.base	6.62131860518e-05
-F1.H.xi2.n8.sloan	6.52371301628e-05
-F1.T.theta.n16.base	8.51170902858e-05
-F1.T.theta.n16.sloan	9.06816084596e-05
-F1.T.theta.n32.base	8.21082153135e-05
-F1.T.theta.n32.sloan	8.86260984272e-05
-F1.T.theta.n8.base	0.000141738126438
-F1.T.theta.n8.sloan	0.000140272672913
-F1.T.xi1.n16.base	9.69724147590e-05
-F1.T.xi1.n16.sloan	0.000101270644502
-F1.T.xi1.n32.base	8.24150827556e-05
-F1.T.xi1.n32.sloan	9.01213934474e-05
-F1.T.xi1.n8.base	0.000146850869768
-F1.T.xi1.n8.sloan	0.000402920758130
-F1.T.xi2.n16.base	8.20191869844e-05
-F1.T.xi2.n16.sloan	8.21816346046e-05
-F1.T.xi2.n32.base	8.36753991011e-05
-F1.T.xi2.n32.sloan	9.77507879787e-05
-F1.T.xi2.n8.base	0.000132262500546
-F1.T.xi2.n8.sloan	0.000352557615642
-U.A.B.n16.base	1.24302540587e-05
-U.A.B.n16.kulkarni	5.21238607831e-12
-U.A.B.n16.nystrom	2.29828562404e-07
-U.A.B.n16.sloan	2.27032264766e-07
-U.A.B.n8.base	0.000100640682056
-U.A.B.n8.kulkarni	8.29888158194e-10
-U.A.B.n8.nystrom	5.17796002153e-06
-U.A.B.n8.sloan	4.39987544665e-06
-U.A.H.n16.base	1.04011936812e-05
-U.A.H.n16.kulkarni	4.48585613100e-12
-U.A.H.n16.nystrom	2.11048844734e-07
-U.A.H.n16.sloan	2.06284274995e-07
-U.A.H.n8.base	8.40036843677e-05
-U.A.H.n8.kulkarni	6.97822577500e-10
-U.A.H.n8.nystrom	4.81380943007e-06
-U.A.H.n8.sloan	3.94607121657e-06
-U.A.T.n16.base	1.44598287608e-05
-U.A.T.n16.kulkarni	6.01119154453e-12
-U.A.T.n16.nystrom	2.48613840514e-07
-U.A.T.n16.sloan	2.47781921980e-07
-U.A.T.n8.base	0.000117298223940
-U.A.T.n8.kulkarni	9.76642433592e-10
-U.A.T.n8.nystrom	5.54303559630e-06
-U.A.T.n8.sloan	4.85475068213e-06
-U.B.B.n16.base	5.32963656452e-06
-U.B.B.n16.kulkarni	6.86117829218e-13
-U.B.B.n16.nystrom	2.79362861733e-08
-U.B.B.n16.sloan	8.38021838589e-08
-U.B.B.n8.base	4.22637669191e-05
-U.B.B.n8.kulkarni	1.11155973315e-10
-U.B.B.n8.nystrom	5.73716749663e-07
-U.B.B.n8.sloan	1.72072184146e-06
-U.B.H.n16.base	2.66453525910e-15
-U.B.H.n16.kulkarni	5.32907051820e-15
-U.B.H.n16.nystrom	1.15463194561e-13
-U.B.H.n16.sloan	3.60600438398e-13
-U.B.H.n8.base	5.94635451989e-13
-U.B.H.n8.kulkarni	4.88498130835e-15
-U.B.H.n8.nystrom	7.99360577730e-15
-U.B.H.n8.sloan	3.81916720471e-14
-U.B.T.n16.base	1.06605331496e-05
-U.B.T.n16.kulkarni	2.73603362189e-12
-U.B.T.n16.nystrom	5.58690489427e-08
-U.B.T.n16.sloan	1.67580491706e-07
-U.B.T.n8.base	8.45716115854e-05
-U.B.T.n8.kulkarni	4.45005809979e-10
-U.B.T.n8.nystrom	1.14812809926e-06
-U.B.T.n8.sloan	3.44266936558e-06
-V.V2.B.lambda.n16.base	1.25800667293e-05
-V.V2.B.lambda.n16.iterKulkarni	4.11186130700e-08
-V.V2.B.lambda.n16.iterNystrom	3.39492032098e-07
-V.V2.B.lambda.n16.kulkarni	3.54920571821e-07
-V.V2.B.lambda.n16.nystrom	1.13442519201e-06
-V.V2.B.lambda.n16.sloan	4.14383340752e-07
-V.V2.B.lambda.n8.base	0.000100868052923
-V.V2.B.lambda.n8.iterKulkarni	5.64733182107e-07
-V.V2.B.lambda.n8.iterNystrom	3.93578117669e-06
-V.V2.B.lambda.n8.kulkarni	4.42352607088e-06
-V.V2.B.lambda.n8.nystrom	1.43707166023e-05
-V.V2.B.lambda.n8.sloan	5.42580813367e-06
-V.V2.B.mu.n16.base	2.08881000983e-05
-V.V2.B.mu.n16.iterKulkarni	1.30373434271e-08
-V.V2.B.mu.n16.iterNystrom	3.85984369022e-07
-V.V2.B.mu.n16.kulkarni	1.54366885163e-07
-V.V2.B.mu.n16.nystrom	3.04336531654e-06
-V.V2.B.mu.n16.sloan	9.04997940365e-07
-V.V2.B.mu.n8.base	0.000145250085867
-V.V2.B.mu.n8.iterKulkarni	1.81213533734e-07
-V.V2.B.mu.n8.iterNystrom	4.78073619881e-06
-V.V2.B.mu.n8.kulkarni	1.53364008249e-06
-V.V2.B.mu.n8.nystrom	2.83092052772e-05
-V.V2.B.mu.n8.sloan	9.52313862923e-06
-V.V2.B.theta.n16.base	1.19393619087e-05
-V.V2.B.theta.n16.iterKulkarni	1.51251940972e-08
-V.V2.B.theta.n16.iterNystrom	4.81561744925e-08
-V.V2.B.theta.n16.kulkarni	2.77796773251e-07
-V.V2.B.theta.n16.nystrom	7.60177238934e-07
-V.V2.B.theta.n16.sloan	2.02252637527e-07
-V.V2.B.theta.n8.base	9.34029360268e-05
-V.V2.B.theta.n8.iterKulkarni	2.68294794270e-07
-V.V2.B.theta.n8.iterNystrom	9.27938128226e-07
-V.V2.B.theta.n8.kulkarni	3.63068101827e-06
-V.V2.B.theta.n8.nystrom	9.96926837760e-06
-V.V2.B.theta.n8.sloan	2.79058552943e-06
-V.V2.B.xi0.n16.base	0.000494121815549
-V.V2.B.xi0.n16.iterKulkarni	9.23927313989e-07
-V.V2.B.xi0.n16.kulkarni	1.59316409388e-05
-V.V2.B.xi0.n16.sloan	9.99251683597e-05
-V.V2.B.xi0.n8.base	0.00361167586767
-V.V2.B.xi0.n8.iterKulkarni	1.30519006972e-05
-V.V2.B.xi0.n8.kulkarni	0.000220479377409
-V.V2.B.xi0.n8.sloan	0.000768168003014
-V.V2.B.xi1.n16.base	6.40656949824e-05
-V.V2.B.xi1.n16.iterKulkarni	9.00242080881e-09
-V.V2.B.xi1.n16.kulkarni	3.38023034785e-07
-V.V2.B.xi1.n16.sloan	1.12135241581e-05
-V.V2.B.xi1.n8.base	0.000466198867850
-V.V2.B.xi1.n8.iterKulkarni	2.76543917987e-07
-V.V2.B.xi1.n8.kulkarni	5.21631405426e-06
-V.V2.B.xi1.n8.sloan	8.68665716174e-05
-V.V2.B.xi2.n16.base	5.26828313429e-05
-V.V2.B.xi2.n16.iterKulkarni	8.54041792842e-09
-V.V2.B.xi2.n16.kulkarni	1.22621314991e-07
-V.V2.B.xi2.n16.sloan	9.75789353930e-06
-V.V2.B.xi2.n8.base	0.000316110809240
-V.V2.B.xi2.n8.iterKulkarni	6.80259355512e-08
-V.V2.B.xi2.n8.kulkarni	1.39580215830e-06
-V.V2.B.xi2.n8.sloan	6.71402579823e-05
-V.V2.H.lambda.n16.base	1.05700779462e-05
-V.V2.H.lambda.n16.iterKulkarni	3.11386390006e-08
-V.V2.H.lambda.n16.iterNystrom	3.13204577440e-07
-V.V2.H.lambda.n16.kulkarni	2.89458662706e-07
-V.V2.H.lambda.n16.nystrom	1.04510595378e-06
-V.V2.H.lambda.n16.sloan	3.69020717317e-07
-V.V2.H.lambda.n8.base	8.46118184733e-05
-V.V2.H.lambda.n8.iterKulkarni	4.21091312930e-07
-V.V2.H.lambda.n8.iterNystrom	3.60482669504e-06
-V.V2.H.lambda.n8.kulkarni	3.53394984454e-06
-V.V2.H.lambda.n8.nystrom	1.30581395978e-05
-V.V2.H.lambda.n8.sloan	4.80103160927e-06
-V.V2.H.mu.n16.base	1.70962776427e-05
-V.V2.H.mu.n16.iterKulkarni	9.87632331473e-09
-V.V2.H.mu.n16.iterNystrom	3.32256949287e-07
-V.V2.H.mu.n16.kulkarni	1.22812990777e-07
-V.V2.H.mu.n16.nystrom	2.70753461307e-06
-V.V2.H.mu.n16.sloan	7.20149073263e-07
-V.V2.H.mu.n8.base	0.000116805493968
-V.V2.H.mu.n8.iterKulkarni	1.35652426181e-07
-V.V2.H.mu.n8.iterNystrom	4.05244088342e-06
-V.V2.H.mu.n8.kulkarni	1.16119593352e-06
-V.V2.H.mu.n8.nystrom	2.43978882873e-05
-V.V2.H.mu.n8.sloan	7.21375844215e-06
-V.V2.H.theta.n16.base	9.98245642458e-06
-V.V2.H.theta.n16.iterKulkarni	1.18962636408e-08
-V.V2.H.theta.n16.iterNystrom	4.82292276671e-08
-V.V2.H.theta.n16.kulkarni	2.27964990218e-07
-V.V2.H.theta.n16.nystrom	6.90357178978e-07
-V.V2.H.theta.n16.sloan	1.66086165820e-07
-V.V2.H.theta.n8.base	7.78872983775e-05
-V.V2.H.theta.n8.iterKulkarni	2.10489903285e-07
-V.V2.H.theta.n8.iterNystrom	9.03404458186e-07
-V.V2.H.theta.n8.kulkarni	2.93067631940e-06
-V.V2.H.theta.n8.nystrom	8.97576911574e-06
-V.V2.H.theta.n8.sloan	2.26071500287e-06
-V.V2.H.xi0.n16.base	0.000404660507147
-V.V2.H.xi0.n16.iterKulkarni	7.13239239780e-07
-V.V2.H.xi0.n16.kulkarni	1.32558070135e-05
-V.V2.H.xi0.n16.sloan	7.49628693519e-05
-V.V2.H.xi0.n8.base	0.00293846126627
-V.V2.H.xi0.n8.iterKulkarni	1.06808049319e-05
-V.V2.H.xi0.n8.kulkarni	0.000183627420005
-V.V2.H.xi0.n8.sloan	0.000583214293903
-V.V2.H.xi1.n16.base	5.27302595561e-05
-V.V2.H.xi1.n16.iterKulkarni	7.48540707196e-09
-V.V2.H.xi1.n16.kulkarni	2.79686781512e-07
-V.V2.H.xi1.n16.sloan	8.34888029455e-06
-V.V2.H.xi1.n8.base	0.000378729897154
-V.V2.H.xi1.n8.iterKulkarni	2.28932671931e-07
-V.V2.H.xi1.n8.kulkarni	4.28579956546e-06
-V.V2.H.xi1.n8.sloan	6.47055683175e-05
-V.V2.H.xi2.n16.base	4.21426793381e-05
-V.V2.H.xi2.n16.iterKulkarni	5.76356340432e-09
-V.V2.H.xi2.n16.kulkarni	9.58367043502e-08
-V.V2.H.xi2.n16.sloan	7.06768209746e-06
-V.V2.H.xi2.n8.base	0.000241807838641
-V.V2.H.xi2.n8.iterKulkarni	3.73055185632e-08
-V.V2.H.xi2.n8.kulkarni	1.15884494212e-06
-V.V2.H.xi2.n8.sloan	4.74532317633e-05
-V.V2.T.lambda.n16.base	1.45948221724e-05
-V.V2.T.lambda.n16.iterKulkarni	5.12416764575e-08
-V.V2.T.lambda.n16.iterNystrom	3.65817557746e-07
-V.V2.T.lambda.n16.kulkarni	4.20428454273e-07
-V.V2.T.lambda.n16.nystrom	1.22741902586e-06
-V.V2.T.lambda.n16.sloan	4.59805762354e-07
-V.V2.T.lambda.n8.base	0.000117147778356
-V.V2.T.lambda.n8.iterKulkarni	7.10602567677e-07
-V.V2.T.lambda.n8.iterNystrom	4.26877189880e-06
-V.V2.T.lambda.n8.kulkarni	5.31565288064e-06
-V.V2.T.lambda.n8.nystrom	1.56898506972e-05
-V.V2.T.lambda.n8.sloan	6.05434999246e-06
-V.V2.T.mu.n16.base	2.46824488607e-05
-V.V2.T.mu.n16.iterKulkarni	1.62524320668e-08
-V.V2.T.mu.n16.iterNystrom	4.41066329793e-07
-V.V2.T.mu.n16.kulkarni	1.85942220288e-07
-V.V2.T.mu.n16.nystrom	3.37997196098e-06
-V.V2.T.mu.n16.sloan	1.09020418670e-06
-V.V2.T.mu.n8.base	0.000173766874825
-V.V2.T.mu.n8.iterKulkarni	2.26845045526e-07
-V.V2.T.mu.n8.iterNystrom	5.53921610025e-06
-V.V2.T.mu.n8.kulkarni	1.90717993875e-06
-V.V2.T.mu.n8.nystrom	3.22467139413e-05
-V.V2.T.mu.n8.sloan	1.18465228467e-05
-V.V2.T.theta.n16.base	1.38967569023e-05
-V.V2.T.theta.n16.iterKulkarni	1.83904056428e-08
-V.V2.T.theta.n16.iterNystrom	4.80845848139e-08
-V.V2.T.theta.n16.kulkarni	3.27653862819e-07
-V.V2.T.theta.n16.nystrom	8.30009148189e-07
-V.V2.T.theta.n16.sloan	2.38425535315e-07
-V.V2.T.theta.n8.base	0.000108937024340
-V.V2.T.theta.n8.iterKulkarni	3.27162975711e-07
-V.V2.T.theta.n8.iterNystrom	9.52810020216e-07
-V.V2.T.theta.n8.kulkarni	4.33219290896e-06
-V.V2.T.theta.n8.nystrom	1.09645733311e-05
-V.V2.T.theta.n8.sloan	3.32080331311e-06
-V.V2.T.xi0.n16.base	0.000583849004201
-V.V2.T.xi0.n16.iterKulkarni	1.13540805668e-06
-V.V2.T.xi0.n16.kulkarni	1.85945769735e-05
-V.V2.T.xi0.n16.sloan	0.000124935735516
-V.V2.T.xi0.n8.base	0.00428831100608
-V.V2.T.xi0.n8.iterKulkarni	1.53629896401e-05
-V.V2.T.xi0.n8.kulkarni	0.000256652675481
-V.V2.T.xi0.n8.sloan	0.000953006382225
-V.V2.T.xi1.n16.base	7.54088262200e-05
-V.V2.T.xi1.n16.iterKulkarni	1.05152286878e-08
-V.V2.T.xi1.n16.kulkarni	3.96279876469e-07
-V.V2.T.xi1.n16.sloan	1.41038029319e-05
-V.V2.T.xi1.n8.base	0.000553940092201
-V.V2.T.xi1.n8.iterKulkarni	3.23778254208e-07
-V.V2.T.xi1.n8.kulkarni	6.14278103284e-06
-V.V2.T.xi1.n8.sloan	0.000109244976350
-V.V2.T.xi2.n16.base	6.32300242638e-05
-V.V2.T.xi2.n16.iterKulkarni	1.13557840908e-08
-V.V2.T.xi2.n16.kulkarni	1.49562633167e-07
-V.V2.T.xi2.n16.sloan	1.24663600409e-05
-V.V2.T.xi2.n8.base	0.000390662356080
-V.V2.T.xi2.n8.iterKulkarni	1.00829034011e-07
-V.V2.T.xi2.n8.kulkarni	1.63050673196e-06
-V.V2.T.xi2.n8.sloan	8.69279933924e-05
-V.V2exp.B.lambda.n16.base	6.13902841629e-06
-V.V2exp.B.lambda.n16.iterKulkarni	1.18291340279e-07
-V.V2exp.B.lambda.n16.iterNystrom	1.52363566386e-06
-V.V2exp.B.lambda.n16.kulkarni	3.15499420811e-07
-V.V2exp.B.lambda.n16.nystrom	4.77589309922e-06
-V.V2exp.B.lambda.n16.sloan	5.41828455880e-07
-V.V2exp.B.lambda.n8.base	5.45669144132e-05
-V.V2exp.B.lambda.n8.iterKulkarni	1.78188878586e-06
-V.V2exp.B.lambda.n8.iterNystrom	2.30326506885e-05
-V.V2exp.B.lambda.n8.kulkarni	4.65799439286e-06
-V.V2exp.B.lambda.n8.nystrom	7.10004223388e-05
-V.V2exp.B.lambda.n8.sloan	8.08989909862e-06
-V.V2exp.B.mu.n16.base	1.01020148802e-05
-V.V2exp.B.mu.n16.iterKulkarni	3.75003894604e-08
-V.V2exp.B.mu.n16.iterNystrom	2.77923107905e-06
-V.V2exp.B.mu.n16.kulkarni	1.42714093432e-07
-V.V2exp.B.mu.n16.nystrom	6.43985907267e-06
-V.V2exp.B.mu.n16.sloan	9.16523904770e-07
-V.V2exp.B.mu.n8.base	7.38973997785e-05
-V.V2exp.B.mu.n8.iterKulkarni	5.62537969095e-07
-V.V2exp.B.mu.n8.iterNystrom	4.01568608361e-05
-V.V2exp.B.mu.n8.kulkarni	1.98043879429e-06
-V.V2exp.B.mu.n8.nystrom	8.66845055421e-05
-V.V2exp.B.mu.n8.sloan	1.31356855535e-05
-V.V2exp.B.theta.n16.base	5.66428851645e-06
-V.V2exp.B.theta.n16.iterKulkarni	3.25126081613e-08
-V.V2exp.B.theta.n16.iterNystrom	4.70509608164e-07
-V.V2exp.B.theta.n16.kulkarni	1.79481371543e-07
-V.V2exp.B.theta.n16.nystrom	1.39248105624e-06
-V.V2exp.B.theta.n16.sloan	2.02631326829e-07
-V.V2exp.B.theta.n8.base	4.79935069686e-05
-V.V2exp.B.theta.n8.iterKulkarni	6.00982072108e-07
-V.V2exp.B.theta.n8.iterNystrom	8.77413580902e-06
-V.V2exp.B.theta.n8.kulkarni	2.80280997567e-06
-V.V2exp.B.theta.n8.nystrom	2.43815141179e-05
-V.V2exp.B.theta.n8.sloan	3.46205477220e-06
-V.V2exp.B.xi0.n16.base	0.000381051266641
-V.V2exp.B.xi0.n16.iterKulkarni	2.21785318377e-06
-V.V2exp.B.xi0.n16.kulkarni	5.04323302897e-06
-V.V2exp.B.xi0.n16.sloan	0.000170840048868
-V.V2exp.B.xi0.n8.base	0.00258689703486
-V.V2exp.B.xi0.n8.iterKulkarni	2.84324967863e-05
-V.V2exp.B.xi0.n8.kulkarni	6.54968103366e-05
-V.V2exp.B.xi0.n8.sloan	0.00117464309470
-V.V2exp.B.xi1.n16.base	4.84790622104e-05
-V.V2exp.B.xi1.n16.iterKulkarni	3.17523611848e-08
-V.V2exp.B.xi1.n16.kulkarni	1.19052937286e-07
-V.V2exp.B.xi1.n16.sloan	2.05207219732e-05
-V.V2exp.B.xi1.n8.base	0.000342183092229
-V.V2exp.B.xi1.n8.iterKulkarni	3.08737986288e-07
-V.V2exp.B.xi1.n8.kulkarni	1.44295607685e-06
-V.V2exp.B.xi1.n8.sloan	0.000153940902025
-V.V2exp.B.xi2.n16.base	5.14135066920e-05
-V.V2exp.B.xi2.n16.iterKulkarni	4.38691665217e-08
-V.V2exp.B.xi2.n16.kulkarni	1.39204043403e-07
-V.V2exp.B.xi2.n16.sloan	2.14274559069e-05
-V.V2exp.B.xi2.n8.base	0.000392561027243
-V.V2exp.B.xi2.n8.iterKulkarni	6.52944716961e-07
-V.V2exp.B.xi2.n8.kulkarni	1.97680728520e-06
-V.V2exp.B.xi2.n8.sloan	0.000167883238873
-V.V2exp.H.lambda.n16.base	1.77635683940e-15
-V.V2exp.H.lambda.n16.iterKulkarni	3.99680288865e-15
-V.V2exp.H.lambda.n16.iterNystrom	1.66206279184e-06
-V.V2exp.H.lambda.n16.kulkarni	6.03961325396e-14
-V.V2exp.H.lambda.n16.nystrom	5.29931325755e-06
-V.V2exp.H.lambda.n16.sloan	1.37667655054e-13
-V.V2exp.H.lambda.n8.base	1.33226762955e-15
-V.V2exp.H.lambda.n8.iterKulkarni	2.66453525910e-15
-V.V2exp.H.lambda.n8.iterNystrom	2.50672848923e-05
-V.V2exp.H.lambda.n8.kulkarni	1.82076576039e-14
-V.V2exp.H.lambda.n8.nystrom	7.84458682199e-05
-V.V2exp.H.lambda.n8.sloan	3.15303338994e-14
-V.V2exp.H.mu.n16.base	1.33226762955e-15
-V.V2exp.H.mu.n16.iterKulkarni	3.10862446895e-15
-V.V2exp.H.mu.n16.iterNystrom	3.26916007998e-06
-V.V2exp.H.mu.n16.kulkarni	7.37188088351e-14
-V.V2exp.H.mu.n16.nystrom	7.56809319347e-06
-V.V2exp.H.mu.n16.sloan	5.54223333893e-13
-V.V2exp.H.mu.n8.base	1.33226762955e-15
-V.V2exp.H.mu.n8.iterKulkarni	1.77635683940e-15
-V.V2exp.H.mu.n8.iterNystrom	4.71573765966e-05
-V.V2exp.H.mu.n8.kulkarni	1.64313007645e-14
-V.V2exp.H.mu.n8.nystrom	0.000101762708114
-V.V2exp.H.mu.n8.sloan	8.65973959208e-14
-V.V2exp.H.theta.n16.base	1.77635683940e-15
-V.V2exp.H.theta.n16.iterKulkarni	3.10862446895e-15
-V.V2exp.H.theta.n16.iterNystrom	5.39144114242e-07
-V.V2exp.H.theta.n16.kulkarni	4.92939022934e-14
-V.V2exp.H.theta.n16.nystrom	1.61016738565e-06
-V.V2exp.H.theta.n16.sloan	2.02504679692e-13
-V.V2exp.H.theta.n8.base	1.33226762955e-15
-V.V2exp.H.theta.n8.iterKulkarni	1.77635683940e-15
-V.V2exp.H.theta.n8.iterNystrom	9.97100592404e-06
-V.V2exp.H.theta.n8.kulkarni	1.33226762955e-14
-V.V2exp.H.theta.n8.nystrom	2.79576980171e-05
-V.V2exp.H.theta.n8.sloan	1.99840144433e-14
-V.V2exp.H.xi0.n16.base	8.88178419700e-16
-V.V2exp.H.xi0.n16.iterKulkarni	7.10542735760e-15
-V.V2exp.H.xi0.n16.kulkarni	1.25677246388e-13
-V.V2exp.H.xi0.n16.sloan	5.46229728116e-13
-V.V2exp.H.xi0.n8.base	1.33226762955e-15
-V.V2exp.H.xi0.n8.iterKulkarni	5.77315972805e-15
-V.V2exp.H.xi0.n8.kulkarni	1.95399252334e-14
-V.V2exp.H.xi0.n8.sloan	7.81597009336e-14
-V.V2exp.H.xi1.n16.base	8.88178419700e-16
-V.V2exp.H.xi1.n16.iterKulkarni	3.99680288865e-15
-V.V2exp.H.xi1.n16.kulkarni	8.52651282912e-14
-V.V2exp.H.xi1.n16.sloan	5.53335155473e-13
-V.V2exp.H.xi1.n8.base	1.33226762955e-15
-V.V2exp.H.xi1.n8.iterKulkarni	1.77635683940e-15
-V.V2exp.H.xi1.n8.kulkarni	1.42108547152e-14
-V.V2exp.H.xi1.n8.sloan	8.61533067109e-14
-V.V2exp.H.xi2.n16.base	1.33226762955e-15
-V.V2exp.H.xi2.n16.iterKulkarni	7.10542735760e-15
-V.V2exp.H.xi2.n16.kulkarni	1.24789067968e-13
-V.V2exp.H.xi2.n16.sloan	5.44009282066e-13
-V.V2exp.H.xi2.n8.base	8.88178419700e-16
-V.V2exp.H.xi2.n8.iterKulkarni	3.55271367880e-15
-V.V2exp.H.xi2.n8.kulkarni	1.59872115546e-14
-V.V2exp.H.xi2.n8.sloan	8.17124146124e-14
-V.V2exp.T.lambda.n16.base	1.22800232916e-05
-V.V2exp.T.lambda.n16.iterKulkarni	2.36684372545e-07
-V.V2exp.T.lambda.n16.iterNystrom	1.38510734526e-06
-V.V2exp.T.lambda.n16.kulkarni	6.31237490722e-07
-V.V2exp.T.lambda.n16.nystrom	4.25208824195e-06
-V.V2exp.T.lambda.n16.sloan	1.08411858379e-06
-V.V2exp.T.lambda.n8.base	0.000109221643291
-V.V2exp.T.lambda.n8.iterKulkarni	3.56986376993e-06
-V.V2exp.T.lambda.n8.iterNystrom	2.09923001391e-05
-V.V2exp.T.lambda.n8.kulkarni	9.33018503613e-06
-V.V2exp.T.lambda.n8.nystrom	6.35320783342e-05
-V.V2exp.T.lambda.n8.sloan	1.62070867709e-05
-V.V2exp.T.mu.n16.base	2.02110311309e-05
-V.V2exp.T.mu.n16.iterKulkarni	7.50092103985e-08
-V.V2exp.T.mu.n16.iterNystrom	2.28873302266e-06
-V.V2exp.T.mu.n16.kulkarni	2.85507353315e-07
-V.V2exp.T.mu.n16.nystrom	5.31037468887e-06
-V.V2exp.T.mu.n16.sloan	1.83402819642e-06
-V.V2exp.T.mu.n8.base	0.000147992195532
-V.V2exp.T.mu.n8.iterKulkarni	1.12564607324e-06
-V.V2exp.T.mu.n8.iterNystrom	3.31244735574e-05
-V.V2exp.T.mu.n8.kulkarni	3.96566907135e-06
-V.V2exp.T.mu.n8.nystrom	7.15393690158e-05
-V.V2exp.T.mu.n8.sloan	2.63278702590e-05
-V.V2exp.T.theta.n16.base	1.13298733235e-05
-V.V2exp.T.theta.n16.iterKulkarni	6.50204370345e-08
-V.V2exp.T.theta.n16.iterNystrom	4.01865655419e-07
-V.V2exp.T.theta.n16.kulkarni	3.59029442176e-07
-V.V2exp.T.theta.n16.nystrom	1.17478626871e-06
-V.V2exp.T.theta.n16.sloan	4.05270238701e-07
-V.V2exp.T.theta.n8.base	9.60378774395e-05
-V.V2exp.T.theta.n8.iterKulkarni	1.20219178790e-06
-V.V2exp.T.theta.n8.iterNystrom	7.57592936962e-06
-V.V2exp.T.theta.n8.kulkarni	5.61025964529e-06
-V.V2exp.T.theta.n8.nystrom	2.08029297823e-05
-V.V2exp.T.theta.n8.sloan	6.92664149682e-06
-V.V2exp.T.xi0.n16.base	0.000761918990077
-V.V2exp.T.xi0.n16.iterKulkarni	4.41030693477e-06
-V.V2exp.T.xi0.n16.kulkarni	1.00339999372e-05
-V.V2exp.T.xi0.n16.sloan	0.000341598594991
-V.V2exp.T.xi0.n8.base	0.00516691091577
-V.V2exp.T.xi0.n8.iterKulkarni	5.55727906395e-05
-V.V2exp.T.xi0.n8.kulkarni	0.000128174217618
-V.V2exp.T.xi0.n8.sloan	0.00234629479562
-V.V2exp.T.xi1.n16.base	9.69942065909e-05
-V.V2exp.T.xi1.n16.iterKulkarni	6.38302188882e-08
-V.V2exp.T.xi1.n16.kulkarni	2.38754747972e-07
-V.V2exp.T.xi1.n16.sloan	4.10576527758e-05
-V.V2exp.T.xi1.n8.base	0.000685411485215
-V.V2exp.T.xi1.n8.iterKulkarni	6.35587218412e-07
-V.V2exp.T.xi1.n8.kulkarni	2.92161072224e-06
-V.V2exp.T.xi1.n8.sloan	0.000308371587159
-V.V2exp.T.xi2.n16.base	0.000102862525258
-V.V2exp.T.xi2.n16.iterKulkarni	8.80768817879e-08
-V.V2exp.T.xi2.n16.kulkarni	2.79081455279e-07
-V.V2exp.T.xi2.n16.sloan	4.28709950238e-05
-V.V2exp.T.xi2.n8.base	0.000786168989280
-V.V2exp.T.xi2.n8.iterKulkarni	1.32540332531e-06
-V.V2exp.T.xi2.n8.kulkarni	3.99177309007e-06
-V.V2exp.T.xi2.n8.sloan	0.000336249983435
-V.V2span.B.lambda.n16.base	8.12683254026e-14
-V.V2span.B.lambda.n16.iterKulkarni	3.33066907388e-16
-V.V2span.B.lambda.n16.iterNystrom	2.11325771382e-06
-V.V2span.B.lambda.n16.kulkarni	4.99600361081e-15
-V.V2span.B.lambda.n16.nystrom	6.46542746519e-06
-V.V2span.B.lambda.n16.sloan	4.44089209850e-16
-V.V2span.B.lambda.n8.base	1.93178806285e-14
-V.V2span.B.lambda.n8.iterKulkarni	1.11022302463e-16
-V.V2span.B.lambda.n8.iterNystrom	2.70604436079e-05
-V.V2span.B.lambda.n8.kulkarni	6.66133814775e-16
-V.V2span.B.lambda.n8.nystrom	8.84136489654e-05
-V.V2span.B.lambda.n8.sloan	4.44089209850e-16
-V.V2span.B.mu.n16.base	8.10462807976e-14
-V.V2span.B.mu.n16.iterKulkarni	3.33066907388e-16
-V.V2span.B.mu.n16.iterNystrom	7.33398286545e-07
-V.V2span.B.mu.n16.kulkarni	5.10702591328e-15
-V.V2span.B.mu.n16.nystrom	2.17261414137e-06
-V.V2span.B.mu.n16.sloan	4.44089209850e-16
-V.V2span.B.mu.n8.base	1.93178806285e-14
-V.V2span.B.mu.n8.iterKulkarni	1.11022302463e-16
-V.V2span.B.mu.n8.iterNystrom	8.81654804874e-06
-V.V2span.B.mu.n8.kulkarni	5.55111512313e-16
-V.V2span.B.mu.n8.nystrom	2.47443405664e-05
-V.V2span.B.mu.n8.sloan	4.44089209850e-16
-V.V2span.B.theta.n16.base	8.12683254026e-14
-V.V2span.B.theta.n16.iterKulkarni	1.11022302463e-16
-V.V2span.B.theta.n16.iterNystrom	3.67116237521e-07
-V.V2span.B.theta.n16.kulkarni	6.66133814775e-16
-V.V2span.B.theta.n16.nystrom	1.23988528056e-06
-V.V2span.B.theta.n16.sloan	4.44089209850e-16
-V.V2span.B.theta.n8.base	1.90958360236e-14
-V.V2span.B.theta.n8.iterKulkarni	1.11022302463e-16
-V.V2span.B.theta.n8.iterNystrom	7.63075414101e-06
-V.V2span.B.theta.n8.kulkarni	6.66133814775e-16
-V.V2span.B.theta.n8.nystrom	2.46558980754e-05
-V.V2span.B.theta.n8.sloan	4.44089209850e-16
-V.V2span.B.xi0.n16.base	8.12683254026e-14
-V.V2span.B.xi0.n16.iterKulkarni	1.11022302463e-16
-V.V2span.B.xi0.n16.kulkarni	5.55111512313e-16
-V.V2span.B.xi0.n16.sloan	4.44089209850e-16
-V.V2span.B.xi0.n8.base	1.90958360236e-14
-V.V2span.B.xi0.n8.iterKulkarni	1.11022302463e-16
-V.V2span.B.xi0.n8.kulkarni	5.55111512313e-16
-V.V2span.B.xi0.n8.sloan	4.44089209850e-16
-V.V2span.B.xi1.n16.base	8.12683254026e-14
-V.V2span.B.xi1.n16.iterKulkarni	1.11022302463e-16
-V.V2span.B.xi1.n16.kulkarni	6.66133814775e-16
-V.V2span.B.xi1.n16.sloan	4.44089209850e-16
-V.V2span.B.xi1.n8.base	1.90958360236e-14
-V.V2span.B.xi1.n8.iterKulkarni	2.22044604925e-16
-V.V2span.B.xi1.n8.kulkarni	4.44089209850e-16
-V.V2span.B.xi1.n8.sloan	4.44089209850e-16
-V.V2span.B.xi2.n16.base	8.10462807976e-14
-V.V2span.B.xi2.n16.iterKulkarni	1.11022302463e-16
-V.V2span.B.xi2.n16.kulkarni	5.55111512313e-16
-V.V2span.B.xi2.n16.sloan	4.44089209850e-16
-V.V2span.B.xi2.n8.base	1.90958360236e-14
-V.V2span.B.xi2.n8.iterKulkarni	1.11022302463e-16
-V.V2span.B.xi2.n8.kulkarni	6.66133814775e-16
-V.V2span.B.xi2.n8.sloan	3.33066907388e-16
-V.V2span.H.lambda.n16.base	4.65655668680e-06
-V.V2span.H.lambda.n16.iterKulkarni	3.65281329628e-08
-V.V2span.H.lambda.n16.iterNystrom	2.06449968210e-06
-V.V2span.H.lambda.n16.kulkarni	9.18197746724e-08
-V.V2span.H.lambda.n16.nystrom	6.42045510368e-06
-V.V2span.H.lambda.n16.sloan	5.76234622685e-07
-V.V2span.H.lambda.n8.base	4.18808454797e-05
-V.V2span.H.lambda.n8.iterKulkarni	5.60675620598e-07
-V.V2span.H.lambda.n8.iterNystrom	2.65053336425e-05
-V.V2span.H.lambda.n8.kulkarni	1.39673356792e-06
-V.V2span.H.lambda.n8.nystrom	8.80808904802e-05
-V.V2span.H.lambda.n8.sloan	8.31897997289e-06
-V.V2span.H.mu.n16.base	6.94864324691e-06
-V.V2span.H.mu.n16.iterKulkarni	1.15344778173e-08
-V.V2span.H.mu.n16.iterNystrom	8.27548916060e-07
-V.V2span.H.mu.n16.kulkarni	4.27869425446e-08
-V.V2span.H.mu.n16.nystrom	2.21564618886e-06
-V.V2span.H.mu.n16.sloan	8.63104306470e-07
-V.V2span.H.mu.n8.base	4.71671406617e-05
-V.V2span.H.mu.n8.iterKulkarni	1.75710401340e-07
-V.V2span.H.mu.n8.iterNystrom	1.00970089321e-05
-V.V2span.H.mu.n8.kulkarni	6.37262665304e-07
-V.V2span.H.mu.n8.nystrom	2.58154579933e-05
-V.V2span.H.mu.n8.sloan	1.19919032425e-05
-V.V2span.H.theta.n16.base	4.17867609681e-06
-V.V2span.H.theta.n16.iterKulkarni	8.96770235848e-09
-V.V2span.H.theta.n16.iterNystrom	3.41880779353e-07
-V.V2span.H.theta.n16.kulkarni	5.08179680558e-08
-V.V2span.H.theta.n16.nystrom	1.20233905709e-06
-V.V2span.H.theta.n16.sloan	1.80659812776e-07
-V.V2span.H.theta.n8.base	3.56802835914e-05
-V.V2span.H.theta.n8.iterKulkarni	1.63151828492e-07
-V.V2span.H.theta.n8.iterNystrom	7.20918306929e-06
-V.V2span.H.theta.n8.kulkarni	8.22351840069e-07
-V.V2span.H.theta.n8.nystrom	2.40436122323e-05
-V.V2span.H.theta.n8.sloan	3.15730114697e-06
-V.V2span.H.xi0.n16.base	0.000224012858196
-V.V2span.H.xi0.n16.iterKulkarni	5.60798024019e-07
-V.V2span.H.xi0.n16.kulkarni	1.43749359716e-06
-V.V2span.H.xi0.n16.sloan	7.12647843586e-05
-V.V2span.H.xi0.n8.base	0.00142713724931
-V.V2span.H.xi0.n8.iterKulkarni	5.38893997570e-06
-V.V2span.H.xi0.n8.kulkarni	1.89402683398e-05
-V.V2span.H.xi0.n8.sloan	0.000425302129053
-V.V2span.H.xi1.n16.base	3.00992325275e-05
-V.V2span.H.xi1.n16.iterKulkarni	7.99517518857e-09
-V.V2span.H.xi1.n16.kulkarni	3.43913681977e-08
-V.V2span.H.xi1.n16.sloan	9.52764502005e-06
-V.V2span.H.xi1.n8.base	0.000206989769786
-V.V2span.H.xi1.n8.iterKulkarni	6.53480580759e-08
-V.V2span.H.xi1.n8.kulkarni	4.41063886747e-07
-V.V2span.H.xi1.n8.sloan	6.94717561075e-05
-V.V2span.H.xi2.n16.base	3.29583487686e-05
-V.V2span.H.xi2.n16.iterKulkarni	1.76917696049e-08
-V.V2span.H.xi2.n16.kulkarni	4.43676048123e-08
-V.V2span.H.xi2.n16.sloan	1.10787327932e-05
-V.V2span.H.xi2.n8.base	0.000253873816778
-V.V2span.H.xi2.n8.iterKulkarni	3.09653655384e-07
-V.V2span.H.xi2.n8.kulkarni	6.84704458243e-07
-V.V2span.H.xi2.n8.sloan	9.22455403998e-05
-V.V2span.T.lambda.n16.base	4.65817456563e-06
-V.V2span.T.lambda.n16.iterKulkarni	3.65591374951e-08
-V.V2span.T.lambda.n16.iterNystrom	2.16206181203e-06
-V.V2span.T.lambda.n16.kulkarni	9.18886129408e-08
-V.V2span.T.lambda.n16.nystrom	6.51043841871e-06
-V.V2span.T.lambda.n16.sloan	5.76791942541e-07
-V.V2span.T.lambda.n8.base	4.19542447625e-05
-V.V2span.T.lambda.n8.iterKulkarni	5.62496172085e-07
-V.V2span.T.lambda.n8.iterNystrom	2.76175045840e-05
-V.V2span.T.lambda.n8.kulkarni	1.40082674160e-06
-V.V2span.T.lambda.n8.nystrom	8.87471221911e-05
-V.V2span.T.lambda.n8.sloan	8.35208167904e-06
-V.V2span.T.mu.n16.base	6.95316212951e-06
-V.V2span.T.mu.n16.iterKulkarni	1.15354570340e-08
-V.V2span.T.mu.n16.iterNystrom	6.39140594894e-07
-V.V2span.T.mu.n16.kulkarni	4.28080570991e-08
-V.V2span.T.mu.n16.nystrom	2.12953508307e-06
-V.V2span.T.mu.n16.sloan	8.64049925053e-07
-V.V2span.T.mu.n8.base	4.72746187683e-05
-V.V2span.T.mu.n8.iterKulkarni	1.75562729909e-07
-V.V2span.T.mu.n8.iterNystrom	7.53016955102e-06
-V.V2span.T.mu.n8.kulkarni	6.38417043897e-07
-V.V2span.T.mu.n8.nystrom	2.36730737078e-05
-V.V2span.T.mu.n8.sloan	1.20418683482e-05
-V.V2span.T.theta.n16.base	4.17962170518e-06
-V.V2span.T.theta.n16.iterKulkarni	8.96490814917e-09
-V.V2span.T.theta.n16.iterNystrom	3.92366452773e-07
-V.V2span.T.theta.n16.kulkarni	5.08353765749e-08
-V.V2span.T.theta.n16.nystrom	1.27746291956e-06
-V.V2span.T.theta.n16.sloan	1.80676142159e-07
-V.V2span.T.theta.n8.base	3.57186427055e-05
-V.V2span.T.theta.n8.iterKulkarni	1.63080542626e-07
-V.V2span.T.theta.n8.iterNystrom	8.05364639389e-06
-V.V2span.T.theta.n8.kulkarni	8.23582700815e-07
-V.V2span.T.theta.n8.nystrom	2.52707938607e-05
-V.V2span.T.theta.n8.sloan	3.16115610999e-06
-V.V2span.T.xi0.n16.base	0.000223919695420
-V.V2span.T.xi0.n16.iterKulkarni	5.52346157034e-07
-V.V2span.T.xi0.n16.kulkarni	1.41023235212e-06
-V.V2span.T.xi0.n16.sloan	7.12361730854e-05
-V.V2span.T.xi0.n8.base	0.00142423269819
-V.V2span.T.xi0.n8.iterKulkarni	5.09530227233e-06
-V.V2span.T.xi0.n8.kulkarni	1.78003741961e-05
-V.V2span.T.xi0.n8.sloan	0.000424515939154
-V.V2span.T.xi1.n16.base	3.01211584037e-05
-V.V2span.T.xi1.n16.iterKulkarni	8.14133271909e-09
-V.V2span.T.xi1.n16.kulkarni	3.47880166895e-08
-V.V2span.T.xi1.n16.sloan	9.53511961876e-06
-V.V2span.T.xi1.n8.base	0.000207603009915
-V.V2span.T.xi1.n8.iterKulkarni	7.29735508687e-08
-V.V2span.T.xi1.n8.kulkarni	4.60802259461e-07
-V.V2span.T.xi1.n8.sloan	6.96897027941e-05
-V.V2span.T.xi2.n16.base	3.29809459755e-05
-V.V2span.T.xi2.n16.iterKulkarni	1.79005938961e-08
-V.V2span.T.xi2.n16.kulkarni	4.48186814328e-08
-V.V2span.T.xi2.n16.sloan	1.10871978491e-05
-V.V2span.T.xi2.n8.base	0.000254546315165
-V.V2span.T.xi2.n8.iterKulkarni	3.24198966783e-07
-V.V2span.T.xi2.n8.kulkarni	7.09417628975e-07
-V.V2span.T.xi2.n8.sloan	9.25188471884e-05
-V.V2win.B.lambda.n16.base	1.77021603653e-06
-V.V2win.B.lambda.n16.iterKulkarni	1.42200695663e-11
-V.V2win.B.lambda.n16.iterNystrom	1.82937506255e-08
-V.V2win.B.lambda.n16.kulkarni	1.95817917437e-10
-V.V2win.B.lambda.n16.nystrom	1.18964971874e-07
-V.V2win.B.lambda.n16.sloan	8.18981309436e-08
-V.V2win.B.lambda.n8.base	1.50496086087e-05
-V.V2win.B.lambda.n8.iterKulkarni	8.90099993711e-10
-V.V2win.B.lambda.n8.iterNystrom	2.69228012773e-07
-V.V2win.B.lambda.n8.kulkarni	7.30818783268e-09
-V.V2win.B.lambda.n8.nystrom	1.89174204135e-06
-V.V2win.B.lambda.n8.sloan	1.22041464934e-06
-V.V2win.B.mu.n16.base	3.18952068634e-06
-V.V2win.B.mu.n16.iterKulkarni	5.49726930643e-12
-V.V2win.B.mu.n16.iterNystrom	3.10270505732e-07
-V.V2win.B.mu.n16.kulkarni	3.54964391214e-10
-V.V2win.B.mu.n16.nystrom	7.48026333763e-07
-V.V2win.B.mu.n16.sloan	1.35991498507e-07
-V.V2win.B.mu.n8.base	2.37546959675e-05
-V.V2win.B.mu.n8.iterKulkarni	3.99693389497e-10
-V.V2win.B.mu.n8.iterNystrom	4.42371610210e-06
-V.V2win.B.mu.n8.kulkarni	1.12951272779e-08
-V.V2win.B.mu.n8.nystrom	1.16361096044e-05
-V.V2win.B.mu.n8.sloan	1.98795375028e-06
-V.V2win.B.theta.n16.base	1.69130590055e-06
-V.V2win.B.theta.n16.iterKulkarni	4.36917169111e-12
-V.V2win.B.theta.n16.iterNystrom	3.20192730108e-08
-V.V2win.B.theta.n16.kulkarni	1.81016979184e-10
-V.V2win.B.theta.n16.nystrom	1.19053418013e-07
-V.V2win.B.theta.n16.sloan	2.33582455600e-08
-V.V2win.B.theta.n8.base	1.39485948222e-05
-V.V2win.B.theta.n8.iterKulkarni	3.37581740339e-10
-V.V2win.B.theta.n8.iterNystrom	5.07516683124e-07
-V.V2win.B.theta.n8.kulkarni	6.44602793365e-09
-V.V2win.B.theta.n8.nystrom	1.89735442402e-06
-V.V2win.B.theta.n8.sloan	4.32918713433e-07
-V.V2win.B.xi0.n16.base	7.98716307969e-05
-V.V2win.B.xi0.n16.iterKulkarni	3.11046055579e-09
-V.V2win.B.xi0.n16.kulkarni	1.30346908822e-08
-V.V2win.B.xi0.n16.sloan	1.18811200864e-05
-V.V2win.B.xi0.n8.base	0.000537263634581
-V.V2win.B.xi0.n8.iterKulkarni	1.25516356753e-07
-V.V2win.B.xi0.n8.kulkarni	5.96511991469e-07
-V.V2win.B.xi0.n8.sloan	7.23766104725e-05
-V.V2win.B.xi1.n16.base	1.07589535628e-05
-V.V2win.B.xi1.n16.iterKulkarni	1.51039514229e-10
-V.V2win.B.xi1.n16.kulkarni	8.76720473997e-10
-V.V2win.B.xi1.n16.sloan	1.57402547996e-06
-V.V2win.B.xi1.n8.base	7.69960051080e-05
-V.V2win.B.xi1.n8.iterKulkarni	5.77887626640e-09
-V.V2win.B.xi1.n8.kulkarni	2.95523463478e-08
-V.V2win.B.xi1.n8.sloan	1.16695703875e-05
-V.V2win.B.xi2.n16.base	1.12646158653e-05
-V.V2win.B.xi2.n16.iterKulkarni	7.06493752389e-11
-V.V2win.B.xi2.n16.kulkarni	2.37791630830e-09
-V.V2win.B.xi2.n16.sloan	1.81351523620e-06
-V.V2win.B.xi2.n8.base	8.72572055332e-05
-V.V2win.B.xi2.n8.iterKulkarni	1.42937572889e-09
-V.V2win.B.xi2.n8.kulkarni	7.32367843037e-08
-V.V2win.B.xi2.n8.sloan	1.52549303907e-05
-V.V2win.H.lambda.n16.base	3.53995186408e-06
-V.V2win.H.lambda.n16.iterKulkarni	2.84552381657e-11
-V.V2win.H.lambda.n16.iterNystrom	2.38407994457e-08
-V.V2win.H.lambda.n16.kulkarni	3.92153864937e-10
-V.V2win.H.lambda.n16.nystrom	1.58565879316e-07
-V.V2win.H.lambda.n16.sloan	1.63715143553e-07
-V.V2win.H.lambda.n8.base	3.00792296558e-05
-V.V2win.H.lambda.n8.iterKulkarni	1.78307202336e-09
-V.V2win.H.lambda.n8.iterNystrom	3.42427696753e-07
-V.V2win.H.lambda.n8.kulkarni	1.46791454547e-08
-V.V2win.H.lambda.n8.nystrom	2.51890811409e-06
-V.V2win.H.lambda.n8.sloan	2.43603432548e-06
-V.V2win.H.mu.n16.base	6.37687837191e-06
-V.V2win.H.mu.n16.iterKulkarni	1.10680353771e-11
-V.V2win.H.mu.n16.iterNystrom	4.13109195074e-07
-V.V2win.H.mu.n16.kulkarni	7.10278058591e-10
-V.V2win.H.mu.n16.nystrom	9.96448099699e-07
-V.V2win.H.mu.n16.sloan	2.71832526044e-07
-V.V2win.H.mu.n8.base	4.74474187960e-05
-V.V2win.H.mu.n8.iterKulkarni	8.14965428475e-10
-V.V2win.H.mu.n8.iterNystrom	5.87273425856e-06
-V.V2win.H.mu.n8.kulkarni	2.26450954655e-08
-V.V2win.H.mu.n8.nystrom	1.54570170661e-05
-V.V2win.H.mu.n8.sloan	3.96727456820e-06
-V.V2win.H.theta.n16.base	3.38224560714e-06
-V.V2win.H.theta.n16.iterKulkarni	8.74089689518e-12
-V.V2win.H.theta.n16.iterNystrom	4.29844032590e-08
-V.V2win.H.theta.n16.kulkarni	3.62141872046e-10
-V.V2win.H.theta.n16.nystrom	1.58702091468e-07
-V.V2win.H.theta.n16.sloan	4.67155942818e-08
-V.V2win.H.theta.n8.base	2.78835545400e-05
-V.V2win.H.theta.n8.iterKulkarni	6.75500766434e-10
-V.V2win.H.theta.n8.iterNystrom	6.82273822550e-07
-V.V2win.H.theta.n8.kulkarni	1.29075765631e-08
-V.V2win.H.theta.n8.nystrom	2.52752439711e-06
-V.V2win.H.theta.n8.sloan	8.65350864965e-07
-V.V2win.H.xi0.n16.base	0.000159769616398
-V.V2win.H.xi0.n16.iterKulkarni	5.87347659398e-09
-V.V2win.H.xi0.n16.kulkarni	2.27239760342e-08
-V.V2win.H.xi0.n16.sloan	2.37657078845e-05
-V.V2win.H.xi0.n8.base	0.00107528759923
-V.V2win.H.xi0.n8.iterKulkarni	2.41324197292e-07
-V.V2win.H.xi0.n8.kulkarni	1.07107763270e-06
-V.V2win.H.xi0.n8.sloan	0.000144839669622
-V.V2win.H.xi1.n16.base	2.15103242922e-05
-V.V2win.H.xi1.n16.iterKulkarni	2.94863022887e-10
-V.V2win.H.xi1.n16.kulkarni	1.65896119064e-09
-V.V2win.H.xi1.n16.sloan	3.14682925984e-06
-V.V2win.H.xi1.n8.base	0.000153774435765
-V.V2win.H.xi1.n8.iterKulkarni	1.11619167242e-08
-V.V2win.H.xi1.n8.kulkarni	5.45266448659e-08
-V.V2win.H.xi1.n8.sloan	2.33032781313e-05
-V.V2win.H.xi2.n16.base	2.25216363188e-05
-V.V2win.H.xi2.n16.iterKulkarni	1.51626045053e-10
-V.V2win.H.xi2.n16.kulkarni	4.86850493253e-09
-V.V2win.H.xi2.n16.sloan	3.62561376110e-06
-V.V2win.H.xi2.n8.base	0.000174284394362
-V.V2win.H.xi2.n8.iterKulkarni	3.62977869983e-09
-V.V2win.H.xi2.n8.kulkarni	1.53316000895e-07
-V.V2win.H.xi2.n8.sloan	3.04625963448e-05
-V.V2win.T.lambda.n16.base	2.43138842393e-13
-V.V2win.T.lambda.n16.iterKulkarni	2.22044604925e-16
-V.V2win.T.lambda.n16.iterNystrom	1.27508821279e-08
-V.V2win.T.lambda.n16.kulkarni	7.77156117238e-16
-V.V2win.T.lambda.n16.nystrom	7.93564507440e-08
-V.V2win.T.lambda.n16.sloan	2.77555756156e-15
-V.V2win.T.lambda.n8.base	5.00710584106e-14
-V.V2win.T.lambda.n8.iterKulkarni	1.11022302463e-16
-V.V2win.T.lambda.n8.iterNystrom	1.96361578442e-07
-V.V2win.T.lambda.n8.kulkarni	6.66133814775e-16
-V.V2win.T.lambda.n8.nystrom	1.26411683021e-06
-V.V2win.T.lambda.n8.sloan	2.10942374679e-15
-V.V2win.T.mu.n16.base	2.98983060532e-13
-V.V2win.T.mu.n16.iterKulkarni	1.11022302463e-16
-V.V2win.T.mu.n16.iterNystrom	2.07306926292e-07
-V.V2win.T.mu.n16.kulkarni	7.77156117238e-16
-V.V2win.T.mu.n16.nystrom	4.99317234115e-07
-V.V2win.T.mu.n16.sloan	5.66213742559e-15
-V.V2win.T.mu.n8.base	3.99680288865e-14
-V.V2win.T.mu.n8.iterKulkarni	1.11022302463e-16
-V.V2win.T.mu.n8.iterNystrom	2.96779056042e-06
-V.V2win.T.mu.n8.kulkarni	5.55111512313e-16
-V.V2win.T.mu.n8.nystrom	7.79743677082e-06
-V.V2win.T.mu.n8.sloan	3.44169137634e-15
-V.V2win.T.theta.n16.base	2.27262653141e-13
-V.V2win.T.theta.n16.iterKulkarni	2.22044604925e-16
-V.V2win.T.theta.n16.iterNystrom	2.10506682086e-08
-V.V2win.T.theta.n16.kulkarni	7.77156117238e-16
-V.V2win.T.theta.n16.nystrom	7.93970392765e-08
-V.V2win.T.theta.n16.sloan	3.88578058619e-15
-V.V2win.T.theta.n8.base	4.99600361081e-14
-V.V2win.T.theta.n8.iterKulkarni	2.22044604925e-16
-V.V2win.T.theta.n8.iterNystrom	3.32518626189e-07
-V.V2win.T.theta.n8.kulkarni	7.77156117238e-16
-V.V2win.T.theta.n8.nystrom	1.26670210077e-06
-V.V2win.T.theta.n8.sloan	3.21964677141e-15
-V.V2win.T.xi0.n16.base	2.99094082834e-13
-V.V2win.T.xi0.n16.iterKulkarni	2.22044604925e-16
-V.V2win.T.xi0.n16.kulkarni	7.77156117238e-16
-V.V2win.T.xi0.n16.sloan	5.55111512313e-15
-V.V2win.T.xi0.n8.base	4.10782519111e-14
-V.V2win.T.xi0.n8.iterKulkarni	2.22044604925e-16
-V.V2win.T.xi0.n8.kulkarni	4.44089209850e-16
-V.V2win.T.xi0.n8.sloan	3.44169137634e-15
-V.V2win.T.xi1.n16.base	2.99205105136e-13
-V.V2win.T.xi1.n16.iterKulkarni	1.11022302463e-16
-V.V2win.T.xi1.n16.kulkarni	7.77156117238e-16
-V.V2win.T.xi1.n16.sloan	5.55111512313e-15
-V.V2win.T.xi1.n8.base	4.01900734914e-14
-V.V2win.T.xi1.n8.iterKulkarni	1.11022302463e-16
-V.V2win.T.xi1.n8.kulkarni	4.44089209850e-16
-V.V2win.T.xi1.n8.sloan	3.44169137634e-15
-V.V2win.T.xi2.n16.base	2.99427149741e-13
-V.V2win.T.xi2.n16.iterKulkarni	2.22044604925e-16
-V.V2win.T.xi2.n16.kulkarni	7.77156117238e-16
-V.V2win.T.xi2.n16.sloan	5.55111512313e-15
-V.V2win.T.xi2.n8.base	4.00790511890e-14
-V.V2win.T.xi2.n8.iterKulkarni	1.11022302463e-16
-V.V2win.T.xi2.n8.kulkarni	6.66133814775e-16
-V.V2win.T.xi2.n8.sloan	3.44169137634e-15
-V1.B.theta.n16.base	1.63799838659e-06
-V1.B.theta.n16.sloan	3.32475372788e-08
-V1.B.theta.n8.base	1.30571143129e-05
-V1.B.theta.n8.sloan	5.77230743648e-07
+F.F2.B.lambda.n16.base	1.4095544249359548e-05	portable
+F.F2.B.lambda.n16.iterKulkarni	3.9745984281580604e-13	portable
+F.F2.B.lambda.n16.iterNystrom	2.2727909108066770e-06	portable
+F.F2.B.lambda.n16.kulkarni	4.1381342796853460e-12	portable
+F.F2.B.lambda.n16.nystrom	5.2917446340394750e-06	portable
+F.F2.B.lambda.n16.sloan	1.2389281466296254e-06	portable
+F.F2.B.lambda.n8.base	0.00012019491468817645	portable
+F.F2.B.lambda.n8.iterKulkarni	5.4822146822175455e-11	portable
+F.F2.B.lambda.n8.iterNystrom	3.1150611458086175e-05	portable
+F.F2.B.lambda.n8.kulkarni	4.0301362247419090e-10	portable
+F.F2.B.lambda.n8.nystrom	7.2043500405460930e-05	portable
+F.F2.B.lambda.n8.sloan	1.6685667567517548e-05	portable
+F.F2.B.mu.n16.base	2.0505859268715730e-05	portable
+F.F2.B.mu.n16.iterKulkarni	1.9872992140790302e-14	portable
+F.F2.B.mu.n16.iterNystrom	8.6653957453997070e-07	portable
+F.F2.B.mu.n16.kulkarni	7.5169870328295470e-12	portable
+F.F2.B.mu.n16.nystrom	2.0141586091204644e-06	portable
+F.F2.B.mu.n16.sloan	1.0243052883662784e-07	portable
+F.F2.B.mu.n8.base	0.00014028121872589060	portable
+F.F2.B.mu.n8.iterKulkarni	8.2096551778931830e-12	portable
+F.F2.B.mu.n8.iterNystrom	1.1441025116187830e-05	portable
+F.F2.B.mu.n8.kulkarni	6.0697846748780650e-10	portable
+F.F2.B.mu.n8.nystrom	2.6381018470522655e-05	portable
+F.F2.B.mu.n8.sloan	1.3016195224979654e-06	portable
+F.F2.B.theta.n16.base	1.2463532695905500e-05	portable
+F.F2.B.theta.n16.iterKulkarni	7.7715611723760960e-15	portable
+F.F2.B.theta.n16.iterNystrom	5.0630446235544470e-07	portable
+F.F2.B.theta.n16.kulkarni	4.7317705309524170e-13	portable
+F.F2.B.theta.n16.nystrom	1.1993195994097760e-06	portable
+F.F2.B.theta.n16.sloan	2.4966705769458030e-07	portable
+F.F2.B.theta.n8.base	0.00010143452655420049	portable
+F.F2.B.theta.n8.iterKulkarni	2.9878322038712213e-12	portable
+F.F2.B.theta.n8.iterNystrom	9.4876185426917560e-06	portable
+F.F2.B.theta.n8.kulkarni	7.7496675743304880e-11	portable
+F.F2.B.theta.n8.nystrom	2.2284559124452485e-05	portable
+F.F2.B.theta.n8.sloan	4.8075583197748630e-06	portable
+F.F2.B.xi0.n16.base	0.00071474002556204400	portable
+F.F2.B.xi0.n16.iterKulkarni	1.9734688105899068e-08	portable
+F.F2.B.xi0.n16.kulkarni	4.9061523510474100e-08	portable
+F.F2.B.xi0.n16.sloan	0.00026943074709473436	portable
+F.F2.B.xi0.n8.base	0.0051924879475405690	portable
+F.F2.B.xi0.n8.iterKulkarni	1.0562395953428450e-06	portable
+F.F2.B.xi0.n8.kulkarni	2.4362588085802273e-06	portable
+F.F2.B.xi0.n8.sloan	0.0021108512902900944	portable
+F.F2.B.xi1.n16.base	9.1601907773242170e-05	portable
+F.F2.B.xi1.n16.iterKulkarni	2.6692537069550326e-10	portable
+F.F2.B.xi1.n16.kulkarni	7.6798467585348360e-10	portable
+F.F2.B.xi1.n16.sloan	2.9931280230544033e-05	portable
+F.F2.B.xi1.n8.base	0.00066723809641155980	portable
+F.F2.B.xi1.n8.iterKulkarni	1.5582635404243206e-08	portable
+F.F2.B.xi1.n8.kulkarni	4.1926972227379620e-08	portable
+F.F2.B.xi1.n8.sloan	0.00023438220194837990	portable
+F.F2.B.xi2.n16.base	7.4943184760534190e-05	portable
+F.F2.B.xi2.n16.iterKulkarni	2.0689283619645948e-10	portable
+F.F2.B.xi2.n16.kulkarni	5.6675919513082820e-10	portable
+F.F2.B.xi2.n16.sloan	2.6034590163703797e-05	portable
+F.F2.B.xi2.n8.base	0.00045049922563755730	portable
+F.F2.B.xi2.n8.iterKulkarni	9.7562050660471300e-09	portable
+F.F2.B.xi2.n8.kulkarni	2.3616360755873700e-08	portable
+F.F2.B.xi2.n8.sloan	0.00018026995601383433	portable
+F.F2.H.lambda.n16.base	1.1869378819251430e-05	portable
+F.F2.H.lambda.n16.iterKulkarni	3.0775382242609340e-13	portable
+F.F2.H.lambda.n16.iterNystrom	2.0519888755954340e-06	portable
+F.F2.H.lambda.n16.kulkarni	2.8729241208225176e-12	portable
+F.F2.H.lambda.n16.nystrom	4.8304531219400815e-06	portable
+F.F2.H.lambda.n16.sloan	1.0794173792572082e-06	portable
+F.F2.H.lambda.n8.base	0.00010098491514076713	portable
+F.F2.H.lambda.n8.iterKulkarni	3.9146352825980560e-11	portable
+F.F2.H.lambda.n8.iterNystrom	2.7945465621570520e-05	portable
+F.F2.H.lambda.n8.kulkarni	2.6714130907379285e-10	portable
+F.F2.H.lambda.n8.nystrom	6.5361138073205540e-05	portable
+F.F2.H.lambda.n8.sloan	1.4413328298878980e-05	portable
+F.F2.H.mu.n16.base	1.6724727815997653e-05	portable
+F.F2.H.mu.n16.iterKulkarni	1.2212453270876722e-14	portable
+F.F2.H.mu.n16.iterNystrom	7.8160570704532970e-07	portable
+F.F2.H.mu.n16.kulkarni	5.0677240182039895e-12	portable
+F.F2.H.mu.n16.nystrom	1.8369362602133066e-06	portable
+F.F2.H.mu.n16.sloan	1.2661628812082880e-07	portable
+F.F2.H.mu.n8.base	0.00011203699101036690	portable
+F.F2.H.mu.n8.iterKulkarni	5.5512261454282450e-12	portable
+F.F2.H.mu.n8.iterNystrom	1.0250084646612478e-05	portable
+F.F2.H.mu.n8.kulkarni	3.9314262956224866e-10	portable
+F.F2.H.mu.n8.nystrom	2.3904621943238170e-05	portable
+F.F2.H.mu.n8.sloan	1.6323477286528387e-06	portable
+F.F2.H.theta.n16.base	1.0431537389887780e-05	portable
+F.F2.H.theta.n16.iterKulkarni	7.6605388699135800e-15	portable
+F.F2.H.theta.n16.iterNystrom	4.6302696588007564e-07	portable
+F.F2.H.theta.n16.kulkarni	3.5760283623176290e-13	portable
+F.F2.H.theta.n16.nystrom	1.1078404060782532e-06	portable
+F.F2.H.theta.n16.sloan	2.2696836499136452e-07	portable
+F.F2.H.theta.n8.base	8.4713295728011670e-05	portable
+F.F2.H.theta.n8.iterKulkarni	2.6280089215902080e-12	portable
+F.F2.H.theta.n8.iterNystrom	8.6255657902878370e-06	portable
+F.F2.H.theta.n8.kulkarni	5.5118687392052834e-11	portable
+F.F2.H.theta.n8.nystrom	2.0468288453256990e-05	portable
+F.F2.H.theta.n8.sloan	4.3094573638491340e-06	portable
+F.F2.H.xi0.n16.base	0.00056795564632250440	portable
+F.F2.H.xi0.n16.iterKulkarni	9.5748502459969130e-09	portable
+F.F2.H.xi0.n16.kulkarni	2.6497965710525760e-08	portable
+F.F2.H.xi0.n16.sloan	0.00019989637744877164	portable
+F.F2.H.xi0.n8.base	0.0041241492290140510	portable
+F.F2.H.xi0.n8.iterKulkarni	4.9913359645437080e-07	portable
+F.F2.H.xi0.n8.kulkarni	1.2651557191878382e-06	portable
+F.F2.H.xi0.n8.sloan	0.0015880843867854821	portable
+F.F2.H.xi1.n16.base	7.2821243851994840e-05	portable
+F.F2.H.xi1.n16.iterKulkarni	1.3122458675240978e-10	portable
+F.F2.H.xi1.n16.kulkarni	4.2465098104571550e-10	portable
+F.F2.H.xi1.n16.sloan	2.1967077560747228e-05	portable
+F.F2.H.xi1.n8.base	0.00052530613660539680	portable
+F.F2.H.xi1.n8.iterKulkarni	7.5228255846937490e-09	portable
+F.F2.H.xi1.n8.kulkarni	2.2470602933921670e-08	portable
+F.F2.H.xi1.n8.sloan	0.00017240106975324743	portable
+F.F2.H.xi2.n16.base	5.7788968731431470e-05	portable
+F.F2.H.xi2.n16.iterKulkarni	9.5815577694224880e-11	portable
+F.F2.H.xi2.n16.kulkarni	2.9431157511083940e-10	portable
+F.F2.H.xi2.n16.sloan	1.8573687400991190e-05	portable
+F.F2.H.xi2.n8.base	0.00033284185494553140	portable
+F.F2.H.xi2.n8.iterKulkarni	4.2151848678173565e-09	portable
+F.F2.H.xi2.n8.kulkarni	1.1176332748163986e-08	portable
+F.F2.H.xi2.n8.sloan	0.00012558399371953577	portable
+F.F2.T.lambda.n16.base	1.6327733830312496e-05	portable
+F.F2.T.lambda.n16.iterKulkarni	5.0215387403795830e-13	portable
+F.F2.T.lambda.n16.iterNystrom	2.4938382789940760e-06	portable
+F.F2.T.lambda.n16.kulkarni	5.6342708276702070e-12	portable
+F.F2.T.lambda.n16.nystrom	5.7535486932547290e-06	portable
+F.F2.T.lambda.n16.sloan	1.3986271770738412e-06	portable
+F.F2.T.lambda.n8.base	0.00013945626282363400	portable
+F.F2.T.lambda.n8.iterKulkarni	7.3367645292421460e-11	portable
+F.F2.T.lambda.n8.iterNystrom	3.4369999668326656e-05	portable
+F.F2.T.lambda.n8.kulkarni	5.6631566103249040e-10	portable
+F.F2.T.lambda.n8.nystrom	7.8755550725784220e-05	portable
+F.F2.T.lambda.n8.sloan	1.8968841818400860e-05	portable
+F.F2.T.mu.n16.base	2.4289582909675644e-05	portable
+F.F2.T.mu.n16.iterKulkarni	3.5860203695392556e-14	portable
+F.F2.T.mu.n16.iterNystrom	9.5153284518367800e-07	portable
+F.F2.T.mu.n16.kulkarni	1.0460188271110837e-11	portable
+F.F2.T.mu.n16.nystrom	2.1915048964427086e-06	portable
+F.F2.T.mu.n16.sloan	8.8004008413911100e-08	portable
+F.F2.T.mu.n8.base	0.00016862646023962924	portable
+F.F2.T.mu.n8.iterKulkarni	1.0777490011548707e-11	portable
+F.F2.T.mu.n8.iterNystrom	1.2635286223416920e-05	portable
+F.F2.T.mu.n8.kulkarni	8.7020357586453660e-10	portable
+F.F2.T.mu.n8.nystrom	2.8864318700749790e-05	portable
+F.F2.T.mu.n8.sloan	1.1100855286660938e-06	portable
+F.F2.T.theta.n16.base	1.4496041698119910e-05	portable
+F.F2.T.theta.n16.iterKulkarni	7.5495165674510640e-15	portable
+F.F2.T.theta.n16.iterNystrom	5.4958429163143310e-07	portable
+F.F2.T.theta.n16.kulkarni	6.0285110237146000e-13	portable
+F.F2.T.theta.n16.nystrom	1.2908052391402691e-06	portable
+F.F2.T.theta.n16.sloan	2.7236648603157220e-07	portable
+F.F2.T.theta.n8.base	0.00011817647318890234	portable
+F.F2.T.theta.n8.iterKulkarni	3.3877345373412027e-12	portable
+F.F2.T.theta.n8.iterNystrom	1.0351159587251857e-05	portable
+F.F2.T.theta.n8.kulkarni	1.0353062851464756e-10	portable
+F.F2.T.theta.n8.nystrom	2.4104050697859590e-05	portable
+F.F2.T.theta.n8.sloan	5.3067866180311896e-06	portable
+F.F2.T.xi0.n16.base	0.00086165632797308160	portable
+F.F2.T.xi0.n16.iterKulkarni	3.3613539951460325e-08	portable
+F.F2.T.xi0.n16.kulkarni	7.9143637199408090e-08	portable
+F.F2.T.xi0.n16.sloan	0.00033895416530382860	portable
+F.F2.T.xi0.n8.base	0.0062612125149072995	portable
+F.F2.T.xi0.n8.iterKulkarni	1.8144531062080915e-06	portable
+F.F2.T.xi0.n8.kulkarni	4.0012719397797270e-06	portable
+F.F2.T.xi0.n8.sloan	0.0026334628841166996	portable
+F.F2.T.xi1.n16.base	0.00011039569215709477	portable
+F.F2.T.xi1.n16.iterKulkarni	4.5292014583253604e-10	portable
+F.F2.T.xi1.n16.kulkarni	1.2239133040381490e-09	portable
+F.F2.T.xi1.n16.sloan	3.7901530600903400e-05	portable
+F.F2.T.xi1.n8.base	0.00080955677878169490	portable
+F.F2.T.xi1.n8.iterKulkarni	2.6678065312424337e-08	portable
+F.F2.T.xi1.n8.kulkarni	6.8016397958281520e-08	portable
+F.F2.T.xi1.n8.sloan	0.00029654639774312486	portable
+F.F2.T.xi2.n16.base	9.2109883999991200e-05	portable
+F.F2.T.xi2.n16.iterKulkarni	3.6271963210765534e-10	portable
+F.F2.T.xi2.n16.kulkarni	9.3766050479615610e-10	portable
+F.F2.T.xi2.n16.sloan	3.3501243096090150e-05	portable
+F.F2.T.xi2.n8.base	0.00056851704444327300	portable
+F.F2.T.xi2.n8.iterKulkarni	1.7724946288488752e-08	portable
+F.F2.T.xi2.n8.kulkarni	4.1117711346849720e-08	portable
+F.F2.T.xi2.n8.sloan	0.00023512175775275423	portable
+F.F2exp.B.lambda.n16.base	6.9501723709564090e-06	portable
+F.F2exp.B.lambda.n16.iterKulkarni	2.1807000649687325e-12	portable
+F.F2exp.B.lambda.n16.iterNystrom	7.6771402768294190e-07	portable
+F.F2exp.B.lambda.n16.kulkarni	3.6366465394621628e-12	portable
+F.F2exp.B.lambda.n16.nystrom	2.4330400836269916e-06	portable
+F.F2exp.B.lambda.n16.sloan	1.7229896129844490e-06	portable
+F.F2exp.B.lambda.n8.base	6.7650306246225260e-05	portable
+F.F2exp.B.lambda.n8.iterKulkarni	4.0557668334884056e-10	portable
+F.F2exp.B.lambda.n8.iterNystrom	9.7596866088789370e-06	portable
+F.F2exp.B.lambda.n8.kulkarni	6.0447913341477030e-10	portable
+F.F2exp.B.lambda.n8.nystrom	4.0515424270637370e-05	portable
+F.F2exp.B.lambda.n8.sloan	2.5787471761740120e-05	portable
+F.F2exp.B.mu.n16.base	1.0083265013616227e-05	portable
+F.F2exp.B.mu.n16.iterKulkarni	1.8567369863831120e-12	portable
+F.F2exp.B.mu.n16.iterNystrom	2.8771133186999975e-07	portable
+F.F2exp.B.mu.n16.kulkarni	8.5409457284413300e-12	portable
+F.F2exp.B.mu.n16.nystrom	9.7577158264527950e-07	portable
+F.F2exp.B.mu.n16.sloan	1.0518933253322870e-06	portable
+F.F2exp.B.mu.n8.base	7.4002412234541740e-05	portable
+F.F2exp.B.mu.n8.iterKulkarni	2.8220337178197497e-10	portable
+F.F2exp.B.mu.n8.iterNystrom	3.4190973459136130e-06	portable
+F.F2exp.B.mu.n8.kulkarni	1.2509173696884090e-09	portable
+F.F2exp.B.mu.n8.nystrom	1.6214218077958975e-05	portable
+F.F2exp.B.mu.n8.sloan	1.4819789592168675e-05	portable
+F.F2exp.B.theta.n16.base	5.6534857555412540e-06	portable
+F.F2exp.B.theta.n16.iterKulkarni	5.8397731095283230e-14	portable
+F.F2exp.B.theta.n16.iterNystrom	2.2257665932556847e-07	portable
+F.F2exp.B.theta.n16.kulkarni	6.3637983771513970e-13	portable
+F.F2exp.B.theta.n16.nystrom	4.3657258053109160e-07	portable
+F.F2exp.B.theta.n16.sloan	3.1930340371744137e-07	portable
+F.F2exp.B.theta.n8.base	4.9074048197095266e-05	portable
+F.F2exp.B.theta.n8.iterKulkarni	2.2060797633116636e-11	portable
+F.F2exp.B.theta.n8.iterNystrom	4.3563482885478070e-06	portable
+F.F2exp.B.theta.n8.kulkarni	9.8750119192914100e-11	portable
+F.F2exp.B.theta.n8.nystrom	8.9842828869812760e-06	portable
+F.F2exp.B.theta.n8.sloan	6.4076264625345660e-06	portable
+F.F2exp.B.xi0.n16.base	0.0010774723805828668	portable
+F.F2exp.B.xi0.n16.iterKulkarni	7.6894448586273260e-08	portable
+F.F2exp.B.xi0.n16.kulkarni	1.0970844166457994e-07	portable
+F.F2exp.B.xi0.n16.sloan	0.00092566190930676310	portable
+F.F2exp.B.xi0.n8.base	0.0074870069289432180	portable
+F.F2exp.B.xi0.n8.iterKulkarni	5.6933580612206210e-06	portable
+F.F2exp.B.xi0.n8.kulkarni	7.5746903607232240e-06	portable
+F.F2exp.B.xi0.n8.sloan	0.0063552014425829470	portable
+F.F2exp.B.xi1.n16.base	0.00013282088761412680	portable
+F.F2exp.B.xi1.n16.iterKulkarni	7.2889716484780820e-10	portable
+F.F2exp.B.xi1.n16.kulkarni	1.2456893294654492e-09	portable
+F.F2exp.B.xi1.n16.sloan	0.00011185920696843432	portable
+F.F2exp.B.xi1.n8.base	0.0010029110892935122	portable
+F.F2exp.B.xi1.n8.iterKulkarni	5.0082541447338260e-08	portable
+F.F2exp.B.xi1.n8.kulkarni	8.0202166463649860e-08	portable
+F.F2exp.B.xi1.n8.sloan	0.00083903750038683000	portable
+F.F2exp.B.xi2.n16.base	0.00013899873816458630	portable
+F.F2exp.B.xi2.n16.iterKulkarni	4.3318348907916970e-10	portable
+F.F2exp.B.xi2.n16.kulkarni	9.9978758605345770e-10	portable
+F.F2exp.B.xi2.n16.sloan	0.00011709355803768418	portable
+F.F2exp.B.xi2.n8.base	0.0010972993539293263	portable
+F.F2exp.B.xi2.n8.iterKulkarni	1.3604316340121159e-08	portable
+F.F2exp.B.xi2.n8.kulkarni	4.7028601235510337e-08	portable
+F.F2exp.B.xi2.n8.sloan	0.00091810473761344550	portable
+F.F2exp.H.lambda.n16.base	2.2204460492503130e-15	portable
+F.F2exp.H.lambda.n16.iterKulkarni	5.1825210789502310e-13	portable
+F.F2exp.H.lambda.n16.iterNystrom	1.7637052878161086e-06	portable
+F.F2exp.H.lambda.n16.kulkarni	5.9796612106310930e-13	portable
+F.F2exp.H.lambda.n16.nystrom	3.6779093377514727e-06	portable
+F.F2exp.H.lambda.n16.sloan	1.7763568394002505e-15	portable
+F.F2exp.H.lambda.n8.base	2.8865798640254070e-15	portable
+F.F2exp.H.lambda.n8.iterKulkarni	5.1691984026547290e-13	portable
+F.F2exp.H.lambda.n8.iterNystrom	2.4183859870907654e-05	portable
+F.F2exp.H.lambda.n8.kulkarni	5.9863225487788440e-13	portable
+F.F2exp.H.lambda.n8.nystrom	5.4150940585584450e-05	portable
+F.F2exp.H.lambda.n8.sloan	2.2204460492503130e-15	portable
+F.F2exp.H.mu.n16.base	1.5543122344752192e-15	portable
+F.F2exp.H.mu.n16.iterKulkarni	5.1825210789502310e-13	portable
+F.F2exp.H.mu.n16.iterNystrom	6.7343663445740280e-07	portable
+F.F2exp.H.mu.n16.kulkarni	5.9841021027295940e-13	portable
+F.F2exp.H.mu.n16.nystrom	1.4291011314337965e-06	portable
+F.F2exp.H.mu.n16.sloan	1.1102230246251565e-15	portable
+F.F2exp.H.mu.n8.base	2.6645352591003757e-15	portable
+F.F2exp.H.mu.n8.iterKulkarni	5.1691984026547290e-13	portable
+F.F2exp.H.mu.n8.iterNystrom	8.8648395422108450e-06	portable
+F.F2exp.H.mu.n8.kulkarni	5.9752203185325930e-13	portable
+F.F2exp.H.mu.n8.nystrom	2.0566116564646464e-05	portable
+F.F2exp.H.mu.n8.sloan	2.6645352591003757e-15	portable
+F.F2exp.H.theta.n16.base	2.2204460492503130e-15	portable
+F.F2exp.H.theta.n16.iterKulkarni	1.7763568394002505e-15	portable
+F.F2exp.H.theta.n16.iterNystrom	4.0247487320677067e-07	portable
+F.F2exp.H.theta.n16.kulkarni	2.2204460492503130e-15	portable
+F.F2exp.H.theta.n16.nystrom	6.5742097188348230e-07	portable
+F.F2exp.H.theta.n16.sloan	1.7763568394002505e-15	portable
+F.F2exp.H.theta.n8.base	2.6645352591003757e-15	portable
+F.F2exp.H.theta.n8.iterKulkarni	1.7763568394002505e-15	portable
+F.F2exp.H.theta.n8.iterNystrom	8.0566820597205440e-06	portable
+F.F2exp.H.theta.n8.kulkarni	2.2204460492503130e-15	portable
+F.F2exp.H.theta.n8.nystrom	1.3555862319103440e-05	portable
+F.F2exp.H.theta.n8.sloan	2.6645352591003757e-15	portable
+F.F2exp.H.xi0.n16.base	1.5543122344752192e-15	portable
+F.F2exp.H.xi0.n16.iterKulkarni	1.1102230246251565e-15	portable
+F.F2exp.H.xi0.n16.kulkarni	1.7763568394002505e-15	portable
+F.F2exp.H.xi0.n16.sloan	1.5543122344752192e-15	portable
+F.F2exp.H.xi0.n8.base	1.3322676295501878e-15	portable
+F.F2exp.H.xi0.n8.iterKulkarni	1.9984014443252818e-15	portable
+F.F2exp.H.xi0.n8.kulkarni	3.1086244689504383e-15	portable
+F.F2exp.H.xi0.n8.sloan	1.3322676295501878e-15	portable
+F.F2exp.H.xi1.n16.base	1.7763568394002505e-15	portable
+F.F2exp.H.xi1.n16.iterKulkarni	2.6645352591003757e-15	portable
+F.F2exp.H.xi1.n16.kulkarni	3.3306690738754696e-15	portable
+F.F2exp.H.xi1.n16.sloan	1.3322676295501878e-15	portable
+F.F2exp.H.xi1.n8.base	1.3322676295501878e-15	portable
+F.F2exp.H.xi1.n8.iterKulkarni	1.3322676295501878e-15	portable
+F.F2exp.H.xi1.n8.kulkarni	1.3322676295501878e-15	portable
+F.F2exp.H.xi1.n8.sloan	8.8817841970012520e-16	portable
+F.F2exp.H.xi2.n16.base	1.7763568394002505e-15	portable
+F.F2exp.H.xi2.n16.iterKulkarni	8.8817841970012520e-16	portable
+F.F2exp.H.xi2.n16.kulkarni	1.7763568394002505e-15	portable
+F.F2exp.H.xi2.n16.sloan	1.7763568394002505e-15	portable
+F.F2exp.H.xi2.n8.base	1.3322676295501878e-15	portable
+F.F2exp.H.xi2.n8.iterKulkarni	1.7763568394002505e-15	portable
+F.F2exp.H.xi2.n8.kulkarni	1.7763568394002505e-15	portable
+F.F2exp.H.xi2.n8.sloan	1.7763568394002505e-15	portable
+F.F2exp.T.lambda.n16.base	1.3903354436628490e-05	portable
+F.F2exp.T.lambda.n16.iterKulkarni	3.1405988920596430e-12	portable
+F.F2exp.T.lambda.n16.iterNystrom	6.9044440031973410e-07	portable
+F.F2exp.T.lambda.n16.kulkarni	5.4201088062200140e-12	portable
+F.F2exp.T.lambda.n16.nystrom	3.0150665288886103e-06	portable
+F.F2exp.T.lambda.n16.sloan	3.4478678092586534e-06	portable
+F.F2exp.T.lambda.n8.base	0.00013545655095725806	portable
+F.F2exp.T.lambda.n8.iterKulkarni	6.4766947360794800e-10	portable
+F.F2exp.T.lambda.n8.iterNystrom	1.2550349391737825e-05	portable
+F.F2exp.T.lambda.n8.kulkarni	9.6400221138992500e-10	portable
+F.F2exp.T.lambda.n8.nystrom	4.9009045767434145e-05	portable
+F.F2exp.T.lambda.n8.sloan	5.1689125866172250e-05	portable
+F.F2exp.T.mu.n16.base	2.0173566128267595e-05	portable
+F.F2exp.T.mu.n16.iterKulkarni	2.7911006839076435e-12	portable
+F.F2exp.T.mu.n16.iterNystrom	2.8351345715549314e-07	portable
+F.F2exp.T.mu.n16.kulkarni	1.3629763984113197e-11	portable
+F.F2exp.T.mu.n16.nystrom	1.2005208249732390e-06	portable
+F.F2exp.T.mu.n16.sloan	2.1047441081112340e-06	portable
+F.F2exp.T.mu.n8.base	0.00014820669372861417	portable
+F.F2exp.T.mu.n8.iterKulkarni	4.7381543133440120e-10	portable
+F.F2exp.T.mu.n8.iterNystrom	5.1972880412698430e-06	portable
+F.F2exp.T.mu.n8.kulkarni	2.0899864061618700e-09	portable
+F.F2exp.T.mu.n8.nystrom	1.9393330544126286e-05	portable
+F.F2exp.T.mu.n8.sloan	2.9692075305787213e-05	portable
+F.F2exp.T.theta.n16.base	1.1308167822132731e-05	portable
+F.F2exp.T.theta.n16.iterKulkarni	9.2370555648813020e-14	portable
+F.F2exp.T.theta.n16.iterNystrom	5.5483502903186380e-08	portable
+F.F2exp.T.theta.n16.kulkarni	1.0129674876679928e-12	portable
+F.F2exp.T.theta.n16.nystrom	3.2535911120845640e-07	portable
+F.F2exp.T.theta.n16.sloan	6.3856235432702140e-07	portable
+F.F2exp.T.theta.n8.base	9.8199026189682570e-05	portable
+F.F2exp.T.theta.n8.iterKulkarni	3.4675151638907664e-11	portable
+F.F2exp.T.theta.n8.iterNystrom	9.5307793879229050e-07	portable
+F.F2exp.T.theta.n8.kulkarni	1.5699730404605816e-10	portable
+F.F2exp.T.theta.n8.nystrom	7.3159604068173680e-06	portable
+F.F2exp.T.theta.n8.sloan	1.2821718977873430e-05	portable
+F.F2exp.T.xi0.n16.base	0.0021545583452267090	portable
+F.F2exp.T.xi0.n16.iterKulkarni	1.2085766276648258e-07	portable
+F.F2exp.T.xi0.n16.kulkarni	1.7202922752979077e-07	portable
+F.F2exp.T.xi0.n16.sloan	0.0018509575152827473	portable
+F.F2exp.T.xi0.n8.base	0.014954955210990440	portable
+F.F2exp.T.xi0.n8.iterKulkarni	8.9790622903596070e-06	portable
+F.F2exp.T.xi0.n8.kulkarni	1.1917806228334271e-05	portable
+F.F2exp.T.xi0.n8.sloan	0.012692571637181960	portable
+F.F2exp.T.xi1.n16.base	0.00026574218631569835	portable
+F.F2exp.T.xi1.n16.iterKulkarni	1.1468381799772942e-09	portable
+F.F2exp.T.xi1.n16.kulkarni	1.9459698297197290e-09	portable
+F.F2exp.T.xi1.n16.sloan	0.00022380493932527834	portable
+F.F2exp.T.xi1.n8.base	0.0020088492056948850	portable
+F.F2exp.T.xi1.n8.iterKulkarni	7.9140639375197000e-08	portable
+F.F2exp.T.xi1.n8.kulkarni	1.2677114447079418e-07	portable
+F.F2exp.T.xi1.n8.sloan	0.0016806683417396329	portable
+F.F2exp.T.xi2.n16.base	0.00027810415233542330	portable
+F.F2exp.T.xi2.n16.iterKulkarni	6.8828742705306920e-10	portable
+F.F2exp.T.xi2.n16.kulkarni	1.5669934239070926e-09	portable
+F.F2exp.T.xi2.n16.sloan	0.00023427810116039005	portable
+F.F2exp.T.xi2.n8.base	0.0021980133334318364	portable
+F.F2exp.T.xi2.n8.iterKulkarni	2.2010490541291006e-08	portable
+F.F2exp.T.xi2.n8.kulkarni	7.5073561811578320e-08	portable
+F.F2exp.T.xi2.n8.sloan	0.0018390779904482457	portable
+F.F2span.B.lambda.n16.base	4.4408920985006260e-16	portable
+F.F2span.B.lambda.n16.iterKulkarni	9.8143715376863840e-14	portable
+F.F2span.B.lambda.n16.iterNystrom	7.9417521621216740e-06	portable
+F.F2span.B.lambda.n16.kulkarni	1.5509815654013437e-13	portable
+F.F2span.B.lambda.n16.nystrom	1.2563666932141615e-05	portable
+F.F2span.B.lambda.n16.sloan	2.2204460492503130e-16	portable
+F.F2span.B.lambda.n8.base	3.3306690738754696e-16	portable
+F.F2span.B.lambda.n8.iterKulkarni	9.8032693074401320e-14	portable
+F.F2span.B.lambda.n8.iterNystrom	0.00011177731616252018	portable
+F.F2span.B.lambda.n8.kulkarni	1.5509815654013437e-13	portable
+F.F2span.B.lambda.n8.nystrom	0.00017682911052552264	portable
+F.F2span.B.lambda.n8.sloan	1.1102230246251565e-16	portable
+F.F2span.B.mu.n16.base	4.4408920985006260e-16	portable
+F.F2span.B.mu.n16.iterKulkarni	9.8143715376863840e-14	portable
+F.F2span.B.mu.n16.iterNystrom	3.0485312957351240e-06	portable
+F.F2span.B.mu.n16.kulkarni	1.5509815654013437e-13	portable
+F.F2span.B.mu.n16.nystrom	4.8227055000626960e-06	portable
+F.F2span.B.mu.n16.sloan	2.2204460492503130e-16	portable
+F.F2span.B.mu.n8.base	3.3306690738754696e-16	portable
+F.F2span.B.mu.n8.iterKulkarni	9.8032693074401320e-14	portable
+F.F2span.B.mu.n8.iterNystrom	4.1496892746240020e-05	portable
+F.F2span.B.mu.n8.kulkarni	1.5509815654013437e-13	portable
+F.F2span.B.mu.n8.nystrom	6.5647117732048340e-05	portable
+F.F2span.B.mu.n8.sloan	1.1102230246251565e-16	portable
+F.F2span.B.theta.n16.base	3.3306690738754696e-16	portable
+F.F2span.B.theta.n16.iterKulkarni	2.2204460492503130e-16	portable
+F.F2span.B.theta.n16.iterNystrom	1.6498373307527459e-06	portable
+F.F2span.B.theta.n16.kulkarni	4.9960036108132040e-16	portable
+F.F2span.B.theta.n16.nystrom	2.6100042271881563e-06	portable
+F.F2span.B.theta.n16.sloan	2.2204460492503130e-16	portable
+F.F2span.B.theta.n8.base	5.5511151231257830e-16	portable
+F.F2span.B.theta.n8.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.B.theta.n8.iterNystrom	3.2307569197254080e-05	portable
+F.F2span.B.theta.n8.kulkarni	3.3306690738754696e-16	portable
+F.F2span.B.theta.n8.nystrom	5.1109821925687804e-05	portable
+F.F2span.B.theta.n8.sloan	2.2204460492503130e-16	portable
+F.F2span.B.xi0.n16.base	3.3306690738754696e-16	portable
+F.F2span.B.xi0.n16.iterKulkarni	2.2204460492503130e-16	portable
+F.F2span.B.xi0.n16.kulkarni	4.4408920985006260e-16	portable
+F.F2span.B.xi0.n16.sloan	1.1102230246251565e-16	portable
+F.F2span.B.xi0.n8.base	3.3306690738754696e-16	portable
+F.F2span.B.xi0.n8.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.B.xi0.n8.kulkarni	3.3306690738754696e-16	portable
+F.F2span.B.xi0.n8.sloan	1.6653345369377348e-16	portable
+F.F2span.B.xi1.n16.base	3.3306690738754696e-16	portable
+F.F2span.B.xi1.n16.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.B.xi1.n16.kulkarni	5.5511151231257830e-16	portable
+F.F2span.B.xi1.n16.sloan	2.2204460492503130e-16	portable
+F.F2span.B.xi1.n8.base	3.3306690738754696e-16	portable
+F.F2span.B.xi1.n8.iterKulkarni	2.2204460492503130e-16	portable
+F.F2span.B.xi1.n8.kulkarni	4.4408920985006260e-16	portable
+F.F2span.B.xi1.n8.sloan	1.6653345369377348e-16	portable
+F.F2span.B.xi2.n16.base	3.3306690738754696e-16	portable
+F.F2span.B.xi2.n16.iterKulkarni	2.2204460492503130e-16	portable
+F.F2span.B.xi2.n16.kulkarni	3.3306690738754696e-16	portable
+F.F2span.B.xi2.n16.sloan	1.1102230246251565e-16	portable
+F.F2span.B.xi2.n8.base	2.2204460492503130e-16	portable
+F.F2span.B.xi2.n8.iterKulkarni	2.2204460492503130e-16	portable
+F.F2span.B.xi2.n8.kulkarni	3.3306690738754696e-16	portable
+F.F2span.B.xi2.n8.sloan	1.1102230246251565e-16	portable
+F.F2span.H.lambda.n16.base	5.0174362458133000e-06	portable
+F.F2span.H.lambda.n16.iterKulkarni	9.8143715376863840e-14	portable
+F.F2span.H.lambda.n16.iterNystrom	7.9730297077862390e-06	portable
+F.F2span.H.lambda.n16.kulkarni	1.5509815654013437e-13	portable
+F.F2span.H.lambda.n16.nystrom	1.2613147280626790e-05	portable
+F.F2span.H.lambda.n16.sloan	9.9301881162361380e-07	portable
+F.F2span.H.lambda.n8.base	4.7106740113544990e-05	portable
+F.F2span.H.lambda.n8.iterKulkarni	9.8032693074401320e-14	portable
+F.F2span.H.lambda.n8.iterNystrom	0.00011253839921843145	portable
+F.F2span.H.lambda.n8.kulkarni	1.5498713423767185e-13	portable
+F.F2span.H.lambda.n8.nystrom	0.00017803312619180112	portable
+F.F2span.H.lambda.n8.sloan	1.4634102726063247e-05	portable
+F.F2span.H.mu.n16.base	6.4730694646630840e-06	portable
+F.F2span.H.mu.n16.iterKulkarni	9.8143715376863840e-14	portable
+F.F2span.H.mu.n16.iterNystrom	3.0646258587507800e-06	portable
+F.F2span.H.mu.n16.kulkarni	1.5509815654013437e-13	portable
+F.F2span.H.mu.n16.nystrom	4.8481667238586820e-06	portable
+F.F2span.H.mu.n16.sloan	1.3255477651075154e-06	portable
+F.F2span.H.mu.n8.base	4.8284932464004450e-05	portable
+F.F2span.H.mu.n8.iterKulkarni	9.7921670771938810e-14	portable
+F.F2span.H.mu.n8.iterNystrom	4.1905268240105540e-05	portable
+F.F2span.H.mu.n8.kulkarni	1.5509815654013437e-13	portable
+F.F2span.H.mu.n8.nystrom	6.6293158251018450e-05	portable
+F.F2span.H.mu.n8.sloan	1.9658782943521302e-05	portable
+F.F2span.H.theta.n16.base	4.2333974559216610e-06	portable
+F.F2span.H.theta.n16.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.H.theta.n16.iterNystrom	1.6341455384427661e-06	portable
+F.F2span.H.theta.n16.kulkarni	5.5511151231257830e-16	portable
+F.F2span.H.theta.n16.nystrom	2.5851801774834370e-06	portable
+F.F2span.H.theta.n16.sloan	2.5855476426528410e-07	portable
+F.F2span.H.theta.n8.base	3.6876692330323200e-05	portable
+F.F2span.H.theta.n8.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.H.theta.n8.iterNystrom	3.2093694487533850e-05	portable
+F.F2span.H.theta.n8.kulkarni	4.4408920985006260e-16	portable
+F.F2span.H.theta.n8.nystrom	5.0771477116851040e-05	portable
+F.F2span.H.theta.n8.sloan	4.8650210109357770e-06	portable
+F.F2span.H.xi0.n16.base	0.00030563158481800023	portable
+F.F2span.H.xi0.n16.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.H.xi0.n16.kulkarni	5.5511151231257830e-16	portable
+F.F2span.H.xi0.n16.sloan	0.00015483152188910942	portable
+F.F2span.H.xi0.n8.base	0.0019177859795399543	portable
+F.F2span.H.xi0.n8.iterKulkarni	1.6653345369377348e-16	portable
+F.F2span.H.xi0.n8.kulkarni	3.8857805861880480e-16	portable
+F.F2span.H.xi0.n8.sloan	0.00093935834872294070	portable
+F.F2span.H.xi1.n16.base	4.0816962515011210e-05	portable
+F.F2span.H.xi1.n16.iterKulkarni	2.2204460492503130e-16	portable
+F.F2span.H.xi1.n16.kulkarni	5.5511151231257830e-16	portable
+F.F2span.H.xi1.n16.sloan	2.0404494236125892e-05	portable
+F.F2span.H.xi1.n8.base	0.00028465106375386020	portable
+F.F2span.H.xi1.n8.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.H.xi1.n8.kulkarni	3.3306690738754696e-16	portable
+F.F2span.H.xi1.n8.sloan	0.00014920100494597577	portable
+F.F2span.H.xi2.n16.base	4.4999258923206220e-05	portable
+F.F2span.H.xi2.n16.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.H.xi2.n16.kulkarni	4.4408920985006260e-16	portable
+F.F2span.H.xi2.n16.sloan	2.3351444567554225e-05	portable
+F.F2span.H.xi2.n8.base	0.00035087769984609720	portable
+F.F2span.H.xi2.n8.iterKulkarni	1.1102230246251565e-16	portable
+F.F2span.H.xi2.n8.kulkarni	3.3306690738754696e-16	portable
+F.F2span.H.xi2.n8.sloan	0.00019299978808473560	portable
+F.F2span.T.lambda.n16.base	5.0194545515580560e-06	portable
+F.F2span.T.lambda.n16.iterKulkarni	3.3140157285060923e-13	portable
+F.F2span.T.lambda.n16.iterNystrom	7.9104401347063200e-06	portable
+F.F2span.T.lambda.n16.kulkarni	1.8536283619141614e-12	portable
+F.F2span.T.lambda.n16.nystrom	1.2514132034180392e-05	portable
+F.F2span.T.lambda.n16.sloan	9.9403685793753030e-07	portable
+F.F2span.T.lambda.n8.base	4.7203291079878085e-05	portable
+F.F2span.T.lambda.n8.iterKulkarni	5.2288950946888235e-11	portable
+F.F2span.T.lambda.n8.iterNystrom	0.00011101276105440760	portable
+F.F2span.T.lambda.n8.kulkarni	2.2802759680473628e-10	portable
+F.F2span.T.lambda.n8.nystrom	0.00017561960215328742	portable
+F.F2span.T.lambda.n8.sloan	1.4693863467307722e-05	portable
+F.F2span.T.mu.n16.base	6.4770442030903650e-06	portable
+F.F2span.T.mu.n16.iterKulkarni	9.0361051974241490e-13	portable
+F.F2span.T.mu.n16.iterNystrom	3.0324252281443975e-06	portable
+F.F2span.T.mu.n16.kulkarni	2.8601565560393283e-12	portable
+F.F2span.T.mu.n16.nystrom	4.7972260761586230e-06	portable
+F.F2span.T.mu.n16.sloan	1.3269806302673715e-06	portable
+F.F2span.T.mu.n8.base	4.8401116689689160e-05	portable
+F.F2span.T.mu.n8.iterKulkarni	1.7396395435298473e-10	portable
+F.F2span.T.mu.n8.iterNystrom	4.1087352022239900e-05	portable
+F.F2span.T.mu.n8.kulkarni	3.6626568444830810e-10	portable
+F.F2span.T.mu.n8.nystrom	6.4999233846396720e-05	portable
+F.F2span.T.mu.n8.sloan	1.9742939854405783e-05	portable
+F.F2span.T.theta.n16.base	4.2343218222828940e-06	portable
+F.F2span.T.theta.n16.iterKulkarni	2.2093438190040615e-14	portable
+F.F2span.T.theta.n16.iterNystrom	1.6655608178206550e-06	portable
+F.F2span.T.theta.n16.kulkarni	3.9934722195766880e-13	portable
+F.F2span.T.theta.n16.nystrom	2.6348784176732920e-06	portable
+F.F2span.T.theta.n16.sloan	2.5856475405205970e-07	portable
+F.F2span.T.theta.n8.base	3.6916013856469476e-05	portable
+F.F2span.T.theta.n8.iterKulkarni	7.2886141566641530e-12	portable
+F.F2span.T.theta.n8.iterNystrom	3.2523677652829264e-05	portable
+F.F2span.T.theta.n8.kulkarni	6.4405591970739800e-11	portable
+F.F2span.T.theta.n8.nystrom	5.1451700468607700e-05	portable
+F.F2span.T.theta.n8.sloan	4.8710703093313160e-06	portable
+F.F2span.T.xi0.n16.base	0.00030548779829564500	portable
+F.F2span.T.xi0.n16.iterKulkarni	1.4657130620321368e-08	portable
+F.F2span.T.xi0.n16.kulkarni	2.3021665684908044e-08	portable
+F.F2span.T.xi0.n16.sloan	0.00015475031672473882	portable
+F.F2span.T.xi0.n8.base	0.0019132144932717532	portable
+F.F2span.T.xi0.n8.iterKulkarni	5.7834652045229970e-07	portable
+F.F2span.T.xi0.n8.kulkarni	9.0693791998663900e-07	portable
+F.F2span.T.xi0.n8.sloan	0.00093675227904765900	portable
+F.F2span.T.xi1.n16.base	4.0847545504929530e-05	portable
+F.F2span.T.xi1.n16.iterKulkarni	2.4443025381515326e-10	portable
+F.F2span.T.xi1.n16.kulkarni	3.9218817082797840e-10	portable
+F.F2span.T.xi1.n16.sloan	2.0420796015940823e-05	portable
+F.F2span.T.xi1.n8.base	0.00028552097160672310	portable
+F.F2span.T.xi1.n8.iterKulkarni	1.3347869587398975e-08	portable
+F.F2span.T.xi1.n8.kulkarni	2.0316884619120400e-08	portable
+F.F2span.T.xi1.n8.sloan	0.00014968540424109555	portable
+F.F2span.T.xi2.n16.base	4.5030587002448110e-05	portable
+F.F2span.T.xi2.n16.iterKulkarni	2.9518654187654647e-10	portable
+F.F2span.T.xi2.n16.kulkarni	4.7681747439298760e-10	portable
+F.F2span.T.xi2.n16.sloan	2.3368960003544714e-05	portable
+F.F2span.T.xi2.n8.base	0.00035181403943318480	portable
+F.F2span.T.xi2.n8.iterKulkarni	1.9210234958322303e-08	portable
+F.F2span.T.xi2.n8.kulkarni	2.9987940464160090e-08	portable
+F.F2span.T.xi2.n8.sloan	0.00019355354820693726	portable
+F1.B.theta.n16.base	8.6096232039256650e-05	sensitive
+F1.B.theta.n16.sloan	8.8125313756570730e-05	sensitive
+F1.B.theta.n32.base	8.0129603679868210e-05	sensitive
+F1.B.theta.n32.sloan	8.9797003315794650e-05	sensitive
+F1.B.theta.n8.base	0.00010145973831088284	sensitive
+F1.B.theta.n8.sloan	0.00010021835162365988	sensitive
+F1.B.xi1.n16.base	8.6019932902026140e-05	sensitive
+F1.B.xi1.n16.sloan	9.1733901338209020e-05	sensitive
+F1.B.xi1.n32.base	7.8169103876923880e-05	sensitive
+F1.B.xi1.n32.sloan	8.6306696181814860e-05	sensitive
+F1.B.xi1.n8.base	9.9695505696217880e-05	sensitive
+F1.B.xi1.n8.sloan	0.00021790794074760810	sensitive
+F1.B.xi2.n16.base	8.5958543988962080e-05	sensitive
+F1.B.xi2.n16.sloan	9.0681608459597380e-05	sensitive
+F1.B.xi2.n32.base	8.2620359425966680e-05	sensitive
+F1.B.xi2.n32.sloan	9.0121393447439860e-05	sensitive
+F1.B.xi2.n8.base	9.9825692013499890e-05	sensitive
+F1.B.xi2.n8.sloan	0.00018812547441382500	sensitive
+F1.H.theta.n16.base	8.6035941828654930e-05	sensitive
+F1.H.theta.n16.sloan	9.3641249971021520e-05	sensitive
+F1.H.theta.n32.base	8.1693389072601260e-05	sensitive
+F1.H.theta.n32.sloan	9.3936090713064860e-05	sensitive
+F1.H.theta.n8.base	6.4208275350363660e-05	sensitive
+F1.H.theta.n8.sloan	6.0164030334597385e-05	sensitive
+F1.H.xi1.n16.base	7.1710796813562180e-05	sensitive
+F1.H.xi1.n16.sloan	7.7330168029909880e-05	sensitive
+F1.H.xi1.n32.base	8.2235434492705650e-05	sensitive
+F1.H.xi1.n32.sloan	8.8626098427191380e-05	sensitive
+F1.H.xi1.n8.base	5.1648253833747050e-05	sensitive
+F1.H.xi1.n8.sloan	6.0690625541148790e-05	sensitive
+F1.H.xi2.n16.base	9.1352719111537080e-05	sensitive
+F1.H.xi2.n16.sloan	9.1733901338209020e-05	sensitive
+F1.H.xi2.n32.base	8.4192087798751200e-05	sensitive
+F1.H.xi2.n32.sloan	9.8162841591253880e-05	sensitive
+F1.H.xi2.n8.base	6.6213186051822250e-05	sensitive
+F1.H.xi2.n8.sloan	6.5237130162820730e-05	sensitive
+F1.T.theta.n16.base	8.5117090285802280e-05	sensitive
+F1.T.theta.n16.sloan	9.0681608459597380e-05	sensitive
+F1.T.theta.n32.base	8.2108215313514420e-05	sensitive
+F1.T.theta.n32.sloan	8.8626098427191380e-05	sensitive
+F1.T.theta.n8.base	0.00014173812643836214	sensitive
+F1.T.theta.n8.sloan	0.00014027267291272238	sensitive
+F1.T.xi1.n16.base	9.6972414759033400e-05	sensitive
+F1.T.xi1.n16.sloan	0.00010127064450227152	sensitive
+F1.T.xi1.n32.base	8.2415082755638020e-05	sensitive
+F1.T.xi1.n32.sloan	9.0121393447439860e-05	sensitive
+F1.T.xi1.n8.base	0.00014685086976795603	sensitive
+F1.T.xi1.n8.sloan	0.00040292075813042060	sensitive
+F1.T.xi2.n16.base	8.2019186984361170e-05	sensitive
+F1.T.xi2.n16.sloan	8.2181634604605590e-05	sensitive
+F1.T.xi2.n32.base	8.3675399101146300e-05	sensitive
+F1.T.xi2.n32.sloan	9.7750787978689860e-05	sensitive
+F1.T.xi2.n8.base	0.00013226250054598765	sensitive
+F1.T.xi2.n8.sloan	0.00035255761564201293	sensitive
+U.A.B.n16.base	1.2430254058726220e-05	portable
+U.A.B.n16.kulkarni	5.2129411898249600e-12	portable
+U.A.B.n16.nystrom	2.2982856184849965e-07	portable
+U.A.B.n16.sloan	2.2703226565390366e-07	portable
+U.A.B.n8.base	0.00010064068205606347	portable
+U.A.B.n8.kulkarni	8.2988804717132330e-10	portable
+U.A.B.n8.nystrom	5.1779600214185710e-06	portable
+U.A.B.n8.sloan	4.3998754466478830e-06	portable
+U.A.H.n16.base	1.0401193758946548e-05	portable
+U.A.H.n16.kulkarni	4.4860781756028700e-12	portable
+U.A.H.n16.nystrom	2.1104874969868348e-07	portable
+U.A.H.n16.sloan	2.0628430852376312e-07	portable
+U.A.H.n8.base	8.4003684390987490e-05	portable
+U.A.H.n8.kulkarni	6.9782257750006240e-10	portable
+U.A.H.n8.nystrom	4.8138094216332306e-06	portable
+U.A.H.n8.sloan	3.9460712197847410e-06	portable
+U.A.T.n16.base	1.4459828775570394e-05	portable
+U.A.T.n16.kulkarni	6.0111915445304476e-12	portable
+U.A.T.n16.nystrom	2.4861384972929557e-07	portable
+U.A.T.n16.sloan	2.4778192275753950e-07	portable
+U.A.T.n8.base	0.00011729822396522316	portable
+U.A.T.n8.kulkarni	9.7664210052528230e-10	portable
+U.A.T.n8.nystrom	5.5430355848651300e-06	portable
+U.A.T.n8.sloan	4.8547506880103340e-06	portable
+U.B.B.n16.base	5.3296367150679200e-06	portable
+U.B.B.n16.kulkarni	6.8478556158879660e-13	portable
+U.B.B.n16.nystrom	2.7936287949614780e-08	portable
+U.B.B.n16.sloan	8.3802188299841870e-08	portable
+U.B.B.n8.base	4.2263766935501934e-05	portable
+U.B.B.n8.kulkarni	1.1115597331468052e-10	portable
+U.B.B.n8.nystrom	5.7371675055151170e-07	portable
+U.B.B.n8.sloan	1.7207218396819712e-06	portable
+U.B.H.n16.base	2.6645352591003757e-15	portable
+U.B.H.n16.kulkarni	7.1054273576010020e-15	portable
+U.B.H.n16.nystrom	8.8817841970012520e-15	portable
+U.B.H.n16.sloan	4.4408920985006260e-15	portable
+U.B.H.n8.base	2.2204460492503130e-15	portable
+U.B.H.n8.kulkarni	3.9968028886505635e-15	portable
+U.B.H.n8.nystrom	9.7699626167013780e-15	portable
+U.B.H.n8.sloan	2.6645352591003757e-15	portable
+U.B.T.n16.base	1.0660532903550290e-05	portable
+U.B.T.n16.kulkarni	2.7298163729483350e-12	portable
+U.B.T.n16.nystrom	5.5869031179156536e-08	portable
+U.B.T.n16.sloan	1.6758043930309440e-07	portable
+U.B.T.n8.base	8.4571611670192230e-05	portable
+U.B.T.n8.kulkarni	4.4500536588998330e-10	portable
+U.B.T.n8.nystrom	1.1481281099179341e-06	portable
+U.B.T.n8.sloan	3.4426693966693733e-06	portable
+V.V2.B.lambda.n16.base	1.2580066729439565e-05	portable
+V.V2.B.lambda.n16.iterKulkarni	4.1118613069990320e-08	portable
+V.V2.B.lambda.n16.iterNystrom	3.3949203215311030e-07	portable
+V.V2.B.lambda.n16.kulkarni	3.5492057193220460e-07	portable
+V.V2.B.lambda.n16.nystrom	1.1344251921174830e-06	portable
+V.V2.B.lambda.n16.sloan	4.1438334097421150e-07	portable
+V.V2.B.lambda.n8.base	0.00010086805292319756	portable
+V.V2.B.lambda.n8.iterKulkarni	5.6473318210681360e-07	portable
+V.V2.B.lambda.n8.iterNystrom	3.9357811766893570e-06	portable
+V.V2.B.lambda.n8.kulkarni	4.4235260708846980e-06	portable
+V.V2.B.lambda.n8.nystrom	1.4370716602263300e-05	portable
+V.V2.B.lambda.n8.sloan	5.4258081336744370e-06	portable
+V.V2.B.mu.n16.base	2.0888100098148676e-05	portable
+V.V2.B.mu.n16.iterKulkarni	1.3037343427058090e-08	portable
+V.V2.B.mu.n16.iterNystrom	3.8598436902237410e-07	portable
+V.V2.B.mu.n16.kulkarni	1.5436688505232610e-07	portable
+V.V2.B.mu.n16.nystrom	3.0433653165351515e-06	portable
+V.V2.B.mu.n16.sloan	9.0499794036524860e-07	portable
+V.V2.B.mu.n8.base	0.00014525008586685484	portable
+V.V2.B.mu.n8.iterKulkarni	1.8121353373423688e-07	portable
+V.V2.B.mu.n8.iterNystrom	4.7807361988061460e-06	portable
+V.V2.B.mu.n8.kulkarni	1.5336400824850216e-06	portable
+V.V2.B.mu.n8.nystrom	2.8309205277188276e-05	portable
+V.V2.B.mu.n8.sloan	9.5231386292304880e-06	portable
+V.V2.B.theta.n16.base	1.1939361908686053e-05	portable
+V.V2.B.theta.n16.iterKulkarni	1.5125194097187490e-08	portable
+V.V2.B.theta.n16.iterNystrom	4.8156174492497430e-08	portable
+V.V2.B.theta.n16.kulkarni	2.7779677336248200e-07	portable
+V.V2.B.theta.n16.nystrom	7.6017723893428980e-07	portable
+V.V2.B.theta.n16.sloan	2.0225263752671196e-07	portable
+V.V2.B.theta.n8.base	9.3402936026665270e-05	portable
+V.V2.B.theta.n8.iterKulkarni	2.6829479427004090e-07	portable
+V.V2.B.theta.n8.iterNystrom	9.2793812822566930e-07	portable
+V.V2.B.theta.n8.kulkarni	3.6306810182740180e-06	portable
+V.V2.B.theta.n8.nystrom	9.9692683775964850e-06	portable
+V.V2.B.theta.n8.sloan	2.7905855294330095e-06	portable
+V.V2.B.xi0.n16.base	0.00049412181554875370	portable
+V.V2.B.xi0.n16.iterKulkarni	9.2392731410040340e-07	portable
+V.V2.B.xi0.n16.kulkarni	1.5931640938826597e-05	portable
+V.V2.B.xi0.n16.sloan	9.9925168359771280e-05	portable
+V.V2.B.xi0.n8.base	0.0036116758676731920	portable
+V.V2.B.xi0.n8.iterKulkarni	1.3051900697225172e-05	portable
+V.V2.B.xi0.n8.kulkarni	0.00022047937740876655	portable
+V.V2.B.xi0.n8.sloan	0.00076816800301382490	portable
+V.V2.B.xi1.n16.base	6.4065694982407000e-05	portable
+V.V2.B.xi1.n16.iterKulkarni	9.0024208088124170e-09	portable
+V.V2.B.xi1.n16.kulkarni	3.3802303478491780e-07	portable
+V.V2.B.xi1.n16.sloan	1.1213524158115717e-05	portable
+V.V2.B.xi1.n8.base	0.00046619886785015385	portable
+V.V2.B.xi1.n8.iterKulkarni	2.7654391798748180e-07	portable
+V.V2.B.xi1.n8.kulkarni	5.2163140542571540e-06	portable
+V.V2.B.xi1.n8.sloan	8.6866571617272290e-05	portable
+V.V2.B.xi2.n16.base	5.2682831343076050e-05	portable
+V.V2.B.xi2.n16.iterKulkarni	8.5404178173931200e-09	portable
+V.V2.B.xi2.n16.kulkarni	1.2262131476870053e-07	portable
+V.V2.B.xi2.n16.sloan	9.7578935392972350e-06	portable
+V.V2.B.xi2.n8.base	0.00031611080924032200	portable
+V.V2.B.xi2.n8.iterKulkarni	6.8025935551219160e-08	portable
+V.V2.B.xi2.n8.kulkarni	1.3958021581883528e-06	portable
+V.V2.B.xi2.n8.sloan	6.7140257982267750e-05	portable
+V.V2.H.lambda.n16.base	1.0570077929261679e-05	portable
+V.V2.H.lambda.n16.iterKulkarni	3.1138638889594006e-08	portable
+V.V2.H.lambda.n16.iterNystrom	3.1320457410943803e-07	portable
+V.V2.H.lambda.n16.kulkarni	2.8945865959695283e-07	portable
+V.V2.H.lambda.n16.nystrom	1.0451059492266879e-06	portable
+V.V2.H.lambda.n16.sloan	3.6902069888711253e-07	portable
+V.V2.H.lambda.n8.base	8.4611818481739040e-05	portable
+V.V2.H.lambda.n8.iterKulkarni	4.2109131270784417e-07	portable
+V.V2.H.lambda.n8.iterNystrom	3.6048266944255225e-06	portable
+V.V2.H.lambda.n8.kulkarni	3.5339498432040983e-06	portable
+V.V2.H.lambda.n8.nystrom	1.3058139595512053e-05	portable
+V.V2.H.lambda.n8.sloan	4.8010316051616540e-06	portable
+V.V2.H.mu.n16.base	1.7096277639572220e-05	portable
+V.V2.H.mu.n16.iterKulkarni	9.8763230926834920e-09	portable
+V.V2.H.mu.n16.iterNystrom	3.3225694662242233e-07	portable
+V.V2.H.mu.n16.kulkarni	1.2281299133221069e-07	portable
+V.V2.H.mu.n16.nystrom	2.7075346059612926e-06	portable
+V.V2.H.mu.n16.sloan	7.2014906760120570e-07	portable
+V.V2.H.mu.n8.base	0.00011680549396775320	portable
+V.V2.H.mu.n8.iterKulkarni	1.3565242606983220e-07	portable
+V.V2.H.mu.n8.iterNystrom	4.0524408835285190e-06	portable
+V.V2.H.mu.n8.kulkarni	1.1611959335189326e-06	portable
+V.V2.H.mu.n8.nystrom	2.4397888288674174e-05	portable
+V.V2.H.mu.n8.sloan	7.2137584437026450e-06	portable
+V.V2.H.theta.n16.base	9.9824564743222770e-06	portable
+V.V2.H.theta.n16.iterKulkarni	1.1896263418798014e-08	portable
+V.V2.H.theta.n16.iterNystrom	4.8229229054896905e-08	portable
+V.V2.H.theta.n16.kulkarni	2.2796498777566399e-07	portable
+V.V2.H.theta.n16.nystrom	6.9035717698007200e-07	portable
+V.V2.H.theta.n16.sloan	1.6608616426605494e-07	portable
+V.V2.H.theta.n8.base	7.7887298398859880e-05	portable
+V.V2.H.theta.n8.iterKulkarni	2.1048990328509376e-07	portable
+V.V2.H.theta.n8.iterNystrom	9.0340445851877500e-07	portable
+V.V2.H.theta.n8.kulkarni	2.9306763179581807e-06	portable
+V.V2.H.theta.n8.nystrom	8.9757691159597640e-06	portable
+V.V2.H.theta.n8.sloan	2.2607150030884426e-06	portable
+V.V2.H.xi0.n16.base	0.00040466050698706457	portable
+V.V2.H.xi0.n16.iterKulkarni	7.1323924011323920e-07	portable
+V.V2.H.xi0.n16.kulkarni	1.3255807015499776e-05	portable
+V.V2.H.xi0.n16.sloan	7.4962869327177550e-05	portable
+V.V2.H.xi0.n8.base	0.0029384612662559650	portable
+V.V2.H.xi0.n8.iterKulkarni	1.0680804932050592e-05	portable
+V.V2.H.xi0.n8.kulkarni	0.00018362742000532783	portable
+V.V2.H.xi0.n8.sloan	0.00058321429389884830	portable
+V.V2.H.xi1.n16.base	5.2730259618938290e-05	portable
+V.V2.H.xi1.n16.iterKulkarni	7.4854070719609920e-09	portable
+V.V2.H.xi1.n16.kulkarni	2.7968678006917713e-07	portable
+V.V2.H.xi1.n16.sloan	8.3488803195308500e-06	portable
+V.V2.H.xi1.n8.base	0.00037872989713161330	portable
+V.V2.H.xi1.n8.iterKulkarni	2.2893267181967047e-07	portable
+V.V2.H.xi1.n8.kulkarni	4.2857995652401115e-06	portable
+V.V2.H.xi1.n8.sloan	6.4705568319833870e-05	portable
+V.V2.H.xi2.n16.base	4.2142679280487980e-05	portable
+V.V2.H.xi2.n16.iterKulkarni	5.7635636263597690e-09	portable
+V.V2.H.xi2.n16.kulkarni	9.5836704017138170e-08	portable
+V.V2.H.xi2.n16.sloan	7.0676820745907420e-06	portable
+V.V2.H.xi2.n8.base	0.00024180783861715850	portable
+V.V2.H.xi2.n8.iterKulkarni	3.7305518563179874e-08	portable
+V.V2.H.xi2.n8.kulkarni	1.1588449423394210e-06	portable
+V.V2.H.xi2.n8.sloan	4.7453231760141710e-05	portable
+V.V2.T.lambda.n16.base	1.4594822195679313e-05	portable
+V.V2.T.lambda.n16.iterKulkarni	5.1241676679580905e-08	portable
+V.V2.T.lambda.n16.iterNystrom	3.6581755785691783e-07	portable
+V.V2.T.lambda.n16.kulkarni	4.2042845382894710e-07	portable
+V.V2.T.lambda.n16.nystrom	1.2274190259731200e-06	portable
+V.V2.T.lambda.n16.sloan	4.5980576202087065e-07	portable
+V.V2.T.lambda.n8.base	0.00011714777836302481	portable
+V.V2.T.lambda.n8.iterKulkarni	7.1060256767729870e-07	portable
+V.V2.T.lambda.n8.iterNystrom	4.2687718992961980e-06	portable
+V.V2.T.lambda.n8.kulkarni	5.3156528816433735e-06	portable
+V.V2.T.lambda.n8.nystrom	1.5689850698996644e-05	portable
+V.V2.T.lambda.n8.sloan	6.0543499939003100e-06	portable
+V.V2.T.mu.n16.base	2.4682448806823132e-05	portable
+V.V2.T.mu.n16.iterKulkarni	1.6252432066821143e-08	portable
+V.V2.T.mu.n16.iterNystrom	4.4106632879348240e-07	portable
+V.V2.T.mu.n16.kulkarni	1.8594222117584990e-07	portable
+V.V2.T.mu.n16.nystrom	3.3799719596494526e-06	portable
+V.V2.T.mu.n16.sloan	1.0902041852611788e-06	portable
+V.V2.T.mu.n8.base	0.00017376687485226583	portable
+V.V2.T.mu.n8.iterKulkarni	2.2684504552561435e-07	portable
+V.V2.T.mu.n8.iterNystrom	5.5392161003586790e-06	portable
+V.V2.T.mu.n8.kulkarni	1.9071799383096888e-06	portable
+V.V2.T.mu.n8.nystrom	3.2246713941308514e-05	portable
+V.V2.T.mu.n8.sloan	1.1846522846914453e-05	portable
+V.V2.T.theta.n16.base	1.3896756917652908e-05	portable
+V.V2.T.theta.n16.iterKulkarni	1.8390405642776386e-08	portable
+V.V2.T.theta.n16.iterNystrom	4.8084586201646570e-08	portable
+V.V2.T.theta.n16.kulkarni	3.2765386248634343e-07	portable
+V.V2.T.theta.n16.nystrom	8.3000914752329180e-07	portable
+V.V2.T.theta.n16.sloan	2.3842553331654415e-07	portable
+V.V2.T.theta.n8.base	0.00010893702436121089	portable
+V.V2.T.theta.n8.iterKulkarni	3.2716297559964860e-07	portable
+V.V2.T.theta.n8.iterNystrom	9.5281002077118870e-07	portable
+V.V2.T.theta.n8.kulkarni	4.3321929099615630e-06	portable
+V.V2.T.theta.n8.nystrom	1.0964573330163319e-05	portable
+V.V2.T.theta.n8.sloan	3.3208033126674863e-06	portable
+V.V2.T.xi0.n16.base	0.00058384900427055350	portable
+V.V2.T.xi0.n16.iterKulkarni	1.1354080566849944e-06	portable
+V.V2.T.xi0.n16.kulkarni	1.8594576970509813e-05	portable
+V.V2.T.xi0.n16.sloan	0.00012493573551797255	portable
+V.V2.T.xi0.n8.base	0.0042883110060858430	portable
+V.V2.T.xi0.n8.iterKulkarni	1.5362989640110847e-05	portable
+V.V2.T.xi0.n8.kulkarni	0.00025665267548102830	portable
+V.V2.T.xi0.n8.sloan	0.00095300638222795000	portable
+V.V2.T.xi1.n16.base	7.5408826164746760e-05	portable
+V.V2.T.xi1.n16.iterKulkarni	1.0515228576757352e-08	portable
+V.V2.T.xi1.n16.kulkarni	3.9627987591384084e-07	portable
+V.V2.T.xi1.n16.sloan	1.4103802930320875e-05	portable
+V.V2.T.xi1.n8.base	0.00055394009219444930	portable
+V.V2.T.xi1.n8.iterKulkarni	3.2377825420759620e-07	portable
+V.V2.T.xi1.n8.kulkarni	6.1427810332803645e-06	portable
+V.V2.T.xi1.n8.sloan	0.00010924497634801078	portable
+V.V2.T.xi2.n16.base	6.3230024263116750e-05	portable
+V.V2.T.xi2.n16.iterKulkarni	1.1355783979816180e-08	portable
+V.V2.T.xi2.n16.kulkarni	1.4956263283405490e-07	portable
+V.V2.T.xi2.n16.sloan	1.2466360042040492e-05	portable
+V.V2.T.xi2.n8.base	0.00039066235607942980	portable
+V.V2.T.xi2.n8.iterKulkarni	1.0082903389996290e-07	portable
+V.V2.T.xi2.n8.kulkarni	1.6305067321864541e-06	portable
+V.V2.T.xi2.n8.sloan	8.6927993394825260e-05	portable
+V.V2exp.B.lambda.n16.base	6.1390285654994160e-06	portable
+V.V2exp.B.lambda.n16.iterKulkarni	1.1829134027863120e-07	portable
+V.V2exp.B.lambda.n16.iterNystrom	1.5236356638581583e-06	portable
+V.V2exp.B.lambda.n16.kulkarni	3.1549942169917244e-07	portable
+V.V2exp.B.lambda.n16.nystrom	4.7758930987740200e-06	portable
+V.V2exp.B.lambda.n16.sloan	5.4182845721229000e-07	portable
+V.V2exp.B.lambda.n8.base	5.4566914432285785e-05	portable
+V.V2exp.B.lambda.n8.iterKulkarni	1.7818887858567223e-06	portable
+V.V2exp.B.lambda.n8.iterNystrom	2.3032650688481482e-05	portable
+V.V2exp.B.lambda.n8.kulkarni	4.6579943937530290e-06	portable
+V.V2exp.B.lambda.n8.nystrom	7.1000422339650980e-05	portable
+V.V2exp.B.lambda.n8.sloan	8.0898990986177920e-06	portable
+V.V2exp.B.mu.n16.base	1.0102014992963149e-05	portable
+V.V2exp.B.mu.n16.iterKulkarni	3.7500389460376480e-08	portable
+V.V2exp.B.mu.n16.iterNystrom	2.7792310786090013e-06	portable
+V.V2exp.B.mu.n16.kulkarni	1.4271409343180608e-07	portable
+V.V2exp.B.mu.n16.nystrom	6.4398590726710840e-06	portable
+V.V2exp.B.mu.n16.sloan	9.1652390654672900e-07	portable
+V.V2exp.B.mu.n8.base	7.3897399769151660e-05	portable
+V.V2exp.B.mu.n8.iterKulkarni	5.6253796998362300e-07	portable
+V.V2exp.B.mu.n8.iterNystrom	4.0156860836138010e-05	portable
+V.V2exp.B.mu.n8.kulkarni	1.9804387938471280e-06	portable
+V.V2exp.B.mu.n8.nystrom	8.6684505542056200e-05	portable
+V.V2exp.B.mu.n8.sloan	1.3135685553500310e-05	portable
+V.V2exp.B.theta.n16.base	5.6642886665514425e-06	portable
+V.V2exp.B.theta.n16.iterKulkarni	3.2512607717194440e-08	portable
+V.V2exp.B.theta.n16.iterNystrom	4.7050960816363840e-07	portable
+V.V2exp.B.theta.n16.kulkarni	1.7948137065459946e-07	portable
+V.V2exp.B.theta.n16.nystrom	1.3924810544629906e-06	portable
+V.V2exp.B.theta.n16.sloan	2.0263132682885043e-07	portable
+V.V2exp.B.theta.n8.base	4.7993507004573390e-05	portable
+V.V2exp.B.theta.n8.iterKulkarni	6.0098207121939140e-07	portable
+V.V2exp.B.theta.n8.iterNystrom	8.7741358090198670e-06	portable
+V.V2exp.B.theta.n8.kulkarni	2.8028099774424220e-06	portable
+V.V2exp.B.theta.n8.nystrom	2.4381514117877146e-05	portable
+V.V2exp.B.theta.n8.sloan	3.4620547726404993e-06	portable
+V.V2exp.B.xi0.n16.base	0.00038105126664289557	portable
+V.V2exp.B.xi0.n16.iterKulkarni	2.2178531837724336e-06	portable
+V.V2exp.B.xi0.n16.kulkarni	5.0432330289673640e-06	portable
+V.V2exp.B.xi0.n16.sloan	0.00017084004887069070	portable
+V.V2exp.B.xi0.n8.base	0.0025868970348597030	portable
+V.V2exp.B.xi0.n8.iterKulkarni	2.8432496786301442e-05	portable
+V.V2exp.B.xi0.n8.kulkarni	6.5496810336629350e-05	portable
+V.V2exp.B.xi0.n8.sloan	0.0011746430946981690	portable
+V.V2exp.B.xi1.n16.base	4.8479062142448015e-05	portable
+V.V2exp.B.xi1.n16.iterKulkarni	3.1752361184800290e-08	portable
+V.V2exp.B.xi1.n16.kulkarni	1.1905293773040171e-07	portable
+V.V2exp.B.xi1.n16.sloan	2.0520721970562760e-05	portable
+V.V2exp.B.xi1.n8.base	0.00034218309224520740	portable
+V.V2exp.B.xi1.n8.iterKulkarni	3.0873798628761050e-07	portable
+V.V2exp.B.xi1.n8.kulkarni	1.4429560772910577e-06	portable
+V.V2exp.B.xi1.n8.sloan	0.00015394090202569544	portable
+V.V2exp.B.xi2.n16.base	5.1413506732878034e-05	portable
+V.V2exp.B.xi2.n16.iterKulkarni	4.3869166077570300e-08	portable
+V.V2exp.B.xi2.n16.kulkarni	1.3920404340339587e-07	portable
+V.V2exp.B.xi2.n16.sloan	2.1427455909606152e-05	portable
+V.V2exp.B.xi2.n8.base	0.00039256102721552110	portable
+V.V2exp.B.xi2.n8.iterKulkarni	6.5294471696120130e-07	portable
+V.V2exp.B.xi2.n8.kulkarni	1.9768072845316453e-06	portable
+V.V2exp.B.xi2.n8.sloan	0.00016788323887251266	portable
+V.V2exp.H.lambda.n16.base	1.7763568394002505e-15	portable
+V.V2exp.H.lambda.n16.iterKulkarni	8.8817841970012520e-16	portable
+V.V2exp.H.lambda.n16.iterNystrom	1.6620628251473590e-06	portable
+V.V2exp.H.lambda.n16.kulkarni	3.5527136788005010e-15	portable
+V.V2exp.H.lambda.n16.nystrom	5.2993133339285240e-06	portable
+V.V2exp.H.lambda.n16.sloan	8.8817841970012520e-16	portable
+V.V2exp.H.lambda.n8.base	1.3322676295501878e-15	portable
+V.V2exp.H.lambda.n8.iterKulkarni	4.4408920985006260e-16	portable
+V.V2exp.H.lambda.n8.iterNystrom	2.5067284901147957e-05	portable
+V.V2exp.H.lambda.n8.kulkarni	3.5527136788005010e-15	portable
+V.V2exp.H.lambda.n8.nystrom	7.8445868243903760e-05	portable
+V.V2exp.H.lambda.n8.sloan	8.8817841970012520e-16	portable
+V.V2exp.H.mu.n16.base	1.3322676295501878e-15	portable
+V.V2exp.H.mu.n16.iterKulkarni	8.8817841970012520e-16	portable
+V.V2exp.H.mu.n16.iterNystrom	3.2691600244660890e-06	portable
+V.V2exp.H.mu.n16.kulkarni	3.5527136788005010e-15	portable
+V.V2exp.H.mu.n16.nystrom	7.5680930282651104e-06	portable
+V.V2exp.H.mu.n16.sloan	6.6613381477509390e-16	portable
+V.V2exp.H.mu.n8.base	1.3322676295501878e-15	portable
+V.V2exp.H.mu.n8.iterKulkarni	8.8817841970012520e-16	portable
+V.V2exp.H.mu.n8.iterNystrom	4.7157376591666630e-05	portable
+V.V2exp.H.mu.n8.kulkarni	3.5527136788005010e-15	portable
+V.V2exp.H.mu.n8.nystrom	0.00010176270810369203	portable
+V.V2exp.H.mu.n8.sloan	8.8817841970012520e-16	portable
+V.V2exp.H.theta.n16.base	1.7763568394002505e-15	portable
+V.V2exp.H.theta.n16.iterKulkarni	8.8817841970012520e-16	portable
+V.V2exp.H.theta.n16.iterNystrom	5.3914410358402170e-07	portable
+V.V2exp.H.theta.n16.kulkarni	2.2204460492503130e-15	portable
+V.V2exp.H.theta.n16.nystrom	1.6101672994928151e-06	portable
+V.V2exp.H.theta.n16.sloan	1.3322676295501878e-15	portable
+V.V2exp.H.theta.n8.base	1.3322676295501878e-15	portable
+V.V2exp.H.theta.n8.iterKulkarni	8.8817841970012520e-16	portable
+V.V2exp.H.theta.n8.iterNystrom	9.9710059213720110e-06	portable
+V.V2exp.H.theta.n8.kulkarni	1.7763568394002505e-15	portable
+V.V2exp.H.theta.n8.nystrom	2.7957698010006027e-05	portable
+V.V2exp.H.theta.n8.sloan	8.8817841970012520e-16	portable
+V.V2exp.H.xi0.n16.base	8.8817841970012520e-16	portable
+V.V2exp.H.xi0.n16.iterKulkarni	6.6613381477509390e-16	portable
+V.V2exp.H.xi0.n16.kulkarni	1.3322676295501878e-15	portable
+V.V2exp.H.xi0.n16.sloan	4.4408920985006260e-16	portable
+V.V2exp.H.xi0.n8.base	1.3322676295501878e-15	portable
+V.V2exp.H.xi0.n8.iterKulkarni	4.4408920985006260e-16	portable
+V.V2exp.H.xi0.n8.kulkarni	1.3322676295501878e-15	portable
+V.V2exp.H.xi0.n8.sloan	8.8817841970012520e-16	portable
+V.V2exp.H.xi1.n16.base	8.8817841970012520e-16	portable
+V.V2exp.H.xi1.n16.iterKulkarni	4.4408920985006260e-16	portable
+V.V2exp.H.xi1.n16.kulkarni	1.3322676295501878e-15	portable
+V.V2exp.H.xi1.n16.sloan	4.4408920985006260e-16	portable
+V.V2exp.H.xi1.n8.base	1.3322676295501878e-15	portable
+V.V2exp.H.xi1.n8.iterKulkarni	4.4408920985006260e-16	portable
+V.V2exp.H.xi1.n8.kulkarni	8.8817841970012520e-16	portable
+V.V2exp.H.xi1.n8.sloan	8.8817841970012520e-16	portable
+V.V2exp.H.xi2.n16.base	1.3322676295501878e-15	portable
+V.V2exp.H.xi2.n16.iterKulkarni	4.4408920985006260e-16	portable
+V.V2exp.H.xi2.n16.kulkarni	1.3322676295501878e-15	portable
+V.V2exp.H.xi2.n16.sloan	8.8817841970012520e-16	portable
+V.V2exp.H.xi2.n8.base	8.8817841970012520e-16	portable
+V.V2exp.H.xi2.n8.iterKulkarni	8.8817841970012520e-16	portable
+V.V2exp.H.xi2.n8.kulkarni	1.7763568394002505e-15	portable
+V.V2exp.H.xi2.n8.sloan	4.4408920985006260e-16	portable
+V.V2exp.T.lambda.n16.base	1.2280022963828685e-05	portable
+V.V2exp.T.lambda.n16.iterKulkarni	2.3668437165724754e-07	portable
+V.V2exp.T.lambda.n16.iterNystrom	1.3851073514814516e-06	portable
+V.V2exp.T.lambda.n16.kulkarni	6.3123747917614990e-07	portable
+V.V2exp.T.lambda.n16.nystrom	4.2520882574947905e-06	portable
+V.V2exp.T.lambda.n16.sloan	1.0841185704713041e-06	portable
+V.V2exp.T.lambda.n8.base	0.00010922164341042873	portable
+V.V2exp.T.lambda.n8.iterKulkarni	3.5698637699255187e-06	portable
+V.V2exp.T.lambda.n8.iterNystrom	2.0992300138189535e-05	portable
+V.V2exp.T.lambda.n8.kulkarni	9.3301850401239500e-06	portable
+V.V2exp.T.lambda.n8.nystrom	6.3532078325767570e-05	portable
+V.V2exp.T.lambda.n8.sloan	1.6207086778852187e-05	portable
+V.V2exp.T.mu.n16.base	2.0211031130923374e-05	portable
+V.V2exp.T.mu.n16.iterKulkarni	7.5009210398491180e-08	portable
+V.V2exp.T.mu.n16.iterNystrom	2.2887330333176690e-06	portable
+V.V2exp.T.mu.n16.kulkarni	2.8550734976207080e-07	portable
+V.V2exp.T.mu.n16.nystrom	5.3103747275073940e-06	portable
+V.V2exp.T.mu.n16.sloan	1.8340281551232351e-06	portable
+V.V2exp.T.mu.n8.base	0.00014799219542016573	portable
+V.V2exp.T.mu.n8.iterKulkarni	1.1256460732411710e-06	portable
+V.V2exp.T.mu.n8.iterNystrom	3.3124473564072330e-05	portable
+V.V2exp.T.mu.n8.kulkarni	3.9656690673517400e-06	portable
+V.V2exp.T.mu.n8.nystrom	7.1539369036255350e-05	portable
+V.V2exp.T.mu.n8.sloan	2.6327870239928330e-05	portable
+V.V2exp.T.theta.n16.base	1.1329873010001990e-05	portable
+V.V2exp.T.theta.n16.iterKulkarni	6.5020436590401690e-08	portable
+V.V2exp.T.theta.n16.iterNystrom	4.0186565364308535e-07	portable
+V.V2exp.T.theta.n16.kulkarni	3.5902943418264500e-07	portable
+V.V2exp.T.theta.n16.nystrom	1.1747862864730507e-06	portable
+V.V2exp.T.theta.n16.sloan	4.0527022582281800e-07	portable
+V.V2exp.T.theta.n8.base	9.6037877600707590e-05	portable
+V.V2exp.T.theta.n8.iterKulkarni	1.2021917883409117e-06	portable
+V.V2exp.T.theta.n8.iterNystrom	7.5759293665100810e-06	portable
+V.V2exp.T.theta.n8.kulkarni	5.6102596470708480e-06	portable
+V.V2exp.T.theta.n8.nystrom	2.0802929769025980e-05	portable
+V.V2exp.T.theta.n8.sloan	6.9266415101409960e-06	portable
+V.V2exp.T.xi0.n16.base	0.00076191898942701290	portable
+V.V2exp.T.xi0.n16.iterKulkarni	4.4103069347656290e-06	portable
+V.V2exp.T.xi0.n16.kulkarni	1.0033999940706195e-05	portable
+V.V2exp.T.xi0.n16.sloan	0.00034159859492177700	portable
+V.V2exp.T.xi0.n8.base	0.0051669109158600790	portable
+V.V2exp.T.xi0.n8.iterKulkarni	5.5572790638169780e-05	portable
+V.V2exp.T.xi0.n8.kulkarni	0.00012817421762001402	portable
+V.V2exp.T.xi0.n8.sloan	0.0023462947956014446	portable
+V.V2exp.T.xi1.n16.base	9.6994206216116650e-05	portable
+V.V2exp.T.xi1.n16.iterKulkarni	6.3830218888227820e-08	portable
+V.V2exp.T.xi1.n16.kulkarni	2.3875475285706216e-07	portable
+V.V2exp.T.xi1.n16.sloan	4.1057652843790040e-05	portable
+V.V2exp.T.xi1.n8.base	0.00068541148537093480	portable
+V.V2exp.T.xi1.n8.iterKulkarni	6.3558721841161510e-07	portable
+V.V2exp.T.xi1.n8.kulkarni	2.9216107217955310e-06	portable
+V.V2exp.T.xi1.n8.sloan	0.00030837158717300640	portable
+V.V2exp.T.xi2.n16.base	0.00010286252525837370	portable
+V.V2exp.T.xi2.n16.iterKulkarni	8.8076881787912950e-08	portable
+V.V2exp.T.xi2.n16.kulkarni	2.7908144772936794e-07	portable
+V.V2exp.T.xi2.n16.sloan	4.2870994957588950e-05	portable
+V.V2exp.T.xi2.n8.base	0.00078616898936223480	portable
+V.V2exp.T.xi2.n8.iterKulkarni	1.3254033257581455e-06	portable
+V.V2exp.T.xi2.n8.kulkarni	3.9917730856320330e-06	portable
+V.V2exp.T.xi2.n8.sloan	0.00033624998342052237	portable
+V.V2span.B.lambda.n16.base	2.2204460492503130e-16	portable
+V.V2span.B.lambda.n16.iterKulkarni	3.3306690738754696e-16	portable
+V.V2span.B.lambda.n16.iterNystrom	2.1132577138205377e-06	portable
+V.V2span.B.lambda.n16.kulkarni	4.4408920985006260e-15	portable
+V.V2span.B.lambda.n16.nystrom	6.4654274655184810e-06	portable
+V.V2span.B.lambda.n16.sloan	1.1102230246251565e-16	portable
+V.V2span.B.lambda.n8.base	3.3306690738754696e-16	portable
+V.V2span.B.lambda.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.lambda.n8.iterNystrom	2.7060443607895834e-05	portable
+V.V2span.B.lambda.n8.kulkarni	4.4408920985006260e-16	portable
+V.V2span.B.lambda.n8.nystrom	8.8413648965390830e-05	portable
+V.V2span.B.lambda.n8.sloan	2.2204460492503130e-16	portable
+V.V2span.B.mu.n16.base	3.3306690738754696e-16	portable
+V.V2span.B.mu.n16.iterKulkarni	3.3306690738754696e-16	portable
+V.V2span.B.mu.n16.iterNystrom	7.3339828654539470e-07	portable
+V.V2span.B.mu.n16.kulkarni	4.4408920985006260e-15	portable
+V.V2span.B.mu.n16.nystrom	2.1726141413696415e-06	portable
+V.V2span.B.mu.n16.sloan	1.1102230246251565e-16	portable
+V.V2span.B.mu.n8.base	3.3306690738754696e-16	portable
+V.V2span.B.mu.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.mu.n8.iterNystrom	8.8165480487401030e-06	portable
+V.V2span.B.mu.n8.kulkarni	2.2204460492503130e-16	portable
+V.V2span.B.mu.n8.nystrom	2.4744340566443257e-05	portable
+V.V2span.B.mu.n8.sloan	1.1102230246251565e-16	portable
+V.V2span.B.theta.n16.base	3.3306690738754696e-16	portable
+V.V2span.B.theta.n16.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.theta.n16.iterNystrom	3.6711623763174830e-07	portable
+V.V2span.B.theta.n16.kulkarni	3.3306690738754696e-16	portable
+V.V2span.B.theta.n16.nystrom	1.2398852804462734e-06	portable
+V.V2span.B.theta.n16.sloan	1.1102230246251565e-16	portable
+V.V2span.B.theta.n8.base	4.4408920985006260e-16	portable
+V.V2span.B.theta.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.theta.n8.iterNystrom	7.6307541410081110e-06	portable
+V.V2span.B.theta.n8.kulkarni	3.3306690738754696e-16	portable
+V.V2span.B.theta.n8.nystrom	2.4655898075431892e-05	portable
+V.V2span.B.theta.n8.sloan	2.2204460492503130e-16	portable
+V.V2span.B.xi0.n16.base	2.2204460492503130e-16	portable
+V.V2span.B.xi0.n16.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.xi0.n16.kulkarni	3.3306690738754696e-16	portable
+V.V2span.B.xi0.n16.sloan	1.1102230246251565e-16	portable
+V.V2span.B.xi0.n8.base	3.3306690738754696e-16	portable
+V.V2span.B.xi0.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.xi0.n8.kulkarni	4.4408920985006260e-16	portable
+V.V2span.B.xi0.n8.sloan	1.1102230246251565e-16	portable
+V.V2span.B.xi1.n16.base	3.3306690738754696e-16	portable
+V.V2span.B.xi1.n16.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.xi1.n16.kulkarni	3.3306690738754696e-16	portable
+V.V2span.B.xi1.n16.sloan	1.1102230246251565e-16	portable
+V.V2span.B.xi1.n8.base	3.3306690738754696e-16	portable
+V.V2span.B.xi1.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.xi1.n8.kulkarni	3.3306690738754696e-16	portable
+V.V2span.B.xi1.n8.sloan	1.1102230246251565e-16	portable
+V.V2span.B.xi2.n16.base	2.2204460492503130e-16	portable
+V.V2span.B.xi2.n16.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.xi2.n16.kulkarni	3.3306690738754696e-16	portable
+V.V2span.B.xi2.n16.sloan	1.1102230246251565e-16	portable
+V.V2span.B.xi2.n8.base	2.2204460492503130e-16	portable
+V.V2span.B.xi2.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2span.B.xi2.n8.kulkarni	3.3306690738754696e-16	portable
+V.V2span.B.xi2.n8.sloan	1.1102230246251565e-16	portable
+V.V2span.H.lambda.n16.base	4.6565566867995400e-06	portable
+V.V2span.H.lambda.n16.iterKulkarni	3.6528132740798470e-08	portable
+V.V2span.H.lambda.n16.iterNystrom	2.0644996798768744e-06	portable
+V.V2span.H.lambda.n16.kulkarni	9.1819765346556890e-08	portable
+V.V2span.H.lambda.n16.nystrom	6.4204551083468790e-06	portable
+V.V2span.H.lambda.n16.sloan	5.7623463001199580e-07	portable
+V.V2span.H.lambda.n8.base	4.1880845521258260e-05	portable
+V.V2span.H.lambda.n8.iterKulkarni	5.6067562037576120e-07	portable
+V.V2span.H.lambda.n8.iterNystrom	2.6505333641790862e-05	portable
+V.V2span.H.lambda.n8.kulkarni	1.3967335663611635e-06	portable
+V.V2span.H.lambda.n8.nystrom	8.8080890478403620e-05	portable
+V.V2span.H.lambda.n8.sloan	8.3189799742200420e-06	portable
+V.V2span.H.mu.n16.base	6.9486432469068050e-06	portable
+V.V2span.H.mu.n16.iterKulkarni	1.1534477817320976e-08	portable
+V.V2span.H.mu.n16.iterNystrom	8.2754891339575920e-07	portable
+V.V2span.H.mu.n16.kulkarni	4.2786946541362170e-08	portable
+V.V2span.H.mu.n16.nystrom	2.2156461888505480e-06	portable
+V.V2span.H.mu.n16.sloan	8.6310428659697180e-07	portable
+V.V2span.H.mu.n8.base	4.7167140781345650e-05	portable
+V.V2span.H.mu.n8.iterKulkarni	1.7571040134001237e-07	portable
+V.V2span.H.mu.n8.iterNystrom	1.0097008931619910e-05	portable
+V.V2span.H.mu.n8.kulkarni	6.3726266519292810e-07	portable
+V.V2span.H.mu.n8.nystrom	2.5815457993356994e-05	portable
+V.V2span.H.mu.n8.sloan	1.1991903235419876e-05	portable
+V.V2span.H.theta.n16.base	4.1786760968109960e-06	portable
+V.V2span.H.theta.n16.iterKulkarni	8.9677022474532460e-09	portable
+V.V2span.H.theta.n16.iterNystrom	3.4188077968622110e-07	portable
+V.V2span.H.theta.n16.kulkarni	5.0817961727567250e-08	portable
+V.V2span.H.theta.n16.nystrom	1.2023390691950908e-06	portable
+V.V2span.H.theta.n16.sloan	1.8065979978665325e-07	portable
+V.V2span.H.theta.n8.base	3.5680283617001150e-05	portable
+V.V2span.H.theta.n8.iterKulkarni	1.6315182849169219e-07	portable
+V.V2span.H.theta.n8.iterNystrom	7.2091830694009930e-06	portable
+V.V2span.H.theta.n8.kulkarni	8.2235183895829070e-07	portable
+V.V2span.H.theta.n8.nystrom	2.4043612234736500e-05	portable
+V.V2span.H.theta.n8.sloan	3.1573011460839240e-06	portable
+V.V2span.H.xi0.n16.base	0.00022401285819562133	portable
+V.V2span.H.xi0.n16.iterKulkarni	5.6079802446262760e-07	portable
+V.V2span.H.xi0.n16.kulkarni	1.4374935982663928e-06	portable
+V.V2span.H.xi0.n16.sloan	7.1264784286650950e-05	portable
+V.V2span.H.xi0.n8.base	0.0014271372491789780	portable
+V.V2span.H.xi0.n8.iterKulkarni	5.3889399760365110e-06	portable
+V.V2span.H.xi0.n8.kulkarni	1.8940268341149924e-05	portable
+V.V2span.H.xi0.n8.sloan	0.00042530212904190456	portable
+V.V2span.H.xi1.n16.base	3.0099232284142020e-05	portable
+V.V2span.H.xi1.n16.iterKulkarni	7.9951751885687370e-09	portable
+V.V2span.H.xi1.n16.kulkarni	3.4391369752029280e-08	portable
+V.V2span.H.xi1.n16.sloan	9.5276450922110460e-06	portable
+V.V2span.H.xi1.n8.base	0.00020698976984567796	portable
+V.V2span.H.xi1.n8.iterKulkarni	6.5348058075898050e-08	portable
+V.V2span.H.xi1.n8.kulkarni	4.4106388741305125e-07	portable
+V.V2span.H.xi1.n8.sloan	6.9471756118599790e-05	portable
+V.V2span.H.xi2.n16.base	3.2958348768596935e-05	portable
+V.V2span.H.xi2.n16.iterKulkarni	1.7691769160776970e-08	portable
+V.V2span.H.xi2.n16.kulkarni	4.4367606255590886e-08	portable
+V.V2span.H.xi2.n16.sloan	1.1078732721658824e-05	portable
+V.V2span.H.xi2.n8.base	0.00025387381663788400	portable
+V.V2span.H.xi2.n8.iterKulkarni	3.0965365516166800e-07	portable
+V.V2span.H.xi2.n8.kulkarni	6.8470445718782360e-07	portable
+V.V2span.H.xi2.n8.sloan	9.2245540388891100e-05	portable
+V.V2span.T.lambda.n16.base	4.6581744502782740e-06	portable
+V.V2span.T.lambda.n16.iterKulkarni	3.6559137273073360e-08	portable
+V.V2span.T.lambda.n16.iterNystrom	2.1620618114726042e-06	portable
+V.V2span.T.lambda.n16.kulkarni	9.1888611497559220e-08	portable
+V.V2span.T.lambda.n16.nystrom	6.5104384150416195e-06	portable
+V.V2span.T.lambda.n16.sloan	5.7679193998794180e-07	portable
+V.V2span.T.lambda.n8.base	4.1954244801023500e-05	portable
+V.V2span.T.lambda.n8.iterKulkarni	5.6249617208514740e-07	portable
+V.V2span.T.lambda.n8.iterNystrom	2.7617504583798970e-05	portable
+V.V2span.T.lambda.n8.kulkarni	1.4008267421594667e-06	portable
+V.V2span.T.lambda.n8.nystrom	8.8747122191978890e-05	portable
+V.V2span.T.lambda.n8.sloan	8.3520816798188240e-06	portable
+V.V2span.T.mu.n16.base	6.9531623940743970e-06	portable
+V.V2span.T.mu.n16.iterKulkarni	1.1535457256073300e-08	portable
+V.V2span.T.mu.n16.iterNystrom	6.3914059600378440e-07	portable
+V.V2span.T.mu.n16.kulkarni	4.2808056877063905e-08	portable
+V.V2span.T.mu.n16.nystrom	2.1295350830629473e-06	portable
+V.V2span.T.mu.n16.sloan	8.6404991839206250e-07	portable
+V.V2span.T.mu.n8.base	4.7274618721671050e-05	portable
+V.V2span.T.mu.n8.iterKulkarni	1.7556272990937316e-07	portable
+V.V2span.T.mu.n8.iterNystrom	7.5301695514617960e-06	portable
+V.V2span.T.mu.n8.kulkarni	6.3841704323053250e-07	portable
+V.V2span.T.mu.n8.nystrom	2.3673073707847214e-05	portable
+V.V2span.T.mu.n8.sloan	1.2041868345358253e-05	portable
+V.V2span.T.theta.n16.base	4.1796215920486550e-06	portable
+V.V2span.T.theta.n16.iterKulkarni	8.9649079271225670e-09	portable
+V.V2span.T.theta.n16.iterNystrom	3.9236645255069647e-07	portable
+V.V2span.T.theta.n16.kulkarni	5.0835375353663890e-08	portable
+V.V2span.T.theta.n16.nystrom	1.2774629163381235e-06	portable
+V.V2span.T.theta.n16.sloan	1.8067613916095127e-07	portable
+V.V2span.T.theta.n8.base	3.5718642746762620e-05	portable
+V.V2span.T.theta.n8.iterKulkarni	1.6308054284763784e-07	portable
+V.V2span.T.theta.n8.iterNystrom	8.0536463940017460e-06	portable
+V.V2span.T.theta.n8.kulkarni	8.2358270181437380e-07	portable
+V.V2span.T.theta.n8.nystrom	2.5270793862719465e-05	portable
+V.V2span.T.theta.n8.sloan	3.1611561119859743e-06	portable
+V.V2span.T.xi0.n16.base	0.00022391969518564814	portable
+V.V2span.T.xi0.n16.iterKulkarni	5.5234615725652250e-07	portable
+V.V2span.T.xi0.n16.kulkarni	1.4102323524500804e-06	portable
+V.V2span.T.xi0.n16.sloan	7.1236173073363500e-05	portable
+V.V2span.T.xi0.n8.base	0.0014242326982303322	portable
+V.V2span.T.xi0.n8.iterKulkarni	5.0953022723287940e-06	portable
+V.V2span.T.xi0.n8.kulkarni	1.7800374196741410e-05	portable
+V.V2span.T.xi0.n8.sloan	0.00042451593915215913	portable
+V.V2span.T.xi1.n16.base	3.0121158260509873e-05	portable
+V.V2span.T.xi1.n16.iterKulkarni	8.1413328301138680e-09	portable
+V.V2span.T.xi1.n16.kulkarni	3.4788017022613360e-08	portable
+V.V2span.T.xi1.n16.sloan	9.5351196300885730e-06	portable
+V.V2span.T.xi1.n8.base	0.00020760300996458536	portable
+V.V2span.T.xi1.n8.iterKulkarni	7.2973550868660200e-08	portable
+V.V2span.T.xi1.n8.kulkarni	4.6080225934996830e-07	portable
+V.V2span.T.xi1.n8.sloan	6.9689702796083000e-05	portable
+V.V2span.T.xi2.n16.base	3.2980945757099533e-05	portable
+V.V2span.T.xi2.n16.iterKulkarni	1.7900593896058580e-08	portable
+V.V2span.T.xi2.n16.kulkarni	4.4818680433600380e-08	portable
+V.V2span.T.xi2.n16.sloan	1.1087197838044460e-05	portable
+V.V2span.T.xi2.n8.base	0.00025454631519883364	portable
+V.V2span.T.xi2.n8.iterKulkarni	3.2419896678348437e-07	portable
+V.V2span.T.xi2.n8.kulkarni	7.0941762803089500e-07	portable
+V.V2span.T.xi2.n8.sloan	9.2518847186640050e-05	portable
+V.V2win.B.lambda.n16.base	1.7702160683974455e-06	portable
+V.V2win.B.lambda.n16.iterKulkarni	1.4219958544003930e-11	portable
+V.V2win.B.lambda.n16.iterNystrom	1.8293750625453242e-08	portable
+V.V2win.B.lambda.n16.kulkarni	1.9581780641431124e-10	portable
+V.V2win.B.lambda.n16.nystrom	1.1896497187358080e-07	portable
+V.V2win.B.lambda.n16.sloan	8.1898130943613980e-08	portable
+V.V2win.B.lambda.n8.base	1.5049608612649479e-05	portable
+V.V2win.B.lambda.n8.iterKulkarni	8.9009999371114650e-10	portable
+V.V2win.B.lambda.n8.iterNystrom	2.6922801277251550e-07	portable
+V.V2win.B.lambda.n8.kulkarni	7.3081876106328990e-09	portable
+V.V2win.B.lambda.n8.nystrom	1.8917420413488983e-06	portable
+V.V2win.B.lambda.n8.sloan	1.2204146493388635e-06	portable
+V.V2win.B.mu.n16.base	3.1895207098786570e-06	portable
+V.V2win.B.mu.n16.iterKulkarni	5.4972693064314630e-12	portable
+V.V2win.B.mu.n16.iterNystrom	3.1027050573229076e-07	portable
+V.V2win.B.mu.n16.kulkarni	3.5496439121374124e-10	portable
+V.V2win.B.mu.n16.nystrom	7.4802633376336300e-07	portable
+V.V2win.B.mu.n16.sloan	1.3599149850662684e-07	portable
+V.V2win.B.mu.n8.base	2.3754695959499195e-05	portable
+V.V2win.B.mu.n8.iterKulkarni	3.9969338949674693e-10	portable
+V.V2win.B.mu.n8.iterNystrom	4.4237161020976860e-06	portable
+V.V2win.B.mu.n8.kulkarni	1.1295127499977298e-08	portable
+V.V2win.B.mu.n8.nystrom	1.1636109604418188e-05	portable
+V.V2win.B.mu.n8.sloan	1.9879537500600010e-06	portable
+V.V2win.B.theta.n16.base	1.6913059326384428e-06	portable
+V.V2win.B.theta.n16.iterKulkarni	4.3691716911098410e-12	portable
+V.V2win.B.theta.n16.iterNystrom	3.2019273010774896e-08	portable
+V.V2win.B.theta.n16.kulkarni	1.8101642407231110e-10	portable
+V.V2win.B.theta.n16.nystrom	1.1905341801288216e-07	portable
+V.V2win.B.theta.n16.sloan	2.3358245559990110e-08	portable
+V.V2win.B.theta.n8.base	1.3948594830393013e-05	portable
+V.V2win.B.theta.n8.iterKulkarni	3.3758174033948760e-10	portable
+V.V2win.B.theta.n8.iterNystrom	5.0751668312365440e-07	portable
+V.V2win.B.theta.n8.kulkarni	6.4460282667155870e-09	portable
+V.V2win.B.theta.n8.nystrom	1.8973544240186158e-06	portable
+V.V2win.B.theta.n8.sloan	4.3291871332229450e-07	portable
+V.V2win.B.xi0.n16.base	7.9871630812911040e-05	portable
+V.V2win.B.xi0.n16.iterKulkarni	3.1104605557885634e-09	portable
+V.V2win.B.xi0.n16.kulkarni	1.3034690993229958e-08	portable
+V.V2win.B.xi0.n16.sloan	1.1881120086210117e-05	portable
+V.V2win.B.xi0.n8.base	0.00053726363458583840	portable
+V.V2win.B.xi0.n8.iterKulkarni	1.2551635675261963e-07	portable
+V.V2win.B.xi0.n8.kulkarni	5.9651199146859570e-07	portable
+V.V2win.B.xi0.n8.sloan	7.2376610472546510e-05	portable
+V.V2win.B.xi1.n16.base	1.0758953544187655e-05	portable
+V.V2win.B.xi1.n16.iterKulkarni	1.5103962525131465e-10	portable
+V.V2win.B.xi1.n16.kulkarni	8.7672080706369120e-10	portable
+V.V2win.B.xi1.n16.sloan	1.5740254799556652e-06	portable
+V.V2win.B.xi1.n8.base	7.6996005102691890e-05	portable
+V.V2win.B.xi1.n8.iterKulkarni	5.7788762664046090e-09	portable
+V.V2win.B.xi1.n8.kulkarni	2.9552346125782947e-08	portable
+V.V2win.B.xi1.n8.sloan	1.1669570387562445e-05	portable
+V.V2win.B.xi2.n16.base	1.1264615865980154e-05	portable
+V.V2win.B.xi2.n16.iterKulkarni	7.0649264216626760e-11	portable
+V.V2win.B.xi2.n16.kulkarni	2.3779161972825590e-09	portable
+V.V2win.B.xi2.n16.sloan	1.8135152363152330e-06	portable
+V.V2win.B.xi2.n8.base	8.7257205526936050e-05	portable
+V.V2win.B.xi2.n8.iterKulkarni	1.4293757288896813e-09	portable
+V.V2win.B.xi2.n8.kulkarni	7.3236784192687310e-08	portable
+V.V2win.B.xi2.n8.sloan	1.5254930390562471e-05	portable
+V.V2win.H.lambda.n16.base	3.5399522876344847e-06	portable
+V.V2win.H.lambda.n16.iterKulkarni	2.8455238165747687e-11	portable
+V.V2win.H.lambda.n16.iterNystrom	2.3840798113461403e-08	portable
+V.V2win.H.lambda.n16.kulkarni	3.9215442004802980e-10	portable
+V.V2win.H.lambda.n16.nystrom	1.5856587931573074e-07	portable
+V.V2win.H.lambda.n16.sloan	1.6371512245871855e-07	portable
+V.V2win.H.lambda.n8.base	3.0079229604407230e-05	portable
+V.V2win.H.lambda.n8.iterKulkarni	1.7830720233646957e-09	portable
+V.V2win.H.lambda.n8.iterNystrom	3.4242769653136660e-07	portable
+V.V2win.H.lambda.n8.kulkarni	1.4679145121654358e-08	portable
+V.V2win.H.lambda.n8.nystrom	2.5189081139798120e-06	portable
+V.V2win.H.lambda.n8.sloan	2.4360343209295365e-06	portable
+V.V2win.H.mu.n16.base	6.3768783719053700e-06	portable
+V.V2win.H.mu.n16.iterKulkarni	1.1068035377093110e-11	portable
+V.V2win.H.mu.n16.iterNystrom	4.1310919729475870e-07	portable
+V.V2win.H.mu.n16.kulkarni	7.1027772552412220e-10	portable
+V.V2win.H.mu.n16.nystrom	9.9644810092058830e-07	portable
+V.V2win.H.mu.n16.sloan	2.7183255335572200e-07	portable
+V.V2win.H.mu.n8.base	4.7447418704105180e-05	portable
+V.V2win.H.mu.n8.iterKulkarni	8.1496531745273160e-10	portable
+V.V2win.H.mu.n8.iterNystrom	5.8727342586717410e-06	portable
+V.V2win.H.mu.n8.kulkarni	2.2645095243412072e-08	portable
+V.V2win.H.mu.n8.nystrom	1.5457017065956258e-05	portable
+V.V2win.H.mu.n8.sloan	3.9672745688612565e-06	portable
+V.V2win.H.theta.n16.base	3.3822461154020544e-06	portable
+V.V2win.H.theta.n16.iterKulkarni	8.7410079174787820e-12	portable
+V.V2win.H.theta.n16.iterNystrom	4.2984403703094640e-08	portable
+V.V2win.H.theta.n16.kulkarni	3.6214220511254780e-10	portable
+V.V2win.H.theta.n16.nystrom	1.5870209146839898e-07	portable
+V.V2win.H.theta.n16.sloan	4.6715599721913750e-08	portable
+V.V2win.H.theta.n8.base	2.7883554549745780e-05	portable
+V.V2win.H.theta.n8.iterKulkarni	6.7550087745615880e-10	portable
+V.V2win.H.theta.n8.iterNystrom	6.8227382254981710e-07	portable
+V.V2win.H.theta.n8.kulkarni	1.2907576452114710e-08	portable
+V.V2win.H.theta.n8.nystrom	2.5275243971112360e-06	portable
+V.V2win.H.theta.n8.sloan	8.6535086629702110e-07	portable
+V.V2win.H.xi0.n16.base	0.00015976961639807552	portable
+V.V2win.H.xi0.n16.iterKulkarni	5.8734765939760790e-09	portable
+V.V2win.H.xi0.n16.kulkarni	2.2723975923177875e-08	portable
+V.V2win.H.xi0.n16.sloan	2.3765707911738154e-05	portable
+V.V2win.H.xi0.n8.base	0.0010752875992884325	portable
+V.V2win.H.xi0.n8.iterKulkarni	2.4132419729205880e-07	portable
+V.V2win.H.xi0.n8.kulkarni	1.0710776331412930e-06	portable
+V.V2win.H.xi0.n8.sloan	0.00014483966962286488	portable
+V.V2win.H.xi1.n16.base	2.1510324375917378e-05	portable
+V.V2win.H.xi1.n16.iterKulkarni	2.9486302288717070e-10	portable
+V.V2win.H.xi1.n16.kulkarni	1.6589615237094790e-09	portable
+V.V2win.H.xi1.n16.sloan	3.1468292321923386e-06	portable
+V.V2win.H.xi1.n8.base	0.00015377443568975746	portable
+V.V2win.H.xi1.n8.iterKulkarni	1.1161916724233834e-08	portable
+V.V2win.H.xi1.n8.kulkarni	5.4526644643893010e-08	portable
+V.V2win.H.xi1.n8.sloan	2.3303278130493155e-05	portable
+V.V2win.H.xi2.n16.base	2.2521636318773020e-05	portable
+V.V2win.H.xi2.n16.iterKulkarni	1.5162604505292165e-10	portable
+V.V2win.H.xi2.n16.kulkarni	4.8685047104868320e-09	portable
+V.V2win.H.xi2.n16.sloan	3.6256137886381268e-06	portable
+V.V2win.H.xi2.n8.base	0.00017428439444044930	portable
+V.V2win.H.xi2.n8.iterKulkarni	3.6297786998318315e-09	portable
+V.V2win.H.xi2.n8.kulkarni	1.5331600144996570e-07	portable
+V.V2win.H.xi2.n8.sloan	3.0462596345648407e-05	portable
+V.V2win.T.lambda.n16.base	6.6613381477509390e-16	portable
+V.V2win.T.lambda.n16.iterKulkarni	1.1102230246251565e-16	portable
+V.V2win.T.lambda.n16.iterNystrom	1.2750882349976678e-08	portable
+V.V2win.T.lambda.n16.kulkarni	4.4408920985006260e-16	portable
+V.V2win.T.lambda.n16.nystrom	7.9356450743972570e-08	portable
+V.V2win.T.lambda.n16.sloan	2.2204460492503130e-16	portable
+V.V2win.T.lambda.n8.base	6.6613381477509390e-16	portable
+V.V2win.T.lambda.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2win.T.lambda.n8.iterNystrom	1.9636157910785101e-07	portable
+V.V2win.T.lambda.n8.kulkarni	3.3306690738754696e-16	portable
+V.V2win.T.lambda.n8.nystrom	1.2641168302129913e-06	portable
+V.V2win.T.lambda.n8.sloan	3.3306690738754696e-16	portable
+V.V2win.T.mu.n16.base	5.5511151231257830e-16	portable
+V.V2win.T.mu.n16.iterKulkarni	1.1102230246251565e-16	portable
+V.V2win.T.mu.n16.iterNystrom	2.0730692729120648e-07	portable
+V.V2win.T.mu.n16.kulkarni	5.5511151231257830e-16	portable
+V.V2win.T.mu.n16.nystrom	4.9931723444807120e-07	portable
+V.V2win.T.mu.n16.sloan	2.2204460492503130e-16	portable
+V.V2win.T.mu.n8.base	4.4408920985006260e-16	portable
+V.V2win.T.mu.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2win.T.mu.n8.iterNystrom	2.9677905603042730e-06	portable
+V.V2win.T.mu.n8.kulkarni	3.3306690738754696e-16	portable
+V.V2win.T.mu.n8.nystrom	7.7974367708177900e-06	portable
+V.V2win.T.mu.n8.sloan	1.1102230246251565e-16	portable
+V.V2win.T.theta.n16.base	5.5511151231257830e-16	portable
+V.V2win.T.theta.n16.iterKulkarni	2.2204460492503130e-16	portable
+V.V2win.T.theta.n16.iterNystrom	2.1050668541633400e-08	portable
+V.V2win.T.theta.n16.kulkarni	4.4408920985006260e-16	portable
+V.V2win.T.theta.n16.nystrom	7.9397039276507540e-08	portable
+V.V2win.T.theta.n16.sloan	2.2204460492503130e-16	portable
+V.V2win.T.theta.n8.base	5.5511151231257830e-16	portable
+V.V2win.T.theta.n8.iterKulkarni	2.2204460492503130e-16	portable
+V.V2win.T.theta.n8.iterNystrom	3.3251862663341570e-07	portable
+V.V2win.T.theta.n8.kulkarni	4.4408920985006260e-16	portable
+V.V2win.T.theta.n8.nystrom	1.2667021007661816e-06	portable
+V.V2win.T.theta.n8.sloan	2.2204460492503130e-16	portable
+V.V2win.T.xi0.n16.base	4.4408920985006260e-16	portable
+V.V2win.T.xi0.n16.iterKulkarni	2.2204460492503130e-16	portable
+V.V2win.T.xi0.n16.kulkarni	3.3306690738754696e-16	portable
+V.V2win.T.xi0.n16.sloan	2.2204460492503130e-16	portable
+V.V2win.T.xi0.n8.base	5.5511151231257830e-16	portable
+V.V2win.T.xi0.n8.iterKulkarni	1.1102230246251565e-16	portable
+V.V2win.T.xi0.n8.kulkarni	4.4408920985006260e-16	portable
+V.V2win.T.xi0.n8.sloan	1.1102230246251565e-16	portable
+V.V2win.T.xi1.n16.base	3.3306690738754696e-16	portable
+V.V2win.T.xi1.n16.iterKulkarni	2.2204460492503130e-16	portable
+V.V2win.T.xi1.n16.kulkarni	4.4408920985006260e-16	portable
+V.V2win.T.xi1.n16.sloan	1.1102230246251565e-16	portable
+V.V2win.T.xi1.n8.base	5.5511151231257830e-16	portable
+V.V2win.T.xi1.n8.iterKulkarni	2.2204460492503130e-16	portable
+V.V2win.T.xi1.n8.kulkarni	5.5511151231257830e-16	portable
+V.V2win.T.xi1.n8.sloan	1.1102230246251565e-16	portable
+V.V2win.T.xi2.n16.base	4.4408920985006260e-16	portable
+V.V2win.T.xi2.n16.iterKulkarni	2.2204460492503130e-16	portable
+V.V2win.T.xi2.n16.kulkarni	5.5511151231257830e-16	portable
+V.V2win.T.xi2.n16.sloan	2.2204460492503130e-16	portable
+V.V2win.T.xi2.n8.base	5.5511151231257830e-16	portable
+V.V2win.T.xi2.n8.iterKulkarni	2.2204460492503130e-16	portable
+V.V2win.T.xi2.n8.kulkarni	4.4408920985006260e-16	portable
+V.V2win.T.xi2.n8.sloan	1.1102230246251565e-16	portable
+V1.B.theta.n16.base	1.6379984023595640e-06	portable
+V1.B.theta.n16.sloan	3.3247537167824250e-08	portable
+V1.B.theta.n8.base	1.3057114317094332e-05	portable
+V1.B.theta.n8.sloan	5.7723074342597160e-07	portable

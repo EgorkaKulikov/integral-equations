@@ -1,7 +1,6 @@
 package characterization
 
 import org.junit.jupiter.api.Tag
-import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -53,31 +52,34 @@ import kotlin.test.fail
  * fast-набора (255 тестов за ~8 с целиком), поэтому тег — `slow`, а для отдельного
  * запуска заведена задача `./gradlew extraCharacterizationTest`.
  *
- * ФОРМАТ ЭТАЛОНА: `ключ<TAB>значение`. Значение — либо число (12 значащих цифр),
- * либо один из специальных маркеров `NaN`, `Infinity`, `-Infinity`, `ERROR:<класс>`.
+ * ФОРМАТ ЭТАЛОНА: `ключ<TAB>значение<TAB>класс` (17 значащих цифр). Значение — либо
+ * число, либо один из маркеров `NaN`, `Infinity`, `-Infinity`, `ERROR:<класс>`.
  * Маркеры сравниваются ПОДСТРОЧНО, а не численно: снимок фиксирует текущее поведение,
  * включая отказы, и превращение отказа в число — такое же изменение поведения, как
  * и изменение самого числа.
  *
- * ТЕГ `machine` — по той же причине, что и у [EhCharacterizationTest]: эталон
- * `baseline-extra.tsv` снят на конкретной машине (multik/OpenBLAS, JDK 21,
- * macOS aarch64) и сравнивается с допуском 1e-9, поэтому на другой архитектуре CPU
- * гейт закономерно красный. В CI исключается флагом `-PmachineDependentGates=false`,
- * локально работает всегда. Подробности — `docs/TESTING.md`.
+ * РЕЖИМ СРАВНЕНИЯ БЕРЁТСЯ ИЗ КОЛОНКИ `класс`, а не из суффикса ключа. Прежде здесь
+ * стояла цепочка `if (key.endsWith(".residual"))`, выбиравшая одну из пяти пар
+ * «допуск + пол»; теперь режим — свойство ДАННЫХ ([BaselineClass], [BaselineFormat]),
+ * а колонка ВЫЧИСЛЯЕТСЯ задачей `./gradlew classifyBaseline`. В этом файле встречаются
+ * `portable` (значения E_h), `residual` (отн. 1e-3 при шуме 6e-15) и `exact`
+ * (счётчики `*.iters` — строгое равенство строк).
+ *
+ * ТЕГА `machine` БОЛЬШЕ НЕТ. Измерение: снятие матрицы на `-Dnumerics.backend=java`
+ * и на `native` даёт 0 падений гейта на ОБОИХ бэкендах (максимум расхождения —
+ * 1.0e-15 абс. у ключей E_h и 1.33e-2 отн. у ключей `*.residual` при значении ~1e-14,
+ * всё поглощается полами), а счётчики `*.iters` не разошлись ни разу (0 из 336).
+ * То есть привязки к машине у этого эталона не было вовсе, и гейт гоняется в CI.
  */
 @Tag("slow")
-@Tag("machine")
 class ExtraCharacterizationTest {
 
-    /** Пара «ключ эталона -> зафиксированная строка значения». */
-    private val baseline: Map<String, String> by lazy {
+    /** Пара «ключ эталона -> зафиксированное значение и класс сравнения». */
+    private val baseline: Map<String, BaselineEntry> by lazy {
         val resource = javaClass.getResourceAsStream(ExtraCharacterizationMatrix.RESOURCE_PATH)
             ?: fail("Не найден файл эталона ${ExtraCharacterizationMatrix.RESOURCE_PATH}")
-        resource.bufferedReader().useLines { lines ->
-            lines.mapNotNull { line ->
-                val parts = line.trim().split('\t')
-                if (parts.size == 2) parts[0] to parts[1] else null
-            }.toMap()
+        resource.bufferedReader().useLines {
+            BaselineFormat.parse(it, ExtraCharacterizationMatrix.RESOURCE_PATH)
         }
     }
 
@@ -95,73 +97,12 @@ class ExtraCharacterizationTest {
         val mismatches = mutableListOf<String>()
 
         for ((key, actualValue) in actual) {
-            val expectedValue = baseline[key]
-            if (expectedValue == null) {
+            val expected = baseline[key]
+            if (expected == null) {
                 mismatches += "$key: отсутствует в эталоне (вычислено $actualValue)"
                 continue
             }
-            val expectedNumber = expectedValue.toDoubleOrNull()
-            val actualNumber = actualValue.toDoubleOrNull()
-            if (expectedNumber == null || actualNumber == null) {
-                // Хотя бы одна сторона — специальный маркер: сравнение строгое, по строке.
-                if (expectedValue != actualValue) {
-                    mismatches += "$key: эталон=$expectedValue, получено=$actualValue " +
-                        "(специальное значение сравнивается строго)"
-                }
-                continue
-            }
-            if (expectedNumber.isNaN() || actualNumber.isNaN()) {
-                if (expectedNumber.isNaN() != actualNumber.isNaN()) {
-                    mismatches += "$key: эталон=$expectedValue, получено=$actualValue (NaN против числа)"
-                }
-                continue
-            }
-            // Ключи невязки сравниваются СВОИМИ порогами — и допуском, и «полом».
-            // Общий пол 1e-11 для них губителен: любая сошедшаяся невязка меньше 1e-13,
-            // то есть все такие ключи молча выпадали бы из сравнения целиком
-            // (см. KDoc [ExtraCharacterizationMatrix.RESIDUAL_ABSOLUTE_FLOOR]).
-            val isResidual = key.endsWith(ExtraCharacterizationMatrix.RESIDUAL_SUFFIX)
-            val tolerance = if (isResidual) {
-                ExtraCharacterizationMatrix.RESIDUAL_RELATIVE_TOLERANCE
-            } else {
-                ExtraCharacterizationMatrix.RELATIVE_TOLERANCE
-            }
-            val floor = if (isResidual) {
-                ExtraCharacterizationMatrix.RESIDUAL_ABSOLUTE_FLOOR
-            } else {
-                ExtraCharacterizationMatrix.ABSOLUTE_FLOOR
-            }
-            // Ранее «оба значения ниже пола» означало ПРОПУСК сравнения, и это было дырой:
-            // под общий пол 1e-11 попадают 53 из 672 ключей E_h, включая 3 `combNystrom`
-            // и 21 `iterCombNystrom` — целевые схемы этапа. Теперь такая пара не пропускается,
-            // а сравнивается по ослабленному, но КОНЕЧНОМУ критерию: относительный допуск
-            // 1e-3 при поле 1e-16 (см. KDoc [ExtraCharacterizationMatrix.SMALL_VALUE_RELATIVE_TOLERANCE]).
-            // Ключи невязки сюда не попадают: у них свой пол 1e-18, ниже любого их значения.
-            // Расхождение на уровне шума округления допусками не проверяется (см. KDoc
-            // [ExtraCharacterizationMatrix.NOISE_FLOOR] и [ExtraCharacterizationMatrix.RESIDUAL_NOISE_FLOOR]).
-            val noiseFloor = if (isResidual) {
-                ExtraCharacterizationMatrix.RESIDUAL_NOISE_FLOOR
-            } else {
-                ExtraCharacterizationMatrix.NOISE_FLOOR
-            }
-            if (abs(actualNumber - expectedNumber) <= noiseFloor) continue
-            val degenerate = abs(expectedNumber) < floor && abs(actualNumber) < floor
-            val effectiveTolerance = if (degenerate) {
-                ExtraCharacterizationMatrix.SMALL_VALUE_RELATIVE_TOLERANCE
-            } else {
-                tolerance
-            }
-            val effectiveFloor = if (degenerate) {
-                ExtraCharacterizationMatrix.SMALL_VALUE_ABSOLUTE_FLOOR
-            } else {
-                floor
-            }
-            val relative =
-                abs(actualNumber - expectedNumber) / maxOf(abs(expectedNumber), effectiveFloor)
-            if (relative > effectiveTolerance) {
-                mismatches += "$key: эталон=$expectedValue, получено=$actualValue, " +
-                    "отн.расхождение=$relative (допуск $effectiveTolerance)"
-            }
+            BaselineFormat.compare(key, expected, actualValue)?.let { mismatches += it }
         }
 
         val producedKeys = actual.map { it.first }.toSet()

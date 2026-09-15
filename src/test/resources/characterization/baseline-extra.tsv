@@ -1,1362 +1,1371 @@
-# ДОПОЛНИТЕЛЬНЫЙ ХАРАКТЕРИЗАЦИОННЫЙ ЭТАЛОН (этап 4): комбинированный Nyström,
+# ДОПОЛНИТЕЛЬНЫЙ ХАРАКТЕРИЗАЦИОННЫЙ ЭТАЛОН: комбинированный Nyström,
 # неравномерные сетки, отрезок [0,2] — то, что НЕ покрыто baseline-eh.tsv.
 #
-# Сверяется тестом characterization.ExtraCharacterizationTest. Допуски и «полы»
-# перечислены в ExtraCharacterizationMatrix (E_h — 1e-9, невязка — свой строгий порог).
-# Формат строки:  ключ <TAB> значение, где значение — либо число (12 значащих цифр),
-# либо маркер NaN / Infinity / -Infinity / ERROR:<класс>, сравниваемый ПОДСТРОЧНО.
-# Строки без символа табуляции (в том числе эти комментарии) парсером ИГНОРИРУЮТСЯ.
+# Сверяется тестом characterization.ExtraCharacterizationTest.
+# ФОРМАТ СТРОКИ:  ключ <TAB> значение <TAB> класс — тот же, что и у baseline-eh.tsv.
+#   значение — 17 значащих цифр (%.17g, round-trip для double) либо маркер
+#              NaN / Infinity / -Infinity / ERROR:<класс>, сравниваемый ПОДСТРОЧНО:
+#              превращение отказа в число — такое же изменение поведения, как и
+#              изменение самого числа;
+#   класс    — ВЫЧИСЛЕН инструментом `./gradlew classifyBaseline` по двум снимкам
+#              (-Dnumerics.backend=java против native), см. шапку baseline-eh.tsv.
+#              Здесь встречаются portable (значения E_h), residual (ключи *.residual,
+#              отн. 1e-3 при шуме 6e-15) и exact (счётчики *.iters, строгое равенство).
+#              Класса sensitive в этом файле НЕТ: измерение дало 0 падений на обоих
+#              бэкендах, то есть привязки к пути LU у дополнительной матрицы нет.
+# Прежний выбор режима по СУФФИКСУ ключа в коде теста этим и заменён: режим берётся
+# из данных, и добавление схемы не требует правки цепочки `if`.
 #
 # ОКРУЖЕНИЕ СНЯТИЯ (существенно: числа к нему привязаны).
-#   бэкенд линейной алгебры : multik  (multik-default 0.2.3, нативный OpenBLAS)
+#   бэкенд линейной алгебры : netlib + системная LAPACK (Apple Accelerate), -Dnumerics.backend=native
+#   библиотеки              : numerical-core 1.1.0, minimal-splines 1.1.0
 #   JDK                     : 21 (jvmToolchain(21))
 #   платформа               : macOS aarch64 (Apple silicon)
-# Тот же довод, что и у baseline-eh.tsv: снимок привязан к реализации LU, и прогон на
-# другом бэкенде — не «порча рефакторингом», а другая арифметика. Задача снятия —
-# `./gradlew captureExtraBaseline`, она фиксирует бэкенд тем же свойством.
+# ПЕРЕНОСИМОСТЬ ПРОВЕРЕНА: гейт зелёный и на `native`, и на `java`; тег `machine` снят,
+# гейт гоняется в CI на ubuntu/OpenBLAS.
 #
 # ИСТОРИЯ ИЗМЕНЕНИЙ ЭТАЛОНА: docs/baseline-changes.md.
-F.F2.B.lambda.geom.s01.n16.base	3.90825826990e-06
-F.F2.B.lambda.geom.s01.n16.combNystrom	3.25430793424e-11
-F.F2.B.lambda.geom.s01.n16.combNystrom.iters	47
-F.F2.B.lambda.geom.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.B.lambda.geom.s01.n16.iterCombNystrom	2.71960232112e-12
-F.F2.B.lambda.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.B.lambda.geom.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.B.lambda.geom.s01.n16.kulkarni	1.58872914824e-13
-F.F2.B.lambda.geom.s01.n8.base	2.96523185377e-05
-F.F2.B.lambda.geom.s01.n8.combNystrom	3.51862461390e-09
-F.F2.B.lambda.geom.s01.n8.combNystrom.iters	47
-F.F2.B.lambda.geom.s01.n8.combNystrom.residual	8.21565038223e-14
-F.F2.B.lambda.geom.s01.n8.iterCombNystrom	4.78914019553e-10
-F.F2.B.lambda.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.B.lambda.geom.s01.n8.iterCombNystrom.residual	8.21565038223e-14
-F.F2.B.lambda.geom.s01.n8.kulkarni	8.90620910354e-12
-F.F2.B.lambda.graded.s01.n16.base	3.75189464796e-05
-F.F2.B.lambda.graded.s01.n16.combNystrom	5.09193798237e-11
-F.F2.B.lambda.graded.s01.n16.combNystrom.iters	47
-F.F2.B.lambda.graded.s01.n16.combNystrom.residual	8.23785484272e-14
-F.F2.B.lambda.graded.s01.n16.iterCombNystrom	1.20126131264e-13
-F.F2.B.lambda.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.B.lambda.graded.s01.n16.iterCombNystrom.residual	8.23785484272e-14
-F.F2.B.lambda.graded.s01.n16.kulkarni	1.47103440540e-11
-F.F2.B.lambda.graded.s01.n8.base	0.000224844701034
-F.F2.B.lambda.graded.s01.n8.combNystrom	4.42634506825e-09
-F.F2.B.lambda.graded.s01.n8.combNystrom.iters	47
-F.F2.B.lambda.graded.s01.n8.combNystrom.residual	8.21565038223e-14
-F.F2.B.lambda.graded.s01.n8.iterCombNystrom	1.63595803571e-11
-F.F2.B.lambda.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.B.lambda.graded.s01.n8.iterCombNystrom.residual	8.21565038223e-14
-F.F2.B.lambda.graded.s01.n8.kulkarni	1.06771003150e-09
-F.F2.B.lambda.quasi.s01.n16.base	2.90220117660e-05
-F.F2.B.lambda.quasi.s01.n16.combNystrom	1.48067080818e-09
-F.F2.B.lambda.quasi.s01.n16.combNystrom.iters	47
-F.F2.B.lambda.quasi.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.B.lambda.quasi.s01.n16.iterCombNystrom	1.39156242085e-10
-F.F2.B.lambda.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.B.lambda.quasi.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.B.lambda.quasi.s01.n16.kulkarni	2.16744400205e-11
-F.F2.B.lambda.quasi.s01.n8.base	0.000242027546631
-F.F2.B.lambda.quasi.s01.n8.combNystrom	1.20011270477e-07
-F.F2.B.lambda.quasi.s01.n8.combNystrom.iters	47
-F.F2.B.lambda.quasi.s01.n8.combNystrom.residual	8.23785484272e-14
-F.F2.B.lambda.quasi.s01.n8.iterCombNystrom	1.60299240548e-08
-F.F2.B.lambda.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.B.lambda.quasi.s01.n8.iterCombNystrom.residual	8.23785484272e-14
-F.F2.B.lambda.quasi.s01.n8.kulkarni	1.88327498041e-09
-F.F2.B.lambda.uniform.s01.n16.base	1.40955442488e-05
-F.F2.B.lambda.uniform.s01.n16.combNystrom	3.57748608515e-10
-F.F2.B.lambda.uniform.s01.n16.combNystrom.iters	47
-F.F2.B.lambda.uniform.s01.n16.combNystrom.residual	8.19344592173e-14
-F.F2.B.lambda.uniform.s01.n16.iterCombNystrom	3.20121706920e-11
-F.F2.B.lambda.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.B.lambda.uniform.s01.n16.iterCombNystrom.residual	8.19344592173e-14
-F.F2.B.lambda.uniform.s01.n16.kulkarni	4.13802325738e-12
-F.F2.B.lambda.uniform.s01.n8.base	0.000120194914688
-F.F2.B.lambda.uniform.s01.n8.combNystrom	3.64443947243e-08
-F.F2.B.lambda.uniform.s01.n8.combNystrom.iters	47
-F.F2.B.lambda.uniform.s01.n8.combNystrom.residual	8.17124146124e-14
-F.F2.B.lambda.uniform.s01.n8.iterCombNystrom	5.06152453283e-09
-F.F2.B.lambda.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.B.lambda.uniform.s01.n8.iterCombNystrom.residual	8.17124146124e-14
-F.F2.B.lambda.uniform.s01.n8.kulkarni	4.03013622474e-10
-F.F2.B.mu.geom.s01.n16.base	7.71315683590e-06
-F.F2.B.mu.geom.s01.n16.combNystrom	1.70176095438e-11
-F.F2.B.mu.geom.s01.n16.combNystrom.iters	47
-F.F2.B.mu.geom.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.B.mu.geom.s01.n16.iterCombNystrom	3.25295346215e-14
-F.F2.B.mu.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.B.mu.geom.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.B.mu.geom.s01.n16.kulkarni	2.04902761425e-12
-F.F2.B.mu.geom.s01.n8.base	5.92420265274e-05
-F.F2.B.mu.geom.s01.n8.combNystrom	1.49228662760e-09
-F.F2.B.mu.geom.s01.n8.combNystrom.iters	47
-F.F2.B.mu.geom.s01.n8.combNystrom.residual	8.14903700075e-14
-F.F2.B.mu.geom.s01.n8.iterCombNystrom	2.00168770448e-11
-F.F2.B.mu.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.B.mu.geom.s01.n8.iterCombNystrom.residual	8.14903700075e-14
-F.F2.B.mu.geom.s01.n8.kulkarni	2.13103645841e-10
-F.F2.B.mu.graded.s01.n16.base	4.44067291767e-05
-F.F2.B.mu.graded.s01.n16.combNystrom	8.50297610100e-11
-F.F2.B.mu.graded.s01.n16.combNystrom.iters	47
-F.F2.B.mu.graded.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.B.mu.graded.s01.n16.iterCombNystrom	1.20603527165e-12
-F.F2.B.mu.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.B.mu.graded.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.B.mu.graded.s01.n16.kulkarni	3.17132986538e-11
-F.F2.B.mu.graded.s01.n8.base	0.000270059344636
-F.F2.B.mu.graded.s01.n8.combNystrom	5.81385173337e-09
-F.F2.B.mu.graded.s01.n8.combNystrom.iters	47
-F.F2.B.mu.graded.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.B.mu.graded.s01.n8.iterCombNystrom	1.97502902921e-10
-F.F2.B.mu.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.B.mu.graded.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.B.mu.graded.s01.n8.kulkarni	2.36851249724e-09
-F.F2.B.mu.quasi.s01.n16.base	3.67448282035e-05
-F.F2.B.mu.quasi.s01.n16.combNystrom	6.47696007938e-10
-F.F2.B.mu.quasi.s01.n16.combNystrom.iters	47
-F.F2.B.mu.quasi.s01.n16.combNystrom.residual	8.22675261247e-14
-F.F2.B.mu.quasi.s01.n16.iterCombNystrom	1.34143807173e-11
-F.F2.B.mu.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.B.mu.quasi.s01.n16.iterCombNystrom.residual	8.22675261247e-14
-F.F2.B.mu.quasi.s01.n16.kulkarni	1.56108459493e-11
-F.F2.B.mu.quasi.s01.n8.base	0.000220743785064
-F.F2.B.mu.quasi.s01.n8.combNystrom	3.68909517379e-08
-F.F2.B.mu.quasi.s01.n8.combNystrom.iters	47
-F.F2.B.mu.quasi.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.B.mu.quasi.s01.n8.iterCombNystrom	1.45637157889e-09
-F.F2.B.mu.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.B.mu.quasi.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.B.mu.quasi.s01.n8.kulkarni	8.06887334726e-10
-F.F2.B.mu.uniform.s01.n16.base	2.05058592693e-05
-F.F2.B.mu.uniform.s01.n16.combNystrom	1.72224123851e-10
-F.F2.B.mu.uniform.s01.n16.combNystrom.iters	47
-F.F2.B.mu.uniform.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.B.mu.uniform.s01.n16.iterCombNystrom	2.10320649785e-12
-F.F2.B.mu.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.B.mu.uniform.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.B.mu.uniform.s01.n16.kulkarni	7.51743112204e-12
-F.F2.B.mu.uniform.s01.n8.base	0.000140281218726
-F.F2.B.mu.uniform.s01.n8.combNystrom	1.30130144438e-08
-F.F2.B.mu.uniform.s01.n8.combNystrom.iters	47
-F.F2.B.mu.uniform.s01.n8.combNystrom.residual	8.14903700075e-14
-F.F2.B.mu.uniform.s01.n8.iterCombNystrom	2.75572231700e-10
-F.F2.B.mu.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.B.mu.uniform.s01.n8.iterCombNystrom.residual	8.14903700075e-14
-F.F2.B.mu.uniform.s01.n8.kulkarni	6.06978467488e-10
-F.F2.B.theta.geom.s01.n16.base	3.65431705029e-06
-F.F2.B.theta.geom.s01.n16.combNystrom	5.03019847997e-12
-F.F2.B.theta.geom.s01.n16.combNystrom.iters	47
-F.F2.B.theta.geom.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.B.theta.geom.s01.n16.iterCombNystrom	1.09579012531e-13
-F.F2.B.theta.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.B.theta.geom.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.B.theta.geom.s01.n16.kulkarni	8.01581023779e-14
-F.F2.B.theta.geom.s01.n8.base	2.68497398469e-05
-F.F2.B.theta.geom.s01.n8.combNystrom	6.81508294242e-10
-F.F2.B.theta.geom.s01.n8.combNystrom.iters	47
-F.F2.B.theta.geom.s01.n8.combNystrom.residual	8.18234369149e-14
-F.F2.B.theta.geom.s01.n8.iterCombNystrom	2.01485494955e-11
-F.F2.B.theta.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.B.theta.geom.s01.n8.iterCombNystrom.residual	8.18234369149e-14
-F.F2.B.theta.geom.s01.n8.kulkarni	9.35829191917e-12
-F.F2.B.theta.geom.s02.n16.base	3.12575208654e-05
-F.F2.B.theta.geom.s02.n16.combNystrom	7.93383914122e-10
-F.F2.B.theta.geom.s02.n16.combNystrom.iters	107
-F.F2.B.theta.geom.s02.n16.combNystrom.residual	7.93809462607e-14
-F.F2.B.theta.geom.s02.n16.iterCombNystrom	5.03010966213e-11
-F.F2.B.theta.geom.s02.n16.iterCombNystrom.iters	107
-F.F2.B.theta.geom.s02.n16.iterCombNystrom.residual	7.93809462607e-14
-F.F2.B.theta.geom.s02.n16.kulkarni	1.21180843138e-12
-F.F2.B.theta.geom.s02.n8.base	0.000241786132892
-F.F2.B.theta.geom.s02.n8.combNystrom	9.04745063313e-08
-F.F2.B.theta.geom.s02.n8.combNystrom.iters	107
-F.F2.B.theta.geom.s02.n8.combNystrom.residual	8.00470800755e-14
-F.F2.B.theta.geom.s02.n8.iterCombNystrom	1.19146305044e-08
-F.F2.B.theta.geom.s02.n8.iterCombNystrom.iters	107
-F.F2.B.theta.geom.s02.n8.iterCombNystrom.residual	8.00470800755e-14
-F.F2.B.theta.geom.s02.n8.kulkarni	1.49696810503e-10
-F.F2.B.theta.graded.s01.n16.base	3.85596548341e-05
-F.F2.B.theta.graded.s01.n16.combNystrom	4.45146808303e-10
-F.F2.B.theta.graded.s01.n16.combNystrom.iters	47
-F.F2.B.theta.graded.s01.n16.combNystrom.residual	8.27116153346e-14
-F.F2.B.theta.graded.s01.n16.iterCombNystrom	1.36255451366e-11
-F.F2.B.theta.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.B.theta.graded.s01.n16.iterCombNystrom.residual	8.27116153346e-14
-F.F2.B.theta.graded.s01.n16.kulkarni	2.36508590490e-11
-F.F2.B.theta.graded.s01.n8.base	0.000236143622279
-F.F2.B.theta.graded.s01.n8.combNystrom	2.11033462927e-08
-F.F2.B.theta.graded.s01.n8.combNystrom.iters	47
-F.F2.B.theta.graded.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.B.theta.graded.s01.n8.iterCombNystrom	1.25251820027e-09
-F.F2.B.theta.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.B.theta.graded.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.B.theta.graded.s01.n8.kulkarni	1.63325075686e-09
-F.F2.B.theta.quasi.s01.n16.base	2.52520261090e-05
-F.F2.B.theta.quasi.s01.n16.combNystrom	4.41281344798e-10
-F.F2.B.theta.quasi.s01.n16.combNystrom.iters	47
-F.F2.B.theta.quasi.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.B.theta.quasi.s01.n16.iterCombNystrom	1.56181734212e-11
-F.F2.B.theta.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.B.theta.quasi.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.B.theta.quasi.s01.n16.kulkarni	4.59809967879e-12
-F.F2.B.theta.quasi.s01.n8.base	0.000204988923958
-F.F2.B.theta.quasi.s01.n8.combNystrom	4.74399765027e-08
-F.F2.B.theta.quasi.s01.n8.combNystrom.iters	47
-F.F2.B.theta.quasi.s01.n8.combNystrom.residual	8.16013923099e-14
-F.F2.B.theta.quasi.s01.n8.iterCombNystrom	3.39171890573e-09
-F.F2.B.theta.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.B.theta.quasi.s01.n8.iterCombNystrom.residual	8.16013923099e-14
-F.F2.B.theta.quasi.s01.n8.kulkarni	6.27869867209e-10
-F.F2.B.theta.uniform.s01.n16.base	1.24635326952e-05
-F.F2.B.theta.uniform.s01.n16.combNystrom	8.58358939482e-11
-F.F2.B.theta.uniform.s01.n16.combNystrom.iters	47
-F.F2.B.theta.uniform.s01.n16.combNystrom.residual	8.17124146124e-14
-F.F2.B.theta.uniform.s01.n16.iterCombNystrom	2.25597318604e-12
-F.F2.B.theta.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.B.theta.uniform.s01.n16.iterCombNystrom.residual	8.17124146124e-14
-F.F2.B.theta.uniform.s01.n16.kulkarni	4.73621142305e-13
-F.F2.B.theta.uniform.s01.n8.base	0.000101434526554
-F.F2.B.theta.uniform.s01.n8.combNystrom	1.11661491164e-08
-F.F2.B.theta.uniform.s01.n8.combNystrom.iters	47
-F.F2.B.theta.uniform.s01.n8.combNystrom.residual	8.14903700075e-14
-F.F2.B.theta.uniform.s01.n8.iterCombNystrom	6.30247298794e-10
-F.F2.B.theta.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.B.theta.uniform.s01.n8.iterCombNystrom.residual	8.14903700075e-14
-F.F2.B.theta.uniform.s01.n8.kulkarni	7.74970088102e-11
-F.F2.B.theta.uniform.s02.n16.base	0.000105459244406
-F.F2.B.theta.uniform.s02.n16.combNystrom	1.16379522686e-08
-F.F2.B.theta.uniform.s02.n16.combNystrom.iters	107
-F.F2.B.theta.uniform.s02.n16.combNystrom.residual	8.01581023779e-14
-F.F2.B.theta.uniform.s02.n16.iterCombNystrom	1.18137455374e-09
-F.F2.B.theta.uniform.s02.n16.iterCombNystrom.iters	107
-F.F2.B.theta.uniform.s02.n16.iterCombNystrom.residual	8.01581023779e-14
-F.F2.B.theta.uniform.s02.n16.kulkarni	7.90051357669e-11
-F.F2.B.theta.uniform.s02.n8.base	0.000834580880010
-F.F2.B.theta.uniform.s02.n8.combNystrom	1.02912803523e-06
-F.F2.B.theta.uniform.s02.n8.combNystrom.iters	107
-F.F2.B.theta.uniform.s02.n8.combNystrom.residual	7.94919685632e-14
-F.F2.B.theta.uniform.s02.n8.iterCombNystrom	1.93527017411e-07
-F.F2.B.theta.uniform.s02.n8.iterCombNystrom.iters	107
-F.F2.B.theta.uniform.s02.n8.iterCombNystrom.residual	7.94919685632e-14
-F.F2.B.theta.uniform.s02.n8.kulkarni	6.93193491497e-09
-F.F2.H.lambda.geom.s01.n16.base	3.39865809329e-06
-F.F2.H.lambda.geom.s01.n16.combNystrom	3.03855829387e-11
-F.F2.H.lambda.geom.s01.n16.combNystrom.iters	47
-F.F2.H.lambda.geom.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.H.lambda.geom.s01.n16.iterCombNystrom	2.60114152439e-12
-F.F2.H.lambda.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.H.lambda.geom.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.H.lambda.geom.s01.n16.kulkarni	1.88404847279e-13
-F.F2.H.lambda.geom.s01.n8.base	2.69348277973e-05
-F.F2.H.lambda.geom.s01.n8.combNystrom	3.28612459466e-09
-F.F2.H.lambda.geom.s01.n8.combNystrom.iters	47
-F.F2.H.lambda.geom.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.H.lambda.geom.s01.n8.iterCombNystrom	4.57886617511e-10
-F.F2.H.lambda.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.H.lambda.geom.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.H.lambda.geom.s01.n8.kulkarni	8.15847389646e-12
-F.F2.H.lambda.graded.s01.n16.base	3.00924933858e-05
-F.F2.H.lambda.graded.s01.n16.combNystrom	4.85808060446e-11
-F.F2.H.lambda.graded.s01.n16.combNystrom.iters	47
-F.F2.H.lambda.graded.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.H.lambda.graded.s01.n16.iterCombNystrom	1.16351372981e-13
-F.F2.H.lambda.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.H.lambda.graded.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.H.lambda.graded.s01.n16.kulkarni	9.64017754512e-12
-F.F2.H.lambda.graded.s01.n8.base	0.000172308254344
-F.F2.H.lambda.graded.s01.n8.combNystrom	4.22290225011e-09
-F.F2.H.lambda.graded.s01.n8.combNystrom.iters	47
-F.F2.H.lambda.graded.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.H.lambda.graded.s01.n8.iterCombNystrom	1.70161662538e-11
-F.F2.H.lambda.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.H.lambda.graded.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.H.lambda.graded.s01.n8.kulkarni	6.43739506145e-10
-F.F2.H.lambda.quasi.s01.n16.base	2.43319428057e-05
-F.F2.H.lambda.quasi.s01.n16.combNystrom	1.37227118557e-09
-F.F2.H.lambda.quasi.s01.n16.combNystrom.iters	47
-F.F2.H.lambda.quasi.s01.n16.combNystrom.residual	8.20454815198e-14
-F.F2.H.lambda.quasi.s01.n16.iterCombNystrom	1.29069532839e-10
-F.F2.H.lambda.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.H.lambda.quasi.s01.n16.iterCombNystrom.residual	8.20454815198e-14
-F.F2.H.lambda.quasi.s01.n16.kulkarni	1.44853018469e-11
-F.F2.H.lambda.quasi.s01.n8.base	0.000199840914869
-F.F2.H.lambda.quasi.s01.n8.combNystrom	1.09444537433e-07
-F.F2.H.lambda.quasi.s01.n8.combNystrom.iters	47
-F.F2.H.lambda.quasi.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.H.lambda.quasi.s01.n8.iterCombNystrom	1.46304169890e-08
-F.F2.H.lambda.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.H.lambda.quasi.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.H.lambda.quasi.s01.n8.kulkarni	1.16765297431e-09
-F.F2.H.lambda.uniform.s01.n16.base	1.18693788584e-05
-F.F2.H.lambda.uniform.s01.n16.combNystrom	3.32065930309e-10
-F.F2.H.lambda.uniform.s01.n16.combNystrom.iters	47
-F.F2.H.lambda.uniform.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.H.lambda.uniform.s01.n16.iterCombNystrom	2.97580848851e-11
-F.F2.H.lambda.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.H.lambda.uniform.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.H.lambda.uniform.s01.n16.kulkarni	2.87281309852e-12
-F.F2.H.lambda.uniform.s01.n8.base	0.000100984915142
-F.F2.H.lambda.uniform.s01.n8.combNystrom	3.34942740210e-08
-F.F2.H.lambda.uniform.s01.n8.combNystrom.iters	47
-F.F2.H.lambda.uniform.s01.n8.combNystrom.residual	8.13793477050e-14
-F.F2.H.lambda.uniform.s01.n8.iterCombNystrom	4.64951332990e-09
-F.F2.H.lambda.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.H.lambda.uniform.s01.n8.iterCombNystrom.residual	8.13793477050e-14
-F.F2.H.lambda.uniform.s01.n8.kulkarni	2.67141198051e-10
-F.F2.H.mu.geom.s01.n16.base	6.24519444192e-06
-F.F2.H.mu.geom.s01.n16.combNystrom	1.58568713715e-11
-F.F2.H.mu.geom.s01.n16.combNystrom.iters	47
-F.F2.H.mu.geom.s01.n16.combNystrom.residual	8.19344592173e-14
-F.F2.H.mu.geom.s01.n16.iterCombNystrom	3.88578058619e-14
-F.F2.H.mu.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.H.mu.geom.s01.n16.iterCombNystrom.residual	8.19344592173e-14
-F.F2.H.mu.geom.s01.n16.kulkarni	1.24422694370e-12
-F.F2.H.mu.geom.s01.n8.base	4.65832103245e-05
-F.F2.H.mu.geom.s01.n8.combNystrom	1.38720646081e-09
-F.F2.H.mu.geom.s01.n8.combNystrom.iters	47
-F.F2.H.mu.geom.s01.n8.combNystrom.residual	8.17124146124e-14
-F.F2.H.mu.geom.s01.n8.iterCombNystrom	1.57851509641e-11
-F.F2.H.mu.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.H.mu.geom.s01.n8.iterCombNystrom.residual	8.17124146124e-14
-F.F2.H.mu.geom.s01.n8.kulkarni	1.19104281993e-10
-F.F2.H.mu.graded.s01.n16.base	3.56637716418e-05
-F.F2.H.mu.graded.s01.n16.combNystrom	7.68698438236e-11
-F.F2.H.mu.graded.s01.n16.combNystrom.iters	47
-F.F2.H.mu.graded.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.H.mu.graded.s01.n16.iterCombNystrom	1.06825659429e-12
-F.F2.H.mu.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.H.mu.graded.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.H.mu.graded.s01.n16.kulkarni	2.09388062444e-11
-F.F2.H.mu.graded.s01.n8.base	0.000208060995306
-F.F2.H.mu.graded.s01.n8.combNystrom	5.07897823798e-09
-F.F2.H.mu.graded.s01.n8.combNystrom.iters	47
-F.F2.H.mu.graded.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.H.mu.graded.s01.n8.iterCombNystrom	1.68763891750e-10
-F.F2.H.mu.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.H.mu.graded.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.H.mu.graded.s01.n8.kulkarni	1.46300205284e-09
-F.F2.H.mu.quasi.s01.n16.base	2.98867402539e-05
-F.F2.H.mu.quasi.s01.n16.combNystrom	5.94026716705e-10
-F.F2.H.mu.quasi.s01.n16.combNystrom.iters	47
-F.F2.H.mu.quasi.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.H.mu.quasi.s01.n16.iterCombNystrom	1.26016974633e-11
-F.F2.H.mu.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.H.mu.quasi.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.H.mu.quasi.s01.n16.kulkarni	1.13103970634e-11
-F.F2.H.mu.quasi.s01.n8.base	0.000175837347900
-F.F2.H.mu.quasi.s01.n8.combNystrom	3.32761406208e-08
-F.F2.H.mu.quasi.s01.n8.combNystrom.iters	47
-F.F2.H.mu.quasi.s01.n8.combNystrom.residual	8.21565038223e-14
-F.F2.H.mu.quasi.s01.n8.iterCombNystrom	1.34623268089e-09
-F.F2.H.mu.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.H.mu.quasi.s01.n8.iterCombNystrom.residual	8.21565038223e-14
-F.F2.H.mu.quasi.s01.n8.kulkarni	5.84890025301e-10
-F.F2.H.mu.uniform.s01.n16.base	1.67247279627e-05
-F.F2.H.mu.uniform.s01.n16.combNystrom	1.58295931918e-10
-F.F2.H.mu.uniform.s01.n16.combNystrom.iters	47
-F.F2.H.mu.uniform.s01.n16.combNystrom.residual	8.17124146124e-14
-F.F2.H.mu.uniform.s01.n16.iterCombNystrom	2.04625205669e-12
-F.F2.H.mu.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.H.mu.uniform.s01.n16.iterCombNystrom.residual	8.17124146124e-14
-F.F2.H.mu.uniform.s01.n16.kulkarni	5.06761299590e-12
-F.F2.H.mu.uniform.s01.n8.base	0.000112036991029
-F.F2.H.mu.uniform.s01.n8.combNystrom	1.17869181082e-08
-F.F2.H.mu.uniform.s01.n8.combNystrom.iters	47
-F.F2.H.mu.uniform.s01.n8.combNystrom.residual	8.17124146124e-14
-F.F2.H.mu.uniform.s01.n8.iterCombNystrom	2.67766586681e-10
-F.F2.H.mu.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.H.mu.uniform.s01.n8.iterCombNystrom.residual	8.17124146124e-14
-F.F2.H.mu.uniform.s01.n8.kulkarni	3.93142851607e-10
-F.F2.H.theta.geom.s01.n16.base	3.08724655884e-06
-F.F2.H.theta.geom.s01.n16.combNystrom	4.73987515903e-12
-F.F2.H.theta.geom.s01.n16.combNystrom.iters	47
-F.F2.H.theta.geom.s01.n16.combNystrom.residual	8.23785484272e-14
-F.F2.H.theta.geom.s01.n16.iterCombNystrom	1.09023901018e-13
-F.F2.H.theta.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.H.theta.geom.s01.n16.iterCombNystrom.residual	8.23785484272e-14
-F.F2.H.theta.geom.s01.n16.kulkarni	4.17443857259e-14
-F.F2.H.theta.geom.s01.n8.base	2.31556815629e-05
-F.F2.H.theta.geom.s01.n8.combNystrom	6.40386965678e-10
-F.F2.H.theta.geom.s01.n8.combNystrom.iters	47
-F.F2.H.theta.geom.s01.n8.combNystrom.residual	8.17124146124e-14
-F.F2.H.theta.geom.s01.n8.iterCombNystrom	1.98966398912e-11
-F.F2.H.theta.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.H.theta.geom.s01.n8.iterCombNystrom.residual	8.17124146124e-14
-F.F2.H.theta.geom.s01.n8.kulkarni	4.47908377055e-12
-F.F2.H.theta.geom.s02.n16.base	2.66244227362e-05
-F.F2.H.theta.geom.s02.n16.combNystrom	7.42778616392e-10
-F.F2.H.theta.geom.s02.n16.combNystrom.iters	107
-F.F2.H.theta.geom.s02.n16.combNystrom.residual	8.04911692853e-14
-F.F2.H.theta.geom.s02.n16.iterCombNystrom	4.82200945839e-11
-F.F2.H.theta.geom.s02.n16.iterCombNystrom.iters	107
-F.F2.H.theta.geom.s02.n16.iterCombNystrom.residual	8.04911692853e-14
-F.F2.H.theta.geom.s02.n16.kulkarni	1.09828812711e-12
-F.F2.H.theta.geom.s02.n8.base	0.000210591641530
-F.F2.H.theta.geom.s02.n8.combNystrom	8.37922331520e-08
-F.F2.H.theta.geom.s02.n8.combNystrom.iters	107
-F.F2.H.theta.geom.s02.n8.combNystrom.residual	7.99360577730e-14
-F.F2.H.theta.geom.s02.n8.iterCombNystrom	1.12992175616e-08
-F.F2.H.theta.geom.s02.n8.iterCombNystrom.iters	107
-F.F2.H.theta.geom.s02.n8.iterCombNystrom.residual	7.99360577730e-14
-F.F2.H.theta.geom.s02.n8.kulkarni	1.87550752706e-10
-F.F2.H.theta.graded.s01.n16.base	3.09930262001e-05
-F.F2.H.theta.graded.s01.n16.combNystrom	4.01723765364e-10
-F.F2.H.theta.graded.s01.n16.combNystrom.iters	47
-F.F2.H.theta.graded.s01.n16.combNystrom.residual	8.19344592173e-14
-F.F2.H.theta.graded.s01.n16.iterCombNystrom	1.22146737169e-11
-F.F2.H.theta.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.H.theta.graded.s01.n16.iterCombNystrom.residual	8.19344592173e-14
-F.F2.H.theta.graded.s01.n16.kulkarni	1.51578749552e-11
-F.F2.H.theta.graded.s01.n8.base	0.000181915091199
-F.F2.H.theta.graded.s01.n8.combNystrom	1.82410799798e-08
-F.F2.H.theta.graded.s01.n8.combNystrom.iters	47
-F.F2.H.theta.graded.s01.n8.combNystrom.residual	8.18234369149e-14
-F.F2.H.theta.graded.s01.n8.iterCombNystrom	1.06762909624e-09
-F.F2.H.theta.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.H.theta.graded.s01.n8.iterCombNystrom.residual	8.18234369149e-14
-F.F2.H.theta.graded.s01.n8.kulkarni	9.50610257178e-10
-F.F2.H.theta.quasi.s01.n16.base	2.10887559549e-05
-F.F2.H.theta.quasi.s01.n16.combNystrom	4.11325307148e-10
-F.F2.H.theta.quasi.s01.n16.combNystrom.iters	47
-F.F2.H.theta.quasi.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.H.theta.quasi.s01.n16.iterCombNystrom	1.46862522143e-11
-F.F2.H.theta.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.H.theta.quasi.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.H.theta.quasi.s01.n16.kulkarni	3.17046389142e-12
-F.F2.H.theta.quasi.s01.n8.base	0.000168921459039
-F.F2.H.theta.quasi.s01.n8.combNystrom	4.34514810799e-08
-F.F2.H.theta.quasi.s01.n8.combNystrom.iters	47
-F.F2.H.theta.quasi.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.H.theta.quasi.s01.n8.iterCombNystrom	3.12368386712e-09
-F.F2.H.theta.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.H.theta.quasi.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.H.theta.quasi.s01.n8.kulkarni	3.94125065917e-10
-F.F2.H.theta.uniform.s01.n16.base	1.04315373002e-05
-F.F2.H.theta.uniform.s01.n16.combNystrom	8.02847788250e-11
-F.F2.H.theta.uniform.s01.n16.combNystrom.iters	47
-F.F2.H.theta.uniform.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.H.theta.uniform.s01.n16.iterCombNystrom	2.13873363464e-12
-F.F2.H.theta.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.H.theta.uniform.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.H.theta.uniform.s01.n16.kulkarni	3.56825680115e-13
-F.F2.H.theta.uniform.s01.n8.base	8.47132957036e-05
-F.F2.H.theta.uniform.s01.n8.combNystrom	1.03461926804e-08
-F.F2.H.theta.uniform.s01.n8.combNystrom.iters	47
-F.F2.H.theta.uniform.s01.n8.combNystrom.residual	8.20454815198e-14
-F.F2.H.theta.uniform.s01.n8.iterCombNystrom	5.89931881123e-10
-F.F2.H.theta.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.H.theta.uniform.s01.n8.iterCombNystrom.residual	8.20454815198e-14
-F.F2.H.theta.uniform.s01.n8.kulkarni	5.51182433028e-11
-F.F2.H.theta.uniform.s02.n16.base	8.83055626264e-05
-F.F2.H.theta.uniform.s02.n16.combNystrom	1.07915785197e-08
-F.F2.H.theta.uniform.s02.n16.combNystrom.iters	107
-F.F2.H.theta.uniform.s02.n16.combNystrom.residual	7.98250354705e-14
-F.F2.H.theta.uniform.s02.n16.iterCombNystrom	1.10595332892e-09
-F.F2.H.theta.uniform.s02.n16.iterCombNystrom.iters	107
-F.F2.H.theta.uniform.s02.n16.iterCombNystrom.residual	7.98250354705e-14
-F.F2.H.theta.uniform.s02.n16.kulkarni	5.70193892102e-11
-F.F2.H.theta.uniform.s02.n8.base	0.000688167191785
-F.F2.H.theta.uniform.s02.n8.combNystrom	9.26260400935e-07
-F.F2.H.theta.uniform.s02.n8.combNystrom.iters	107
-F.F2.H.theta.uniform.s02.n8.combNystrom.residual	7.97140131681e-14
-F.F2.H.theta.uniform.s02.n8.iterCombNystrom	1.75203368036e-07
-F.F2.H.theta.uniform.s02.n8.iterCombNystrom.iters	107
-F.F2.H.theta.uniform.s02.n8.iterCombNystrom.residual	7.97140131681e-14
-F.F2.H.theta.uniform.s02.n8.kulkarni	4.20370316334e-09
-F.F2.T.lambda.geom.s01.n16.base	4.41779570326e-06
-F.F2.T.lambda.geom.s01.n16.combNystrom	3.48020501306e-11
-F.F2.T.lambda.geom.s01.n16.combNystrom.iters	47
-F.F2.T.lambda.geom.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.T.lambda.geom.s01.n16.iterCombNystrom	2.84794410277e-12
-F.F2.T.lambda.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.T.lambda.geom.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.T.lambda.geom.s01.n16.kulkarni	1.54543045028e-13
-F.F2.T.lambda.geom.s01.n8.base	3.23716824121e-05
-F.F2.T.lambda.geom.s01.n8.combNystrom	3.76306052985e-09
-F.F2.T.lambda.geom.s01.n8.combNystrom.iters	47
-F.F2.T.lambda.geom.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.T.lambda.geom.s01.n8.iterCombNystrom	5.02672792280e-10
-F.F2.T.lambda.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.T.lambda.geom.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.T.lambda.geom.s01.n8.kulkarni	8.93884966047e-12
-F.F2.T.lambda.graded.s01.n16.base	4.49508726523e-05
-F.F2.T.lambda.graded.s01.n16.combNystrom	5.28127541699e-11
-F.F2.T.lambda.graded.s01.n16.combNystrom.iters	47
-F.F2.T.lambda.graded.s01.n16.combNystrom.residual	8.21565038223e-14
-F.F2.T.lambda.graded.s01.n16.iterCombNystrom	1.09690034833e-13
-F.F2.T.lambda.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.T.lambda.graded.s01.n16.iterCombNystrom.residual	8.21565038223e-14
-F.F2.T.lambda.graded.s01.n16.kulkarni	2.10409467627e-11
-F.F2.T.lambda.graded.s01.n8.base	0.000277536229879
-F.F2.T.lambda.graded.s01.n8.combNystrom	4.57179794022e-09
-F.F2.T.lambda.graded.s01.n8.combNystrom.iters	47
-F.F2.T.lambda.graded.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.T.lambda.graded.s01.n8.iterCombNystrom	1.16431309038e-11
-F.F2.T.lambda.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.T.lambda.graded.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.T.lambda.graded.s01.n8.kulkarni	1.62485169763e-09
-F.F2.T.lambda.quasi.s01.n16.base	3.37150999441e-05
-F.F2.T.lambda.quasi.s01.n16.combNystrom	1.59654889309e-09
-F.F2.T.lambda.quasi.s01.n16.combNystrom.iters	47
-F.F2.T.lambda.quasi.s01.n16.combNystrom.residual	8.19344592173e-14
-F.F2.T.lambda.quasi.s01.n16.iterCombNystrom	1.49904311186e-10
-F.F2.T.lambda.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.T.lambda.quasi.s01.n16.iterCombNystrom.residual	8.19344592173e-14
-F.F2.T.lambda.quasi.s01.n16.kulkarni	3.02631253390e-11
-F.F2.T.lambda.quasi.s01.n8.base	0.000284349330052
-F.F2.T.lambda.quasi.s01.n8.combNystrom	1.31448809282e-07
-F.F2.T.lambda.quasi.s01.n8.combNystrom.iters	47
-F.F2.T.lambda.quasi.s01.n8.combNystrom.residual	8.14903700075e-14
-F.F2.T.lambda.quasi.s01.n8.iterCombNystrom	1.75403287450e-08
-F.F2.T.lambda.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.T.lambda.quasi.s01.n8.iterCombNystrom.residual	8.14903700075e-14
-F.F2.T.lambda.quasi.s01.n8.kulkarni	2.75959988194e-09
-F.F2.T.lambda.uniform.s01.n16.base	1.63277338139e-05
-F.F2.T.lambda.uniform.s01.n16.combNystrom	3.85181442297e-10
-F.F2.T.lambda.uniform.s01.n16.combNystrom.iters	47
-F.F2.T.lambda.uniform.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.T.lambda.uniform.s01.n16.iterCombNystrom	3.44080319792e-11
-F.F2.T.lambda.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.T.lambda.uniform.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.T.lambda.uniform.s01.n16.kulkarni	5.63504798379e-12
-F.F2.T.lambda.uniform.s01.n8.base	0.000139456262797
-F.F2.T.lambda.uniform.s01.n8.combNystrom	3.96181327744e-08
-F.F2.T.lambda.uniform.s01.n8.combNystrom.iters	47
-F.F2.T.lambda.uniform.s01.n8.combNystrom.residual	8.20454815198e-14
-F.F2.T.lambda.uniform.s01.n8.iterCombNystrom	5.50358114637e-09
-F.F2.T.lambda.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.T.lambda.uniform.s01.n8.iterCombNystrom.residual	8.20454815198e-14
-F.F2.T.lambda.uniform.s01.n8.kulkarni	5.66316327166e-10
-F.F2.T.mu.geom.s01.n16.base	9.18171036912e-06
-F.F2.T.mu.geom.s01.n16.combNystrom	1.81862302995e-11
-F.F2.T.mu.geom.s01.n16.combNystrom.iters	47
-F.F2.T.mu.geom.s01.n16.combNystrom.residual	8.18234369149e-14
-F.F2.T.mu.geom.s01.n16.iterCombNystrom	5.30686605771e-14
-F.F2.T.mu.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.T.mu.geom.s01.n16.iterCombNystrom.residual	8.18234369149e-14
-F.F2.T.mu.geom.s01.n16.kulkarni	3.10107495238e-12
-F.F2.T.mu.geom.s01.n8.base	7.19236481195e-05
-F.F2.T.mu.geom.s01.n8.combNystrom	1.59424085044e-09
-F.F2.T.mu.geom.s01.n8.combNystrom.iters	47
-F.F2.T.mu.geom.s01.n8.combNystrom.residual	8.19344592173e-14
-F.F2.T.mu.geom.s01.n8.iterCombNystrom	2.24176233132e-11
-F.F2.T.mu.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.T.mu.geom.s01.n8.iterCombNystrom.residual	8.19344592173e-14
-F.F2.T.mu.geom.s01.n8.kulkarni	3.39824945961e-10
-F.F2.T.mu.graded.s01.n16.base	5.31570487516e-05
-F.F2.T.mu.graded.s01.n16.combNystrom	9.41811073574e-11
-F.F2.T.mu.graded.s01.n16.combNystrom.iters	47
-F.F2.T.mu.graded.s01.n16.combNystrom.residual	8.19344592173e-14
-F.F2.T.mu.graded.s01.n16.iterCombNystrom	1.36579636489e-12
-F.F2.T.mu.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.T.mu.graded.s01.n16.iterCombNystrom.residual	8.19344592173e-14
-F.F2.T.mu.graded.s01.n16.kulkarni	4.48161507904e-11
-F.F2.T.mu.graded.s01.n8.base	0.000332265596920
-F.F2.T.mu.graded.s01.n8.combNystrom	6.66187083276e-09
-F.F2.T.mu.graded.s01.n8.combNystrom.iters	47
-F.F2.T.mu.graded.s01.n8.combNystrom.residual	8.17124146124e-14
-F.F2.T.mu.graded.s01.n8.iterCombNystrom	2.31616170687e-10
-F.F2.T.mu.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.T.mu.graded.s01.n8.iterCombNystrom.residual	8.17124146124e-14
-F.F2.T.mu.graded.s01.n8.kulkarni	3.50832563001e-09
-F.F2.T.mu.quasi.s01.n16.base	4.36097159200e-05
-F.F2.T.mu.quasi.s01.n16.combNystrom	7.05549729751e-10
-F.F2.T.mu.quasi.s01.n16.combNystrom.iters	47
-F.F2.T.mu.quasi.s01.n16.combNystrom.residual	8.17124146124e-14
-F.F2.T.mu.quasi.s01.n16.iterCombNystrom	1.42625911081e-11
-F.F2.T.mu.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.T.mu.quasi.s01.n16.iterCombNystrom.residual	8.17124146124e-14
-F.F2.T.mu.quasi.s01.n16.kulkarni	2.05898631478e-11
-F.F2.T.mu.quasi.s01.n8.base	0.000265798934463
-F.F2.T.mu.quasi.s01.n8.combNystrom	4.08374402072e-08
-F.F2.T.mu.quasi.s01.n8.combNystrom.iters	47
-F.F2.T.mu.quasi.s01.n8.combNystrom.residual	8.17124146124e-14
-F.F2.T.mu.quasi.s01.n8.iterCombNystrom	1.57263402301e-09
-F.F2.T.mu.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.T.mu.quasi.s01.n8.iterCombNystrom.residual	8.17124146124e-14
-F.F2.T.mu.quasi.s01.n8.kulkarni	1.06774133979e-09
-F.F2.T.mu.uniform.s01.n16.base	2.42895829545e-05
-F.F2.T.mu.uniform.s01.n16.combNystrom	1.87215576375e-10
-F.F2.T.mu.uniform.s01.n16.combNystrom.iters	47
-F.F2.T.mu.uniform.s01.n16.combNystrom.residual	8.14903700075e-14
-F.F2.T.mu.uniform.s01.n16.iterCombNystrom	2.15405471238e-12
-F.F2.T.mu.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.T.mu.uniform.s01.n16.iterCombNystrom.residual	8.14903700075e-14
-F.F2.T.mu.uniform.s01.n16.kulkarni	1.04605213380e-11
-F.F2.T.mu.uniform.s01.n8.base	0.000168626460206
-F.F2.T.mu.uniform.s01.n8.combNystrom	1.43478409154e-08
-F.F2.T.mu.uniform.s01.n8.combNystrom.iters	47
-F.F2.T.mu.uniform.s01.n8.combNystrom.residual	8.20454815198e-14
-F.F2.T.mu.uniform.s01.n8.iterCombNystrom	2.82165957266e-10
-F.F2.T.mu.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.T.mu.uniform.s01.n8.iterCombNystrom.residual	8.20454815198e-14
-F.F2.T.mu.uniform.s01.n8.kulkarni	8.70203575865e-10
-F.F2.T.theta.geom.s01.n16.base	4.25584939157e-06
-F.F2.T.theta.geom.s01.n16.combNystrom	5.32873745129e-12
-F.F2.T.theta.geom.s01.n16.combNystrom.iters	47
-F.F2.T.theta.geom.s01.n16.combNystrom.residual	8.14903700075e-14
-F.F2.T.theta.geom.s01.n16.iterCombNystrom	1.10356168648e-13
-F.F2.T.theta.geom.s01.n16.iterCombNystrom.iters	47
-F.F2.T.theta.geom.s01.n16.iterCombNystrom.residual	8.14903700075e-14
-F.F2.T.theta.geom.s01.n16.kulkarni	1.34003919072e-13
-F.F2.T.theta.geom.s01.n8.base	3.20283355940e-05
-F.F2.T.theta.geom.s01.n8.combNystrom	7.23950455139e-10
-F.F2.T.theta.geom.s01.n8.combNystrom.iters	47
-F.F2.T.theta.geom.s01.n8.combNystrom.residual	8.21565038223e-14
-F.F2.T.theta.geom.s01.n8.iterCombNystrom	2.06217265486e-11
-F.F2.T.theta.geom.s01.n8.iterCombNystrom.iters	47
-F.F2.T.theta.geom.s01.n8.iterCombNystrom.residual	8.21565038223e-14
-F.F2.T.theta.geom.s01.n8.kulkarni	1.64187552443e-11
-F.F2.T.theta.geom.s02.n16.base	3.58920768138e-05
-F.F2.T.theta.geom.s02.n16.combNystrom	8.46775094487e-10
-F.F2.T.theta.geom.s02.n16.combNystrom.iters	107
-F.F2.T.theta.geom.s02.n16.combNystrom.residual	7.98250354705e-14
-F.F2.T.theta.geom.s02.n16.iterCombNystrom	5.24283949588e-11
-F.F2.T.theta.geom.s02.n16.iterCombNystrom.iters	107
-F.F2.T.theta.geom.s02.n16.iterCombNystrom.residual	7.98250354705e-14
-F.F2.T.theta.geom.s02.n16.kulkarni	3.39850370068e-12
-F.F2.T.theta.geom.s02.n8.base	0.000273261265038
-F.F2.T.theta.geom.s02.n8.combNystrom	9.75715372942e-08
-F.F2.T.theta.geom.s02.n8.combNystrom.iters	107
-F.F2.T.theta.geom.s02.n8.combNystrom.residual	8.02691246804e-14
-F.F2.T.theta.geom.s02.n8.iterCombNystrom	1.25506990356e-08
-F.F2.T.theta.geom.s02.n8.iterCombNystrom.iters	107
-F.F2.T.theta.geom.s02.n8.iterCombNystrom.residual	8.02691246804e-14
-F.F2.T.theta.geom.s02.n8.kulkarni	3.88940102347e-10
-F.F2.T.theta.graded.s01.n16.base	4.61319559890e-05
-F.F2.T.theta.graded.s01.n16.combNystrom	4.92943241781e-10
-F.F2.T.theta.graded.s01.n16.combNystrom.iters	47
-F.F2.T.theta.graded.s01.n16.combNystrom.residual	8.17124146124e-14
-F.F2.T.theta.graded.s01.n16.iterCombNystrom	1.51926249359e-11
-F.F2.T.theta.graded.s01.n16.iterCombNystrom.iters	47
-F.F2.T.theta.graded.s01.n16.iterCombNystrom.residual	8.17124146124e-14
-F.F2.T.theta.graded.s01.n16.kulkarni	3.41259243086e-11
-F.F2.T.theta.graded.s01.n8.base	0.000290536935526
-F.F2.T.theta.graded.s01.n8.combNystrom	2.43648395903e-08
-F.F2.T.theta.graded.s01.n8.combNystrom.iters	47
-F.F2.T.theta.graded.s01.n8.combNystrom.residual	8.17124146124e-14
-F.F2.T.theta.graded.s01.n8.iterCombNystrom	1.46589262950e-09
-F.F2.T.theta.graded.s01.n8.iterCombNystrom.iters	47
-F.F2.T.theta.graded.s01.n8.iterCombNystrom.residual	8.17124146124e-14
-F.F2.T.theta.graded.s01.n8.kulkarni	2.51478970981e-09
-F.F2.T.theta.quasi.s01.n16.base	2.94192415521e-05
-F.F2.T.theta.quasi.s01.n16.combNystrom	4.73125538747e-10
-F.F2.T.theta.quasi.s01.n16.combNystrom.iters	47
-F.F2.T.theta.quasi.s01.n16.combNystrom.residual	8.23785484272e-14
-F.F2.T.theta.quasi.s01.n16.iterCombNystrom	1.65991664858e-11
-F.F2.T.theta.quasi.s01.n16.iterCombNystrom.iters	47
-F.F2.T.theta.quasi.s01.n16.iterCombNystrom.residual	8.23785484272e-14
-F.F2.T.theta.quasi.s01.n16.kulkarni	6.28341823017e-12
-F.F2.T.theta.quasi.s01.n8.base	0.000241145217373
-F.F2.T.theta.quasi.s01.n8.combNystrom	5.17390521537e-08
-F.F2.T.theta.quasi.s01.n8.combNystrom.iters	47
-F.F2.T.theta.quasi.s01.n8.combNystrom.residual	8.16013923099e-14
-F.F2.T.theta.quasi.s01.n8.iterCombNystrom	3.67876218377e-09
-F.F2.T.theta.quasi.s01.n8.iterCombNystrom.iters	47
-F.F2.T.theta.quasi.s01.n8.iterCombNystrom.residual	8.16013923099e-14
-F.F2.T.theta.quasi.s01.n8.kulkarni	9.12449227286e-10
-F.F2.T.theta.uniform.s01.n16.base	1.44960416839e-05
-F.F2.T.theta.uniform.s01.n16.combNystrom	9.17212972240e-11
-F.F2.T.theta.uniform.s01.n16.combNystrom.iters	47
-F.F2.T.theta.uniform.s01.n16.combNystrom.residual	8.17124146124e-14
-F.F2.T.theta.uniform.s01.n16.iterCombNystrom	2.37854180796e-12
-F.F2.T.theta.uniform.s01.n16.iterCombNystrom.iters	47
-F.F2.T.theta.uniform.s01.n16.iterCombNystrom.residual	8.17124146124e-14
-F.F2.T.theta.uniform.s01.n16.kulkarni	6.03517236186e-13
-F.F2.T.theta.uniform.s01.n8.base	0.000118176473161
-F.F2.T.theta.uniform.s01.n8.combNystrom	1.20410508231e-08
-F.F2.T.theta.uniform.s01.n8.combNystrom.iters	47
-F.F2.T.theta.uniform.s01.n8.combNystrom.residual	8.16013923099e-14
-F.F2.T.theta.uniform.s01.n8.iterCombNystrom	6.72744748798e-10
-F.F2.T.theta.uniform.s01.n8.iterCombNystrom.iters	47
-F.F2.T.theta.uniform.s01.n8.iterCombNystrom.residual	8.16013923099e-14
-F.F2.T.theta.uniform.s01.n8.kulkarni	1.03530406470e-10
-F.F2.T.theta.uniform.s02.n16.base	0.000122633839555
-F.F2.T.theta.uniform.s02.n16.combNystrom	1.25405231755e-08
-F.F2.T.theta.uniform.s02.n16.combNystrom.iters	107
-F.F2.T.theta.uniform.s02.n16.combNystrom.residual	8.01581023779e-14
-F.F2.T.theta.uniform.s02.n16.iterCombNystrom	1.26086896479e-09
-F.F2.T.theta.uniform.s02.n16.iterCombNystrom.iters	107
-F.F2.T.theta.uniform.s02.n16.iterCombNystrom.residual	8.01581023779e-14
-F.F2.T.theta.uniform.s02.n16.kulkarni	1.04329656025e-10
-F.F2.T.theta.uniform.s02.n8.base	0.000982031794245
-F.F2.T.theta.uniform.s02.n8.combNystrom	1.14144748531e-06
-F.F2.T.theta.uniform.s02.n8.combNystrom.iters	107
-F.F2.T.theta.uniform.s02.n8.combNystrom.residual	7.94919685632e-14
-F.F2.T.theta.uniform.s02.n8.iterCombNystrom	2.13392085890e-07
-F.F2.T.theta.uniform.s02.n8.iterCombNystrom.iters	107
-F.F2.T.theta.uniform.s02.n8.iterCombNystrom.residual	7.94919685632e-14
-F.F2.T.theta.uniform.s02.n8.kulkarni	1.02909417654e-08
-V.V2.B.lambda.geom.s01.n16.base	3.62852549063e-06
-V.V2.B.lambda.geom.s01.n16.combNystrom	3.60549322731e-07
-V.V2.B.lambda.geom.s01.n16.combNystrom.iters	13
-V.V2.B.lambda.geom.s01.n16.combNystrom.residual	3.65818486614e-14
-V.V2.B.lambda.geom.s01.n16.iterCombNystrom	7.19451709319e-08
-V.V2.B.lambda.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.B.lambda.geom.s01.n16.iterCombNystrom.residual	3.65818486614e-14
-V.V2.B.lambda.geom.s01.n16.kulkarni	9.48275165058e-08
-V.V2.B.lambda.geom.s01.n8.base	2.70250501471e-05
-V.V2.B.lambda.geom.s01.n8.combNystrom	4.88671138787e-06
-V.V2.B.lambda.geom.s01.n8.combNystrom.iters	13
-V.V2.B.lambda.geom.s01.n8.combNystrom.residual	3.78030939885e-14
-V.V2.B.lambda.geom.s01.n8.iterCombNystrom	1.05121548988e-06
-V.V2.B.lambda.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.B.lambda.geom.s01.n8.iterCombNystrom.residual	3.78030939885e-14
-V.V2.B.lambda.geom.s01.n8.kulkarni	1.33486678011e-06
-V.V2.B.lambda.graded.s01.n16.base	3.83219011532e-05
-V.V2.B.lambda.graded.s01.n16.combNystrom	1.67877814417e-06
-V.V2.B.lambda.graded.s01.n16.combNystrom.iters	13
-V.V2.B.lambda.graded.s01.n16.combNystrom.residual	3.67483821151e-14
-V.V2.B.lambda.graded.s01.n16.iterCombNystrom	1.84154922311e-07
-V.V2.B.lambda.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.B.lambda.graded.s01.n16.iterCombNystrom.residual	3.67483821151e-14
-V.V2.B.lambda.graded.s01.n16.kulkarni	4.52738677215e-07
-V.V2.B.lambda.graded.s01.n8.base	0.000232666361694
-V.V2.B.lambda.graded.s01.n8.combNystrom	1.75683052849e-05
-V.V2.B.lambda.graded.s01.n8.combNystrom.iters	13
-V.V2.B.lambda.graded.s01.n8.combNystrom.residual	4.07451850037e-14
-V.V2.B.lambda.graded.s01.n8.iterCombNystrom	2.38256985308e-06
-V.V2.B.lambda.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.B.lambda.graded.s01.n8.iterCombNystrom.residual	4.07451850037e-14
-V.V2.B.lambda.graded.s01.n8.kulkarni	5.09874801291e-06
-V.V2.B.lambda.quasi.s01.n16.base	2.57826002804e-05
-V.V2.B.lambda.quasi.s01.n16.combNystrom	2.86460234644e-06
-V.V2.B.lambda.quasi.s01.n16.combNystrom.iters	13
-V.V2.B.lambda.quasi.s01.n16.combNystrom.residual	3.64153152077e-14
-V.V2.B.lambda.quasi.s01.n16.iterCombNystrom	2.32776748210e-07
-V.V2.B.lambda.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.B.lambda.quasi.s01.n16.iterCombNystrom.residual	3.64153152077e-14
-V.V2.B.lambda.quasi.s01.n16.kulkarni	7.68819643837e-07
-V.V2.B.lambda.quasi.s01.n8.base	0.000207038478685
-V.V2.B.lambda.quasi.s01.n8.combNystrom	2.89532757909e-05
-V.V2.B.lambda.quasi.s01.n8.combNystrom.iters	13
-V.V2.B.lambda.quasi.s01.n8.combNystrom.residual	4.04676292476e-14
-V.V2.B.lambda.quasi.s01.n8.iterCombNystrom	2.73976017495e-06
-V.V2.B.lambda.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.B.lambda.quasi.s01.n8.iterCombNystrom.residual	4.04676292476e-14
-V.V2.B.lambda.quasi.s01.n8.kulkarni	7.96192211761e-06
-V.V2.B.lambda.uniform.s01.n16.base	1.25800667293e-05
-V.V2.B.lambda.uniform.s01.n16.combNystrom	1.33293466953e-06
-V.V2.B.lambda.uniform.s01.n16.combNystrom.iters	13
-V.V2.B.lambda.uniform.s01.n16.combNystrom.residual	3.65818486614e-14
-V.V2.B.lambda.uniform.s01.n16.iterCombNystrom	1.37648305087e-07
-V.V2.B.lambda.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.B.lambda.uniform.s01.n16.iterCombNystrom.residual	3.65818486614e-14
-V.V2.B.lambda.uniform.s01.n16.kulkarni	3.54920571821e-07
-V.V2.B.lambda.uniform.s01.n8.base	0.000100868052923
-V.V2.B.lambda.uniform.s01.n8.combNystrom	1.60616754183e-05
-V.V2.B.lambda.uniform.s01.n8.combNystrom.iters	13
-V.V2.B.lambda.uniform.s01.n8.combNystrom.residual	3.91353616180e-14
-V.V2.B.lambda.uniform.s01.n8.iterCombNystrom	1.87009909125e-06
-V.V2.B.lambda.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.B.lambda.uniform.s01.n8.iterCombNystrom.residual	3.91353616180e-14
-V.V2.B.lambda.uniform.s01.n8.kulkarni	4.42352607088e-06
-V.V2.B.mu.geom.s01.n16.base	7.53180910196e-06
-V.V2.B.mu.geom.s01.n16.combNystrom	1.89797881966e-07
-V.V2.B.mu.geom.s01.n16.combNystrom.iters	13
-V.V2.B.mu.geom.s01.n16.combNystrom.residual	3.62487817540e-14
-V.V2.B.mu.geom.s01.n16.iterCombNystrom	2.27546843590e-08
-V.V2.B.mu.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.B.mu.geom.s01.n16.iterCombNystrom.residual	3.62487817540e-14
-V.V2.B.mu.geom.s01.n16.kulkarni	5.20859034792e-08
-V.V2.B.mu.geom.s01.n8.base	5.62352402285e-05
-V.V2.B.mu.geom.s01.n8.combNystrom	2.46767790824e-06
-V.V2.B.mu.geom.s01.n8.combNystrom.iters	13
-V.V2.B.mu.geom.s01.n8.combNystrom.residual	3.66373598126e-14
-V.V2.B.mu.geom.s01.n8.iterCombNystrom	3.30312733721e-07
-V.V2.B.mu.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.B.mu.geom.s01.n8.iterCombNystrom.residual	3.66373598126e-14
-V.V2.B.mu.geom.s01.n8.kulkarni	7.25707023030e-07
-V.V2.B.mu.graded.s01.n16.base	4.49753371409e-05
-V.V2.B.mu.graded.s01.n16.combNystrom	1.24207534880e-06
-V.V2.B.mu.graded.s01.n16.combNystrom.iters	13
-V.V2.B.mu.graded.s01.n16.combNystrom.residual	3.63042929052e-14
-V.V2.B.mu.graded.s01.n16.iterCombNystrom	8.12698812691e-08
-V.V2.B.mu.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.B.mu.graded.s01.n16.iterCombNystrom.residual	3.63042929052e-14
-V.V2.B.mu.graded.s01.n16.kulkarni	3.29729027304e-07
-V.V2.B.mu.graded.s01.n8.base	0.000275008637726
-V.V2.B.mu.graded.s01.n8.combNystrom	1.31975242692e-05
-V.V2.B.mu.graded.s01.n8.combNystrom.iters	13
-V.V2.B.mu.graded.s01.n8.combNystrom.residual	3.84137166520e-14
-V.V2.B.mu.graded.s01.n8.iterCombNystrom	9.87017067078e-07
-V.V2.B.mu.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.B.mu.graded.s01.n8.iterCombNystrom.residual	3.84137166520e-14
-V.V2.B.mu.graded.s01.n8.kulkarni	3.73737018999e-06
-V.V2.B.mu.quasi.s01.n16.base	3.79627190871e-05
-V.V2.B.mu.quasi.s01.n16.combNystrom	9.67427824627e-07
-V.V2.B.mu.quasi.s01.n16.combNystrom.iters	13
-V.V2.B.mu.quasi.s01.n16.combNystrom.residual	3.61932706028e-14
-V.V2.B.mu.quasi.s01.n16.iterCombNystrom	7.45763457655e-08
-V.V2.B.mu.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.B.mu.quasi.s01.n16.iterCombNystrom.residual	3.61932706028e-14
-V.V2.B.mu.quasi.s01.n16.kulkarni	2.76868379445e-07
-V.V2.B.mu.quasi.s01.n8.base	0.000234990553843
-V.V2.B.mu.quasi.s01.n8.combNystrom	1.06984377626e-05
-V.V2.B.mu.quasi.s01.n8.combNystrom.iters	13
-V.V2.B.mu.quasi.s01.n8.combNystrom.residual	3.78030939885e-14
-V.V2.B.mu.quasi.s01.n8.iterCombNystrom	9.50862114935e-07
-V.V2.B.mu.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.B.mu.quasi.s01.n8.iterCombNystrom.residual	3.78030939885e-14
-V.V2.B.mu.quasi.s01.n8.kulkarni	2.79785454427e-06
-V.V2.B.mu.uniform.s01.n16.base	2.08881000983e-05
-V.V2.B.mu.uniform.s01.n16.combNystrom	5.48180735582e-07
-V.V2.B.mu.uniform.s01.n16.combNystrom.iters	13
-V.V2.B.mu.uniform.s01.n16.combNystrom.residual	3.60822483003e-14
-V.V2.B.mu.uniform.s01.n16.iterCombNystrom	4.36672188409e-08
-V.V2.B.mu.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.B.mu.uniform.s01.n16.iterCombNystrom.residual	3.60822483003e-14
-V.V2.B.mu.uniform.s01.n16.kulkarni	1.54366885163e-07
-V.V2.B.mu.uniform.s01.n8.base	0.000145250085867
-V.V2.B.mu.uniform.s01.n8.combNystrom	5.36293914066e-06
-V.V2.B.mu.uniform.s01.n8.combNystrom.iters	13
-V.V2.B.mu.uniform.s01.n8.combNystrom.residual	3.71924713249e-14
-V.V2.B.mu.uniform.s01.n8.iterCombNystrom	6.04258049930e-07
-V.V2.B.mu.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.B.mu.uniform.s01.n8.iterCombNystrom.residual	3.71924713249e-14
-V.V2.B.mu.uniform.s01.n8.kulkarni	1.53364008249e-06
-V.V2.B.theta.geom.s01.n16.base	3.63144505855e-06
-V.V2.B.theta.geom.s01.n16.combNystrom	2.71080666359e-07
-V.V2.B.theta.geom.s01.n16.combNystrom.iters	13
-V.V2.B.theta.geom.s01.n16.combNystrom.residual	3.60822483003e-14
-V.V2.B.theta.geom.s01.n16.iterCombNystrom	2.09449183552e-08
-V.V2.B.theta.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.B.theta.geom.s01.n16.iterCombNystrom.residual	3.60822483003e-14
-V.V2.B.theta.geom.s01.n16.kulkarni	7.02916627127e-08
-V.V2.B.theta.geom.s01.n8.base	2.70500636751e-05
-V.V2.B.theta.geom.s01.n8.combNystrom	3.75846759659e-06
-V.V2.B.theta.geom.s01.n8.combNystrom.iters	13
-V.V2.B.theta.geom.s01.n8.combNystrom.residual	3.66373598126e-14
-V.V2.B.theta.geom.s01.n8.iterCombNystrom	3.74393005598e-07
-V.V2.B.theta.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.B.theta.geom.s01.n8.iterCombNystrom.residual	3.66373598126e-14
-V.V2.B.theta.geom.s01.n8.kulkarni	1.00349132870e-06
-V.V2.B.theta.geom.s02.n16.base	2.90751446925e-05
-V.V2.B.theta.geom.s02.n16.combNystrom	3.65461284257e-06
-V.V2.B.theta.geom.s02.n16.combNystrom.iters	15
-V.V2.B.theta.geom.s02.n16.combNystrom.residual	1.22124532709e-14
-V.V2.B.theta.geom.s02.n16.iterCombNystrom	2.52905381415e-07
-V.V2.B.theta.geom.s02.n16.iterCombNystrom.iters	15
-V.V2.B.theta.geom.s02.n16.iterCombNystrom.residual	1.22124532709e-14
-V.V2.B.theta.geom.s02.n16.kulkarni	9.74797089492e-07
-V.V2.B.theta.geom.s02.n8.base	0.000208645547303
-V.V2.B.theta.geom.s02.n8.combNystrom	4.43096081675e-05
-V.V2.B.theta.geom.s02.n8.combNystrom.iters	15
-V.V2.B.theta.geom.s02.n8.combNystrom.residual	1.26010313295e-14
-V.V2.B.theta.geom.s02.n8.iterCombNystrom	4.20702873971e-06
-V.V2.B.theta.geom.s02.n8.iterCombNystrom.iters	15
-V.V2.B.theta.geom.s02.n8.iterCombNystrom.residual	1.26010313295e-14
-V.V2.B.theta.geom.s02.n8.kulkarni	1.23230841553e-05
-V.V2.B.theta.graded.s01.n16.base	3.84005099969e-05
-V.V2.B.theta.graded.s01.n16.combNystrom	1.19908022267e-06
-V.V2.B.theta.graded.s01.n16.combNystrom.iters	13
-V.V2.B.theta.graded.s01.n16.combNystrom.residual	3.63042929052e-14
-V.V2.B.theta.graded.s01.n16.iterCombNystrom	7.40071465222e-08
-V.V2.B.theta.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.B.theta.graded.s01.n16.iterCombNystrom.residual	3.63042929052e-14
-V.V2.B.theta.graded.s01.n16.kulkarni	3.44287188092e-07
-V.V2.B.theta.graded.s01.n8.base	0.000233698537105
-V.V2.B.theta.graded.s01.n8.combNystrom	1.17262509406e-05
-V.V2.B.theta.graded.s01.n8.combNystrom.iters	13
-V.V2.B.theta.graded.s01.n8.combNystrom.residual	3.85247389545e-14
-V.V2.B.theta.graded.s01.n8.iterCombNystrom	1.11753910859e-06
-V.V2.B.theta.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.B.theta.graded.s01.n8.iterCombNystrom.residual	3.85247389545e-14
-V.V2.B.theta.graded.s01.n8.kulkarni	3.66452413814e-06
-V.V2.B.theta.quasi.s01.n16.base	2.39133010055e-05
-V.V2.B.theta.quasi.s01.n16.combNystrom	2.34709349445e-06
-V.V2.B.theta.quasi.s01.n16.combNystrom.iters	13
-V.V2.B.theta.quasi.s01.n16.combNystrom.residual	3.63598040565e-14
-V.V2.B.theta.quasi.s01.n16.iterCombNystrom	1.15481409324e-07
-V.V2.B.theta.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.B.theta.quasi.s01.n16.iterCombNystrom.residual	3.63598040565e-14
-V.V2.B.theta.quasi.s01.n16.kulkarni	6.22188769062e-07
-V.V2.B.theta.quasi.s01.n8.base	0.000186578494195
-V.V2.B.theta.quasi.s01.n8.combNystrom	2.51508063167e-05
-V.V2.B.theta.quasi.s01.n8.combNystrom.iters	13
-V.V2.B.theta.quasi.s01.n8.combNystrom.residual	3.89688281643e-14
-V.V2.B.theta.quasi.s01.n8.iterCombNystrom	1.92253912867e-06
-V.V2.B.theta.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.B.theta.quasi.s01.n8.iterCombNystrom.residual	3.89688281643e-14
-V.V2.B.theta.quasi.s01.n8.kulkarni	6.87957593115e-06
-V.V2.B.theta.uniform.s01.n16.base	1.19393619087e-05
-V.V2.B.theta.uniform.s01.n16.combNystrom	1.05774574921e-06
-V.V2.B.theta.uniform.s01.n16.combNystrom.iters	13
-V.V2.B.theta.uniform.s01.n16.combNystrom.residual	3.61932706028e-14
-V.V2.B.theta.uniform.s01.n16.iterCombNystrom	5.34344063441e-08
-V.V2.B.theta.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.B.theta.uniform.s01.n16.iterCombNystrom.residual	3.61932706028e-14
-V.V2.B.theta.uniform.s01.n16.kulkarni	2.77796773251e-07
-V.V2.B.theta.uniform.s01.n8.base	9.34029360268e-05
-V.V2.B.theta.uniform.s01.n8.combNystrom	1.33819936509e-05
-V.V2.B.theta.uniform.s01.n8.combNystrom.iters	13
-V.V2.B.theta.uniform.s01.n8.combNystrom.residual	3.76365605348e-14
-V.V2.B.theta.uniform.s01.n8.iterCombNystrom	9.40498746882e-07
-V.V2.B.theta.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.B.theta.uniform.s01.n8.iterCombNystrom.residual	3.76365605348e-14
-V.V2.B.theta.uniform.s01.n8.kulkarni	3.63068101827e-06
-V.V2.B.theta.uniform.s02.n16.base	9.34029360268e-05
-V.V2.B.theta.uniform.s02.n16.combNystrom	1.33819936510e-05
-V.V2.B.theta.uniform.s02.n16.combNystrom.iters	15
-V.V2.B.theta.uniform.s02.n16.combNystrom.residual	1.19348975147e-14
-V.V2.B.theta.uniform.s02.n16.iterCombNystrom	9.40498918633e-07
-V.V2.B.theta.uniform.s02.n16.iterCombNystrom.iters	15
-V.V2.B.theta.uniform.s02.n16.iterCombNystrom.residual	1.19348975147e-14
-V.V2.B.theta.uniform.s02.n16.kulkarni	3.63068101827e-06
-V.V2.B.theta.uniform.s02.n8.base	0.000669148557981
-V.V2.B.theta.uniform.s02.n8.combNystrom	0.000142891648751
-V.V2.B.theta.uniform.s02.n8.combNystrom.iters	15
-V.V2.B.theta.uniform.s02.n8.combNystrom.residual	1.38222766566e-14
-V.V2.B.theta.uniform.s02.n8.iterCombNystrom	1.57789069397e-05
-V.V2.B.theta.uniform.s02.n8.iterCombNystrom.iters	15
-V.V2.B.theta.uniform.s02.n8.iterCombNystrom.residual	1.38222766566e-14
-V.V2.B.theta.uniform.s02.n8.kulkarni	4.06385832966e-05
-V.V2.H.lambda.geom.s01.n16.base	3.05795549660e-06
-V.V2.H.lambda.geom.s01.n16.combNystrom	3.26992664501e-07
-V.V2.H.lambda.geom.s01.n16.combNystrom.iters	13
-V.V2.H.lambda.geom.s01.n16.combNystrom.residual	3.63042929052e-14
-V.V2.H.lambda.geom.s01.n16.iterCombNystrom	5.87338095936e-08
-V.V2.H.lambda.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.H.lambda.geom.s01.n16.iterCombNystrom.residual	3.63042929052e-14
-V.V2.H.lambda.geom.s01.n16.kulkarni	7.78364717124e-08
-V.V2.H.lambda.geom.s01.n8.base	2.24792425212e-05
-V.V2.H.lambda.geom.s01.n8.combNystrom	4.38505048561e-06
-V.V2.H.lambda.geom.s01.n8.combNystrom.iters	13
-V.V2.H.lambda.geom.s01.n8.combNystrom.residual	3.79696274422e-14
-V.V2.H.lambda.geom.s01.n8.iterCombNystrom	8.51738712004e-07
-V.V2.H.lambda.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.H.lambda.geom.s01.n8.iterCombNystrom.residual	3.79696274422e-14
-V.V2.H.lambda.geom.s01.n8.kulkarni	1.07921568293e-06
-V.V2.H.lambda.graded.s01.n16.base	3.08167599977e-05
-V.V2.H.lambda.graded.s01.n16.combNystrom	1.50756143280e-06
-V.V2.H.lambda.graded.s01.n16.combNystrom.iters	13
-V.V2.H.lambda.graded.s01.n16.combNystrom.residual	3.63598040565e-14
-V.V2.H.lambda.graded.s01.n16.iterCombNystrom	1.59527873578e-07
-V.V2.H.lambda.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.H.lambda.graded.s01.n16.iterCombNystrom.residual	3.63598040565e-14
-V.V2.H.lambda.graded.s01.n16.kulkarni	3.64451517743e-07
-V.V2.H.lambda.graded.s01.n8.base	0.000179458667815
-V.V2.H.lambda.graded.s01.n8.combNystrom	1.53776072287e-05
-V.V2.H.lambda.graded.s01.n8.combNystrom.iters	13
-V.V2.H.lambda.graded.s01.n8.combNystrom.residual	4.08562073062e-14
-V.V2.H.lambda.graded.s01.n8.iterCombNystrom	2.02801214533e-06
-V.V2.H.lambda.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.H.lambda.graded.s01.n8.iterCombNystrom.residual	4.08562073062e-14
-V.V2.H.lambda.graded.s01.n8.kulkarni	3.94091621603e-06
-V.V2.H.lambda.quasi.s01.n16.base	2.15873052234e-05
-V.V2.H.lambda.quasi.s01.n16.combNystrom	2.58015579768e-06
-V.V2.H.lambda.quasi.s01.n16.combNystrom.iters	13
-V.V2.H.lambda.quasi.s01.n16.combNystrom.residual	3.66928709639e-14
-V.V2.H.lambda.quasi.s01.n16.iterCombNystrom	2.06006865455e-07
-V.V2.H.lambda.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.H.lambda.quasi.s01.n16.iterCombNystrom.residual	3.66928709639e-14
-V.V2.H.lambda.quasi.s01.n16.kulkarni	6.23832061231e-07
-V.V2.H.lambda.quasi.s01.n8.base	0.000170650723083
-V.V2.H.lambda.quasi.s01.n8.combNystrom	2.57496218632e-05
-V.V2.H.lambda.quasi.s01.n8.combNystrom.iters	13
-V.V2.H.lambda.quasi.s01.n8.combNystrom.residual	4.03566069451e-14
-V.V2.H.lambda.quasi.s01.n8.iterCombNystrom	2.40996708289e-06
-V.V2.H.lambda.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.H.lambda.quasi.s01.n8.iterCombNystrom.residual	4.03566069451e-14
-V.V2.H.lambda.quasi.s01.n8.kulkarni	6.32037680781e-06
-V.V2.H.lambda.uniform.s01.n16.base	1.05700779462e-05
-V.V2.H.lambda.uniform.s01.n16.combNystrom	1.20416218574e-06
-V.V2.H.lambda.uniform.s01.n16.combNystrom.iters	13
-V.V2.H.lambda.uniform.s01.n16.combNystrom.residual	3.61377594515e-14
-V.V2.H.lambda.uniform.s01.n16.iterCombNystrom	1.19272387633e-07
-V.V2.H.lambda.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.H.lambda.uniform.s01.n16.iterCombNystrom.residual	3.61377594515e-14
-V.V2.H.lambda.uniform.s01.n16.kulkarni	2.89458662706e-07
-V.V2.H.lambda.uniform.s01.n8.base	8.46118184733e-05
-V.V2.H.lambda.uniform.s01.n8.combNystrom	1.43247081499e-05
-V.V2.H.lambda.uniform.s01.n8.combNystrom.iters	13
-V.V2.H.lambda.uniform.s01.n8.combNystrom.residual	3.91908727693e-14
-V.V2.H.lambda.uniform.s01.n8.iterCombNystrom	1.60515483050e-06
-V.V2.H.lambda.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.H.lambda.uniform.s01.n8.iterCombNystrom.residual	3.91908727693e-14
-V.V2.H.lambda.uniform.s01.n8.kulkarni	3.53394984454e-06
-V.V2.H.mu.geom.s01.n16.base	6.19485024800e-06
-V.V2.H.mu.geom.s01.n16.combNystrom	1.70255073928e-07
-V.V2.H.mu.geom.s01.n16.combNystrom.iters	13
-V.V2.H.mu.geom.s01.n16.combNystrom.residual	3.63042929052e-14
-V.V2.H.mu.geom.s01.n16.iterCombNystrom	1.85613359127e-08
-V.V2.H.mu.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.H.mu.geom.s01.n16.iterCombNystrom.residual	3.63042929052e-14
-V.V2.H.mu.geom.s01.n16.kulkarni	4.20158863257e-08
-V.V2.H.mu.geom.s01.n8.base	4.56076687609e-05
-V.V2.H.mu.geom.s01.n8.combNystrom	2.16102975004e-06
-V.V2.H.mu.geom.s01.n8.combNystrom.iters	13
-V.V2.H.mu.geom.s01.n8.combNystrom.residual	3.68038932663e-14
-V.V2.H.mu.geom.s01.n8.iterCombNystrom	2.67538638132e-07
-V.V2.H.mu.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.H.mu.geom.s01.n8.iterCombNystrom.residual	3.68038932663e-14
-V.V2.H.mu.geom.s01.n8.kulkarni	5.64447092954e-07
-V.V2.H.mu.graded.s01.n16.base	3.61767098990e-05
-V.V2.H.mu.graded.s01.n16.combNystrom	1.11777796119e-06
-V.V2.H.mu.graded.s01.n16.combNystrom.iters	13
-V.V2.H.mu.graded.s01.n16.combNystrom.residual	3.64708263589e-14
-V.V2.H.mu.graded.s01.n16.iterCombNystrom	7.02529111551e-08
-V.V2.H.mu.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.H.mu.graded.s01.n16.iterCombNystrom.residual	3.64708263589e-14
-V.V2.H.mu.graded.s01.n16.kulkarni	2.66165378293e-07
-V.V2.H.mu.graded.s01.n8.base	0.000212563019740
-V.V2.H.mu.graded.s01.n8.combNystrom	1.16112304632e-05
-V.V2.H.mu.graded.s01.n8.combNystrom.iters	13
-V.V2.H.mu.graded.s01.n8.combNystrom.residual	3.82471831983e-14
-V.V2.H.mu.graded.s01.n8.iterCombNystrom	8.33775961606e-07
-V.V2.H.mu.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.H.mu.graded.s01.n8.iterCombNystrom.residual	3.82471831983e-14
-V.V2.H.mu.graded.s01.n8.kulkarni	2.90873314401e-06
-V.V2.H.mu.quasi.s01.n16.base	3.09564465431e-05
-V.V2.H.mu.quasi.s01.n16.combNystrom	8.55087912255e-07
-V.V2.H.mu.quasi.s01.n16.combNystrom.iters	13
-V.V2.H.mu.quasi.s01.n16.combNystrom.residual	3.64708263589e-14
-V.V2.H.mu.quasi.s01.n16.iterCombNystrom	6.60939871722e-08
-V.V2.H.mu.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.H.mu.quasi.s01.n16.iterCombNystrom.residual	3.64708263589e-14
-V.V2.H.mu.quasi.s01.n16.kulkarni	2.18049678979e-07
-V.V2.H.mu.quasi.s01.n8.base	0.000188121554277
-V.V2.H.mu.quasi.s01.n8.combNystrom	9.59889890462e-06
-V.V2.H.mu.quasi.s01.n8.combNystrom.iters	13
-V.V2.H.mu.quasi.s01.n8.combNystrom.residual	3.79141162909e-14
-V.V2.H.mu.quasi.s01.n8.iterCombNystrom	8.41903297188e-07
-V.V2.H.mu.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.H.mu.quasi.s01.n8.iterCombNystrom.residual	3.79141162909e-14
-V.V2.H.mu.quasi.s01.n8.kulkarni	2.23941306110e-06
-V.V2.H.mu.uniform.s01.n16.base	1.70962776427e-05
-V.V2.H.mu.uniform.s01.n16.combNystrom	4.87522847981e-07
-V.V2.H.mu.uniform.s01.n16.combNystrom.iters	13
-V.V2.H.mu.uniform.s01.n16.combNystrom.residual	3.63598040565e-14
-V.V2.H.mu.uniform.s01.n16.iterCombNystrom	3.78604319007e-08
-V.V2.H.mu.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.H.mu.uniform.s01.n16.iterCombNystrom.residual	3.63598040565e-14
-V.V2.H.mu.uniform.s01.n16.kulkarni	1.22812990777e-07
-V.V2.H.mu.uniform.s01.n8.base	0.000116805493968
-V.V2.H.mu.uniform.s01.n8.combNystrom	4.80042822748e-06
-V.V2.H.mu.uniform.s01.n8.combNystrom.iters	13
-V.V2.H.mu.uniform.s01.n8.combNystrom.residual	3.74145159299e-14
-V.V2.H.mu.uniform.s01.n8.iterCombNystrom	5.19807489940e-07
-V.V2.H.mu.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.H.mu.uniform.s01.n8.iterCombNystrom.residual	3.74145159299e-14
-V.V2.H.mu.uniform.s01.n8.kulkarni	1.16119593352e-06
-V.V2.H.theta.geom.s01.n16.base	3.00605311931e-06
-V.V2.H.theta.geom.s01.n16.combNystrom	2.46641882806e-07
-V.V2.H.theta.geom.s01.n16.combNystrom.iters	13
-V.V2.H.theta.geom.s01.n16.combNystrom.residual	3.61932706028e-14
-V.V2.H.theta.geom.s01.n16.iterCombNystrom	1.72478098470e-08
-V.V2.H.theta.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.H.theta.geom.s01.n16.iterCombNystrom.residual	3.61932706028e-14
-V.V2.H.theta.geom.s01.n16.kulkarni	5.80119352556e-08
-V.V2.H.theta.geom.s01.n8.base	2.21615116461e-05
-V.V2.H.theta.geom.s01.n8.combNystrom	3.39483328216e-06
-V.V2.H.theta.geom.s01.n8.combNystrom.iters	13
-V.V2.H.theta.geom.s01.n8.combNystrom.residual	3.66373598126e-14
-V.V2.H.theta.geom.s01.n8.iterCombNystrom	3.06056759491e-07
-V.V2.H.theta.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.H.theta.geom.s01.n8.iterCombNystrom.residual	3.66373598126e-14
-V.V2.H.theta.geom.s01.n8.kulkarni	8.20763406684e-07
-V.V2.H.theta.geom.s02.n16.base	2.44002725300e-05
-V.V2.H.theta.geom.s02.n16.combNystrom	3.29945921751e-06
-V.V2.H.theta.geom.s02.n16.combNystrom.iters	15
-V.V2.H.theta.geom.s02.n16.combNystrom.residual	1.21569421196e-14
-V.V2.H.theta.geom.s02.n16.iterCombNystrom	2.18957834419e-07
-V.V2.H.theta.geom.s02.n16.iterCombNystrom.iters	15
-V.V2.H.theta.geom.s02.n16.iterCombNystrom.residual	1.21569421196e-14
-V.V2.H.theta.geom.s02.n16.kulkarni	7.95789967700e-07
-V.V2.H.theta.geom.s02.n8.base	0.000176022432906
-V.V2.H.theta.geom.s02.n8.combNystrom	3.93858313255e-05
-V.V2.H.theta.geom.s02.n8.combNystrom.iters	15
-V.V2.H.theta.geom.s02.n8.combNystrom.residual	1.24900090270e-14
-V.V2.H.theta.geom.s02.n8.iterCombNystrom	3.62852292102e-06
-V.V2.H.theta.geom.s02.n8.iterCombNystrom.iters	15
-V.V2.H.theta.geom.s02.n8.iterCombNystrom.residual	1.24900090270e-14
-V.V2.H.theta.geom.s02.n8.kulkarni	9.84928357517e-06
-V.V2.H.theta.graded.s01.n16.base	3.08994677762e-05
-V.V2.H.theta.graded.s01.n16.combNystrom	1.07110829450e-06
-V.V2.H.theta.graded.s01.n16.combNystrom.iters	13
-V.V2.H.theta.graded.s01.n16.combNystrom.residual	3.62487817540e-14
-V.V2.H.theta.graded.s01.n16.iterCombNystrom	6.49371535433e-08
-V.V2.H.theta.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.H.theta.graded.s01.n16.iterCombNystrom.residual	3.62487817540e-14
-V.V2.H.theta.graded.s01.n16.kulkarni	2.78073260418e-07
-V.V2.H.theta.graded.s01.n8.base	0.000180529366313
-V.V2.H.theta.graded.s01.n8.combNystrom	1.02231162301e-05
-V.V2.H.theta.graded.s01.n8.combNystrom.iters	13
-V.V2.H.theta.graded.s01.n8.combNystrom.residual	3.85247389545e-14
-V.V2.H.theta.graded.s01.n8.iterCombNystrom	9.79306263416e-07
-V.V2.H.theta.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.H.theta.graded.s01.n8.iterCombNystrom.residual	3.85247389545e-14
-V.V2.H.theta.graded.s01.n8.kulkarni	2.87334532356e-06
-V.V2.H.theta.quasi.s01.n16.base	1.99577386506e-05
-V.V2.H.theta.quasi.s01.n16.combNystrom	2.12135585720e-06
-V.V2.H.theta.quasi.s01.n16.combNystrom.iters	13
-V.V2.H.theta.quasi.s01.n16.combNystrom.residual	3.63598040565e-14
-V.V2.H.theta.quasi.s01.n16.iterCombNystrom	1.03406320395e-07
-V.V2.H.theta.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.H.theta.quasi.s01.n16.iterCombNystrom.residual	3.63598040565e-14
-V.V2.H.theta.quasi.s01.n16.kulkarni	5.08075756689e-07
-V.V2.H.theta.quasi.s01.n8.base	0.000153536195325
-V.V2.H.theta.quasi.s01.n8.combNystrom	2.24380145323e-05
-V.V2.H.theta.quasi.s01.n8.combNystrom.iters	13
-V.V2.H.theta.quasi.s01.n8.combNystrom.residual	3.89688281643e-14
-V.V2.H.theta.quasi.s01.n8.iterCombNystrom	1.71480454625e-06
-V.V2.H.theta.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.H.theta.quasi.s01.n8.iterCombNystrom.residual	3.89688281643e-14
-V.V2.H.theta.quasi.s01.n8.kulkarni	5.49988288767e-06
-V.V2.H.theta.uniform.s01.n16.base	9.98245642458e-06
-V.V2.H.theta.uniform.s01.n16.combNystrom	9.58920258864e-07
-V.V2.H.theta.uniform.s01.n16.combNystrom.iters	13
-V.V2.H.theta.uniform.s01.n16.combNystrom.residual	3.64708263589e-14
-V.V2.H.theta.uniform.s01.n16.iterCombNystrom	4.73322441241e-08
-V.V2.H.theta.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.H.theta.uniform.s01.n16.iterCombNystrom.residual	3.64708263589e-14
-V.V2.H.theta.uniform.s01.n16.kulkarni	2.27964990218e-07
-V.V2.H.theta.uniform.s01.n8.base	7.78872983775e-05
-V.V2.H.theta.uniform.s01.n8.combNystrom	1.19979701103e-05
-V.V2.H.theta.uniform.s01.n8.combNystrom.iters	13
-V.V2.H.theta.uniform.s01.n8.combNystrom.residual	3.76920716860e-14
-V.V2.H.theta.uniform.s01.n8.iterCombNystrom	8.29655060319e-07
-V.V2.H.theta.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.H.theta.uniform.s01.n8.iterCombNystrom.residual	3.76920716860e-14
-V.V2.H.theta.uniform.s01.n8.kulkarni	2.93067631940e-06
-V.V2.H.theta.uniform.s02.n16.base	7.78872983775e-05
-V.V2.H.theta.uniform.s02.n16.combNystrom	1.19979701105e-05
-V.V2.H.theta.uniform.s02.n16.combNystrom.iters	15
-V.V2.H.theta.uniform.s02.n16.combNystrom.residual	1.20459198172e-14
-V.V2.H.theta.uniform.s02.n16.iterCombNystrom	8.29655067092e-07
-V.V2.H.theta.uniform.s02.n16.iterCombNystrom.iters	15
-V.V2.H.theta.uniform.s02.n16.iterCombNystrom.residual	1.20459198172e-14
-V.V2.H.theta.uniform.s02.n16.kulkarni	2.93067631940e-06
-V.V2.H.theta.uniform.s02.n8.base	0.000549270673323
-V.V2.H.theta.uniform.s02.n8.combNystrom	0.000125188753198
-V.V2.H.theta.uniform.s02.n8.combNystrom.iters	15
-V.V2.H.theta.uniform.s02.n8.combNystrom.residual	1.39332989590e-14
-V.V2.H.theta.uniform.s02.n8.iterCombNystrom	1.38169879160e-05
-V.V2.H.theta.uniform.s02.n8.iterCombNystrom.iters	15
-V.V2.H.theta.uniform.s02.n8.iterCombNystrom.residual	1.39332989590e-14
-V.V2.H.theta.uniform.s02.n8.kulkarni	3.16969452732e-05
-V.V2.T.lambda.geom.s01.n16.base	4.26071099080e-06
-V.V2.T.lambda.geom.s01.n16.combNystrom	3.94117421476e-07
-V.V2.T.lambda.geom.s01.n16.combNystrom.iters	13
-V.V2.T.lambda.geom.s01.n16.combNystrom.residual	3.65818486614e-14
-V.V2.T.lambda.geom.s01.n16.iterCombNystrom	8.51954964354e-08
-V.V2.T.lambda.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.T.lambda.geom.s01.n16.iterCombNystrom.residual	3.65818486614e-14
-V.V2.T.lambda.geom.s01.n16.kulkarni	1.11824282278e-07
-V.V2.T.lambda.geom.s01.n8.base	3.19323986173e-05
-V.V2.T.lambda.geom.s01.n8.combNystrom	5.38907890746e-06
-V.V2.T.lambda.geom.s01.n8.combNystrom.iters	13
-V.V2.T.lambda.geom.s01.n8.combNystrom.residual	3.80806497446e-14
-V.V2.T.lambda.geom.s01.n8.iterCombNystrom	1.25208208646e-06
-V.V2.T.lambda.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.T.lambda.geom.s01.n8.iterCombNystrom.residual	3.80806497446e-14
-V.V2.T.lambda.geom.s01.n8.kulkarni	1.62071176446e-06
-V.V2.T.lambda.graded.s01.n16.base	4.58325568613e-05
-V.V2.T.lambda.graded.s01.n16.combNystrom	1.85012072651e-06
-V.V2.T.lambda.graded.s01.n16.combNystrom.iters	13
-V.V2.T.lambda.graded.s01.n16.combNystrom.residual	3.63598040565e-14
-V.V2.T.lambda.graded.s01.n16.iterCombNystrom	2.08900981735e-07
-V.V2.T.lambda.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.T.lambda.graded.s01.n16.iterCombNystrom.residual	3.63598040565e-14
-V.V2.T.lambda.graded.s01.n16.kulkarni	5.41092077144e-07
-V.V2.T.lambda.graded.s01.n8.base	0.000286029820428
-V.V2.T.lambda.graded.s01.n8.combNystrom	1.97658433148e-05
-V.V2.T.lambda.graded.s01.n8.combNystrom.iters	13
-V.V2.T.lambda.graded.s01.n8.combNystrom.residual	4.09672296087e-14
-V.V2.T.lambda.graded.s01.n8.iterCombNystrom	2.73864209377e-06
-V.V2.T.lambda.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.T.lambda.graded.s01.n8.iterCombNystrom.residual	4.09672296087e-14
-V.V2.T.lambda.graded.s01.n8.kulkarni	6.26028114481e-06
-V.V2.T.lambda.quasi.s01.n16.base	2.99808045887e-05
-V.V2.T.lambda.quasi.s01.n16.combNystrom	3.14935850620e-06
-V.V2.T.lambda.quasi.s01.n16.combNystrom.iters	13
-V.V2.T.lambda.quasi.s01.n16.combNystrom.residual	3.65818486614e-14
-V.V2.T.lambda.quasi.s01.n16.iterCombNystrom	2.59677154335e-07
-V.V2.T.lambda.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.T.lambda.quasi.s01.n16.iterCombNystrom.residual	3.65818486614e-14
-V.V2.T.lambda.quasi.s01.n16.kulkarni	9.13964494642e-07
-V.V2.T.lambda.quasi.s01.n8.base	0.000243579888489
-V.V2.T.lambda.quasi.s01.n8.combNystrom	3.21694491502e-05
-V.V2.T.lambda.quasi.s01.n8.combNystrom.iters	13
-V.V2.T.lambda.quasi.s01.n8.combNystrom.residual	4.05786515500e-14
-V.V2.T.lambda.quasi.s01.n8.iterCombNystrom	3.08809260474e-06
-V.V2.T.lambda.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.T.lambda.quasi.s01.n8.iterCombNystrom.residual	4.05786515500e-14
-V.V2.T.lambda.quasi.s01.n8.kulkarni	9.61093999663e-06
-V.V2.T.lambda.uniform.s01.n16.base	1.45948221724e-05
-V.V2.T.lambda.uniform.s01.n16.combNystrom	1.46179828919e-06
-V.V2.T.lambda.uniform.s01.n16.combNystrom.iters	13
-V.V2.T.lambda.uniform.s01.n16.combNystrom.residual	3.65263375102e-14
-V.V2.T.lambda.uniform.s01.n16.iterCombNystrom	1.56214577052e-07
-V.V2.T.lambda.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.T.lambda.uniform.s01.n16.iterCombNystrom.residual	3.65263375102e-14
-V.V2.T.lambda.uniform.s01.n16.kulkarni	4.20428454273e-07
-V.V2.T.lambda.uniform.s01.n8.base	0.000117147778356
-V.V2.T.lambda.uniform.s01.n8.combNystrom	1.78036471649e-05
-V.V2.T.lambda.uniform.s01.n8.combNystrom.iters	13
-V.V2.T.lambda.uniform.s01.n8.combNystrom.residual	3.91908727693e-14
-V.V2.T.lambda.uniform.s01.n8.iterCombNystrom	2.13782851288e-06
-V.V2.T.lambda.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.T.lambda.uniform.s01.n8.iterCombNystrom.residual	3.91908727693e-14
-V.V2.T.lambda.uniform.s01.n8.kulkarni	5.31565288064e-06
-V.V2.T.mu.geom.s01.n16.base	8.86923831300e-06
-V.V2.T.mu.geom.s01.n16.combNystrom	2.09346654900e-07
-V.V2.T.mu.geom.s01.n16.combNystrom.iters	13
-V.V2.T.mu.geom.s01.n16.combNystrom.residual	3.62487817540e-14
-V.V2.T.mu.geom.s01.n16.iterCombNystrom	2.69495896710e-08
-V.V2.T.mu.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.T.mu.geom.s01.n16.iterCombNystrom.residual	3.62487817540e-14
-V.V2.T.mu.geom.s01.n16.kulkarni	6.21588795990e-08
-V.V2.T.mu.geom.s01.n8.base	6.68784663100e-05
-V.V2.T.mu.geom.s01.n8.combNystrom	2.77468717702e-06
-V.V2.T.mu.geom.s01.n8.combNystrom.iters	13
-V.V2.T.mu.geom.s01.n8.combNystrom.residual	3.66928709639e-14
-V.V2.T.mu.geom.s01.n8.iterCombNystrom	3.93163146595e-07
-V.V2.T.mu.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.T.mu.geom.s01.n8.iterCombNystrom.residual	3.66928709639e-14
-V.V2.T.mu.geom.s01.n8.kulkarni	8.87133731475e-07
-V.V2.T.mu.graded.s01.n16.base	5.37813495114e-05
-V.V2.T.mu.graded.s01.n16.combNystrom	1.36644367743e-06
-V.V2.T.mu.graded.s01.n16.combNystrom.iters	13
-V.V2.T.mu.graded.s01.n16.combNystrom.residual	3.62487817540e-14
-V.V2.T.mu.graded.s01.n16.iterCombNystrom	9.24949898895e-08
-V.V2.T.mu.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.T.mu.graded.s01.n16.iterCombNystrom.residual	3.62487817540e-14
-V.V2.T.mu.graded.s01.n16.kulkarni	3.93330635839e-07
-V.V2.T.mu.graded.s01.n8.base	0.000337672097215
-V.V2.T.mu.graded.s01.n8.combNystrom	1.47893386320e-05
-V.V2.T.mu.graded.s01.n8.combNystrom.iters	13
-V.V2.T.mu.graded.s01.n8.combNystrom.residual	3.84137166520e-14
-V.V2.T.mu.graded.s01.n8.iterCombNystrom	1.14144921648e-06
-V.V2.T.mu.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.T.mu.graded.s01.n8.iterCombNystrom.residual	3.84137166520e-14
-V.V2.T.mu.graded.s01.n8.kulkarni	4.56812160776e-06
-V.V2.T.mu.quasi.s01.n16.base	4.49757652993e-05
-V.V2.T.mu.quasi.s01.n16.combNystrom	1.07987919673e-06
-V.V2.T.mu.quasi.s01.n16.combNystrom.iters	13
-V.V2.T.mu.quasi.s01.n16.combNystrom.residual	3.63042929052e-14
-V.V2.T.mu.quasi.s01.n16.iterCombNystrom	8.30620261461e-08
-V.V2.T.mu.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.T.mu.quasi.s01.n16.iterCombNystrom.residual	3.63042929052e-14
-V.V2.T.mu.quasi.s01.n16.kulkarni	3.35747645130e-07
-V.V2.T.mu.quasi.s01.n8.base	0.000282033231501
-V.V2.T.mu.quasi.s01.n8.combNystrom	1.17997753980e-05
-V.V2.T.mu.quasi.s01.n8.combNystrom.iters	13
-V.V2.T.mu.quasi.s01.n8.combNystrom.residual	3.79141162909e-14
-V.V2.T.mu.quasi.s01.n8.iterCombNystrom	1.06019177348e-06
-V.V2.T.mu.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.T.mu.quasi.s01.n8.iterCombNystrom.residual	3.79141162909e-14
-V.V2.T.mu.quasi.s01.n8.kulkarni	3.35720980471e-06
-V.V2.T.mu.uniform.s01.n16.base	2.46824488607e-05
-V.V2.T.mu.uniform.s01.n16.combNystrom	6.08879732966e-07
-V.V2.T.mu.uniform.s01.n16.combNystrom.iters	13
-V.V2.T.mu.uniform.s01.n16.combNystrom.residual	3.63598040565e-14
-V.V2.T.mu.uniform.s01.n16.iterCombNystrom	4.95333365436e-08
-V.V2.T.mu.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.T.mu.uniform.s01.n16.iterCombNystrom.residual	3.63598040565e-14
-V.V2.T.mu.uniform.s01.n16.kulkarni	1.85942220288e-07
-V.V2.T.mu.uniform.s01.n8.base	0.000173766874825
-V.V2.T.mu.uniform.s01.n8.combNystrom	5.92563481028e-06
-V.V2.T.mu.uniform.s01.n8.combNystrom.iters	13
-V.V2.T.mu.uniform.s01.n8.combNystrom.residual	3.73034936274e-14
-V.V2.T.mu.uniform.s01.n8.iterCombNystrom	6.88852841213e-07
-V.V2.T.mu.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.T.mu.uniform.s01.n8.iterCombNystrom.residual	3.73034936274e-14
-V.V2.T.mu.uniform.s01.n8.kulkarni	1.90717993875e-06
-V.V2.T.theta.geom.s01.n16.base	4.26277324006e-06
-V.V2.T.theta.geom.s01.n16.combNystrom	2.95525075300e-07
-V.V2.T.theta.geom.s01.n16.combNystrom.iters	13
-V.V2.T.theta.geom.s01.n16.combNystrom.residual	3.61377594515e-14
-V.V2.T.theta.geom.s01.n16.iterCombNystrom	2.46424850525e-08
-V.V2.T.theta.geom.s01.n16.iterCombNystrom.iters	13
-V.V2.T.theta.geom.s01.n16.iterCombNystrom.residual	3.61377594515e-14
-V.V2.T.theta.geom.s01.n16.kulkarni	8.25741678367e-08
-V.V2.T.theta.geom.s01.n8.base	3.19451338233e-05
-V.V2.T.theta.geom.s01.n8.combNystrom	4.12243704517e-06
-V.V2.T.theta.geom.s01.n8.combNystrom.iters	13
-V.V2.T.theta.geom.s01.n8.combNystrom.residual	3.67483821151e-14
-V.V2.T.theta.geom.s01.n8.iterCombNystrom	4.42803052336e-07
-V.V2.T.theta.geom.s01.n8.iterCombNystrom.iters	13
-V.V2.T.theta.geom.s01.n8.iterCombNystrom.residual	3.67483821151e-14
-V.V2.T.theta.geom.s01.n8.kulkarni	1.18638035240e-06
-V.V2.T.theta.geom.s02.n16.base	3.37517846024e-05
-V.V2.T.theta.geom.s02.n16.combNystrom	4.01011844575e-06
-V.V2.T.theta.geom.s02.n16.combNystrom.iters	15
-V.V2.T.theta.geom.s02.n16.combNystrom.residual	1.19348975147e-14
-V.V2.T.theta.geom.s02.n16.iterCombNystrom	2.88395462955e-07
-V.V2.T.theta.geom.s02.n16.iterCombNystrom.iters	15
-V.V2.T.theta.geom.s02.n16.iterCombNystrom.residual	1.19348975147e-14
-V.V2.T.theta.geom.s02.n16.kulkarni	1.15397713696e-06
-V.V2.T.theta.geom.s02.n8.base	0.000241493898364
-V.V2.T.theta.geom.s02.n8.combNystrom	4.92543496945e-05
-V.V2.T.theta.geom.s02.n8.combNystrom.iters	15
-V.V2.T.theta.geom.s02.n8.combNystrom.residual	1.24900090270e-14
-V.V2.T.theta.geom.s02.n8.iterCombNystrom	4.81696125809e-06
-V.V2.T.theta.geom.s02.n8.iterCombNystrom.iters	15
-V.V2.T.theta.geom.s02.n8.iterCombNystrom.residual	1.24900090270e-14
-V.V2.T.theta.geom.s02.n8.kulkarni	1.48069146806e-05
-V.V2.T.theta.graded.s01.n16.base	4.59070626980e-05
-V.V2.T.theta.graded.s01.n16.combNystrom	1.32711841971e-06
-V.V2.T.theta.graded.s01.n16.combNystrom.iters	13
-V.V2.T.theta.graded.s01.n16.combNystrom.residual	3.62487817540e-14
-V.V2.T.theta.graded.s01.n16.iterCombNystrom	8.31337162444e-08
-V.V2.T.theta.graded.s01.n16.iterCombNystrom.iters	13
-V.V2.T.theta.graded.s01.n16.iterCombNystrom.residual	3.62487817540e-14
-V.V2.T.theta.graded.s01.n16.kulkarni	4.10533731898e-07
-V.V2.T.theta.graded.s01.n8.base	0.000287023296006
-V.V2.T.theta.graded.s01.n8.combNystrom	1.32322579440e-05
-V.V2.T.theta.graded.s01.n8.combNystrom.iters	13
-V.V2.T.theta.graded.s01.n8.combNystrom.residual	3.85802501057e-14
-V.V2.T.theta.graded.s01.n8.iterCombNystrom	1.25605469414e-06
-V.V2.T.theta.graded.s01.n8.iterCombNystrom.iters	13
-V.V2.T.theta.graded.s01.n8.iterCombNystrom.residual	3.85802501057e-14
-V.V2.T.theta.graded.s01.n8.kulkarni	4.45706408092e-06
-V.V2.T.theta.quasi.s01.n16.base	2.78762569041e-05
-V.V2.T.theta.quasi.s01.n16.combNystrom	2.57301694506e-06
-V.V2.T.theta.quasi.s01.n16.combNystrom.iters	13
-V.V2.T.theta.quasi.s01.n16.combNystrom.residual	3.65263375102e-14
-V.V2.T.theta.quasi.s01.n16.iterCombNystrom	1.27563975494e-07
-V.V2.T.theta.quasi.s01.n16.iterCombNystrom.iters	13
-V.V2.T.theta.quasi.s01.n16.iterCombNystrom.residual	3.65263375102e-14
-V.V2.T.theta.quasi.s01.n16.kulkarni	7.36394869416e-07
-V.V2.T.theta.quasi.s01.n8.base	0.000219698678972
-V.V2.T.theta.quasi.s01.n8.combNystrom	2.78722540256e-05
-V.V2.T.theta.quasi.s01.n8.combNystrom.iters	13
-V.V2.T.theta.quasi.s01.n8.combNystrom.residual	3.89133170131e-14
-V.V2.T.theta.quasi.s01.n8.iterCombNystrom	2.13106647939e-06
-V.V2.T.theta.quasi.s01.n8.iterCombNystrom.iters	13
-V.V2.T.theta.quasi.s01.n8.iterCombNystrom.residual	3.89133170131e-14
-V.V2.T.theta.quasi.s01.n8.kulkarni	8.26367640083e-06
-V.V2.T.theta.uniform.s01.n16.base	1.38967569023e-05
-V.V2.T.theta.uniform.s01.n16.combNystrom	1.15662221611e-06
-V.V2.T.theta.uniform.s01.n16.combNystrom.iters	13
-V.V2.T.theta.uniform.s01.n16.combNystrom.residual	3.63042929052e-14
-V.V2.T.theta.uniform.s01.n16.iterCombNystrom	5.95657070335e-08
-V.V2.T.theta.uniform.s01.n16.iterCombNystrom.iters	13
-V.V2.T.theta.uniform.s01.n16.iterCombNystrom.residual	3.63042929052e-14
-V.V2.T.theta.uniform.s01.n16.kulkarni	3.27653862819e-07
-V.V2.T.theta.uniform.s01.n8.base	0.000108937024340
-V.V2.T.theta.uniform.s01.n8.combNystrom	1.47690465693e-05
-V.V2.T.theta.uniform.s01.n8.combNystrom.iters	13
-V.V2.T.theta.uniform.s01.n8.combNystrom.residual	3.75810493836e-14
-V.V2.T.theta.uniform.s01.n8.iterCombNystrom	1.05156825114e-06
-V.V2.T.theta.uniform.s01.n8.iterCombNystrom.iters	13
-V.V2.T.theta.uniform.s01.n8.iterCombNystrom.residual	3.75810493836e-14
-V.V2.T.theta.uniform.s01.n8.kulkarni	4.33219290896e-06
-V.V2.T.theta.uniform.s02.n16.base	0.000108937024340
-V.V2.T.theta.uniform.s02.n16.combNystrom	1.47690465697e-05
-V.V2.T.theta.uniform.s02.n16.combNystrom.iters	15
-V.V2.T.theta.uniform.s02.n16.combNystrom.residual	1.20459198172e-14
-V.V2.T.theta.uniform.s02.n16.iterCombNystrom	1.05156850527e-06
-V.V2.T.theta.uniform.s02.n16.iterCombNystrom.iters	15
-V.V2.T.theta.uniform.s02.n16.iterCombNystrom.residual	1.20459198172e-14
-V.V2.T.theta.uniform.s02.n16.kulkarni	4.33219290896e-06
-V.V2.T.theta.uniform.s02.n8.base	0.000790120584649
-V.V2.T.theta.uniform.s02.n8.combNystrom	0.000160781869672
-V.V2.T.theta.uniform.s02.n8.combNystrom.iters	15
-V.V2.T.theta.uniform.s02.n8.combNystrom.residual	1.37112543541e-14
-V.V2.T.theta.uniform.s02.n8.iterCombNystrom	1.77626616538e-05
-V.V2.T.theta.uniform.s02.n8.iterCombNystrom.iters	15
-V.V2.T.theta.uniform.s02.n8.iterCombNystrom.residual	1.37112543541e-14
-V.V2.T.theta.uniform.s02.n8.kulkarni	4.96633010569e-05
+F.F2.B.lambda.geom.s01.n16.base	3.9082582719007775e-06	portable
+F.F2.B.lambda.geom.s01.n16.combNystrom	3.2543079342417514e-11	portable
+F.F2.B.lambda.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.B.lambda.geom.s01.n16.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.lambda.geom.s01.n16.iterCombNystrom	2.7193802765168584e-12	portable
+F.F2.B.lambda.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.geom.s01.n16.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.lambda.geom.s01.n16.kulkarni	1.5865087021893487e-13	portable
+F.F2.B.lambda.geom.s01.n8.base	2.9652318536355082e-05	portable
+F.F2.B.lambda.geom.s01.n8.combNystrom	3.5186242808293855e-09	portable
+F.F2.B.lambda.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.B.lambda.geom.s01.n8.combNystrom.residual	8.2156503822261580e-14	residual
+F.F2.B.lambda.geom.s01.n8.iterCombNystrom	4.7891401955268980e-10	portable
+F.F2.B.lambda.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.geom.s01.n8.iterCombNystrom.residual	8.2156503822261580e-14	residual
+F.F2.B.lambda.geom.s01.n8.kulkarni	8.9064311481479300e-12	portable
+F.F2.B.lambda.graded.s01.n16.base	3.7518946492398620e-05	portable
+F.F2.B.lambda.graded.s01.n16.combNystrom	5.0919268801408180e-11	portable
+F.F2.B.lambda.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.B.lambda.graded.s01.n16.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.lambda.graded.s01.n16.iterCombNystrom	1.2012613126444194e-13	portable
+F.F2.B.lambda.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.graded.s01.n16.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.lambda.graded.s01.n16.kulkarni	1.4710233031678400e-11	portable
+F.F2.B.lambda.graded.s01.n8.base	0.00022484470103112386	portable
+F.F2.B.lambda.graded.s01.n8.combNystrom	4.4263451792758700e-09	portable
+F.F2.B.lambda.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.B.lambda.graded.s01.n8.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.lambda.graded.s01.n8.iterCombNystrom	1.6359358312456607e-11	portable
+F.F2.B.lambda.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.graded.s01.n8.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.lambda.graded.s01.n8.kulkarni	1.0677096984323953e-09	portable
+F.F2.B.lambda.quasi.s01.n16.base	2.9022011774904044e-05	portable
+F.F2.B.lambda.quasi.s01.n16.combNystrom	1.4806704751180177e-09	portable
+F.F2.B.lambda.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.B.lambda.quasi.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.lambda.quasi.s01.n16.iterCombNystrom	1.3915635310723928e-10	portable
+F.F2.B.lambda.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.quasi.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.lambda.quasi.s01.n16.kulkarni	2.1675106154361856e-11	portable
+F.F2.B.lambda.quasi.s01.n8.base	0.00024202754662905335	portable
+F.F2.B.lambda.quasi.s01.n8.combNystrom	1.2001127080996100e-07	portable
+F.F2.B.lambda.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.B.lambda.quasi.s01.n8.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.lambda.quasi.s01.n8.iterCombNystrom	1.6029924054805633e-08	portable
+F.F2.B.lambda.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.quasi.s01.n8.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.lambda.quasi.s01.n8.kulkarni	1.8832742032515170e-09	portable
+F.F2.B.lambda.uniform.s01.n16.base	1.4095544249359548e-05	portable
+F.F2.B.lambda.uniform.s01.n16.combNystrom	3.5774838647029130e-10	portable
+F.F2.B.lambda.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.B.lambda.uniform.s01.n16.combNystrom.residual	8.2156503822261580e-14	residual
+F.F2.B.lambda.uniform.s01.n16.iterCombNystrom	3.2012170692041764e-11	portable
+F.F2.B.lambda.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.uniform.s01.n16.iterCombNystrom.residual	8.2156503822261580e-14	residual
+F.F2.B.lambda.uniform.s01.n16.kulkarni	4.1381342796853460e-12	portable
+F.F2.B.lambda.uniform.s01.n8.base	0.00012019491468817645	portable
+F.F2.B.lambda.uniform.s01.n8.combNystrom	3.6444394613255326e-08	portable
+F.F2.B.lambda.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.B.lambda.uniform.s01.n8.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.lambda.uniform.s01.n8.iterCombNystrom	5.0615244218121800e-09	portable
+F.F2.B.lambda.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.lambda.uniform.s01.n8.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.lambda.uniform.s01.n8.kulkarni	4.0301362247419090e-10	portable
+F.F2.B.mu.geom.s01.n16.base	7.7131568435584440e-06	portable
+F.F2.B.mu.geom.s01.n16.combNystrom	1.7017609543756862e-11	portable
+F.F2.B.mu.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.B.mu.geom.s01.n16.combNystrom.residual	8.2600593032111650e-14	residual
+F.F2.B.mu.geom.s01.n16.iterCombNystrom	3.2418512319054570e-14	portable
+F.F2.B.mu.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.mu.geom.s01.n16.iterCombNystrom.residual	8.2600593032111650e-14	residual
+F.F2.B.mu.geom.s01.n16.kulkarni	2.0486945473408014e-12	portable
+F.F2.B.mu.geom.s01.n8.base	5.9242026527628330e-05	portable
+F.F2.B.mu.geom.s01.n8.combNystrom	1.4922866276023683e-09	portable
+F.F2.B.mu.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.B.mu.geom.s01.n8.combNystrom.residual	8.1601392309949000e-14	residual
+F.F2.B.mu.geom.s01.n8.iterCombNystrom	2.0016877044781722e-11	portable
+F.F2.B.mu.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.mu.geom.s01.n8.iterCombNystrom.residual	8.1601392309949000e-14	residual
+F.F2.B.mu.geom.s01.n8.kulkarni	2.1310386788542246e-10	portable
+F.F2.B.mu.graded.s01.n16.base	4.4406729174273350e-05	portable
+F.F2.B.mu.graded.s01.n16.combNystrom	8.5029983054596410e-11	portable
+F.F2.B.mu.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.B.mu.graded.s01.n16.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.mu.graded.s01.n16.iterCombNystrom	1.2059242493478450e-12	portable
+F.F2.B.mu.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.mu.graded.s01.n16.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.mu.graded.s01.n16.kulkarni	3.1713964787627447e-11	portable
+F.F2.B.mu.graded.s01.n8.base	0.00027005934463708580	portable
+F.F2.B.mu.graded.s01.n8.combNystrom	5.8138515113270730e-09	portable
+F.F2.B.mu.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.B.mu.graded.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.mu.graded.s01.n8.iterCombNystrom	1.9750290292108730e-10	portable
+F.F2.B.mu.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.mu.graded.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.mu.graded.s01.n8.kulkarni	2.3685129413308914e-09	portable
+F.F2.B.mu.quasi.s01.n16.base	3.6744828199375410e-05	portable
+F.F2.B.mu.quasi.s01.n16.combNystrom	6.4769600793823660e-10	portable
+F.F2.B.mu.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.B.mu.quasi.s01.n16.combNystrom.residual	8.2156503822261580e-14	residual
+F.F2.B.mu.quasi.s01.n16.iterCombNystrom	1.3414380717335916e-11	portable
+F.F2.B.mu.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.mu.quasi.s01.n16.iterCombNystrom.residual	8.2156503822261580e-14	residual
+F.F2.B.mu.quasi.s01.n16.kulkarni	1.5610512882346940e-11	portable
+F.F2.B.mu.quasi.s01.n8.base	0.00022074378506453662	portable
+F.F2.B.mu.quasi.s01.n8.combNystrom	3.6890951848889130e-08	portable
+F.F2.B.mu.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.B.mu.quasi.s01.n8.combNystrom.residual	8.1823436914874040e-14	residual
+F.F2.B.mu.quasi.s01.n8.iterCombNystrom	1.4563715788895593e-09	portable
+F.F2.B.mu.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.mu.quasi.s01.n8.iterCombNystrom.residual	8.1823436914874040e-14	residual
+F.F2.B.mu.quasi.s01.n8.kulkarni	8.0688733472555900e-10	portable
+F.F2.B.mu.uniform.s01.n16.base	2.0505859268715730e-05	portable
+F.F2.B.mu.uniform.s01.n16.combNystrom	1.7222401282879218e-10	portable
+F.F2.B.mu.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.B.mu.uniform.s01.n16.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.mu.uniform.s01.n16.iterCombNystrom	2.1029844532449715e-12	portable
+F.F2.B.mu.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.mu.uniform.s01.n16.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.B.mu.uniform.s01.n16.kulkarni	7.5169870328295470e-12	portable
+F.F2.B.mu.uniform.s01.n8.base	0.00014028121872589060	portable
+F.F2.B.mu.uniform.s01.n8.combNystrom	1.3013014443785664e-08	portable
+F.F2.B.mu.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.B.mu.uniform.s01.n8.combNystrom.residual	8.1823436914874040e-14	residual
+F.F2.B.mu.uniform.s01.n8.iterCombNystrom	2.7557245374509876e-10	portable
+F.F2.B.mu.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.mu.uniform.s01.n8.iterCombNystrom.residual	8.1823436914874040e-14	residual
+F.F2.B.mu.uniform.s01.n8.kulkarni	6.0697846748780650e-10	portable
+F.F2.B.theta.geom.s01.n16.base	3.6543170535141556e-06	portable
+F.F2.B.theta.geom.s01.n16.combNystrom	5.0299764353667340e-12	portable
+F.F2.B.theta.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.B.theta.geom.s01.n16.combNystrom.residual	8.2378548427186620e-14	residual
+F.F2.B.theta.geom.s01.n16.iterCombNystrom	1.0957901253050295e-13	portable
+F.F2.B.theta.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.theta.geom.s01.n16.iterCombNystrom.residual	8.2378548427186620e-14	residual
+F.F2.B.theta.geom.s01.n16.kulkarni	8.0491169285323850e-14	portable
+F.F2.B.theta.geom.s01.n8.base	2.6849739846013243e-05	portable
+F.F2.B.theta.geom.s01.n8.combNystrom	6.8150851628701050e-10	portable
+F.F2.B.theta.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.B.theta.geom.s01.n8.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.theta.geom.s01.n8.iterCombNystrom	2.0148549495502266e-11	portable
+F.F2.B.theta.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.theta.geom.s01.n8.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.theta.geom.s01.n8.kulkarni	9.3581808968679070e-12	portable
+F.F2.B.theta.geom.s02.n16.base	3.1257520870520140e-05	portable
+F.F2.B.theta.geom.s02.n16.combNystrom	7.9338335901013580e-10	portable
+F.F2.B.theta.geom.s02.n16.combNystrom.iters	107	exact
+F.F2.B.theta.geom.s02.n16.combNystrom.residual	7.9936057773011270e-14	residual
+F.F2.B.theta.geom.s02.n16.iterCombNystrom	5.0301096621296890e-11	portable
+F.F2.B.theta.geom.s02.n16.iterCombNystrom.iters	107	exact
+F.F2.B.theta.geom.s02.n16.iterCombNystrom.residual	7.9936057773011270e-14	residual
+F.F2.B.theta.geom.s02.n16.kulkarni	1.2126966097980585e-12	portable
+F.F2.B.theta.geom.s02.n8.base	0.00024178613288960982	portable
+F.F2.B.theta.geom.s02.n8.combNystrom	9.0474506220239450e-08	portable
+F.F2.B.theta.geom.s02.n8.combNystrom.iters	107	exact
+F.F2.B.theta.geom.s02.n8.combNystrom.residual	8.0047080075473790e-14	residual
+F.F2.B.theta.geom.s02.n8.iterCombNystrom	1.1914630282383598e-08	portable
+F.F2.B.theta.geom.s02.n8.iterCombNystrom.iters	107	exact
+F.F2.B.theta.geom.s02.n8.iterCombNystrom.residual	8.0047080075473790e-14	residual
+F.F2.B.theta.geom.s02.n8.kulkarni	1.4969692152533298e-10	portable
+F.F2.B.theta.graded.s01.n16.base	3.8559654835568224e-05	portable
+F.F2.B.theta.graded.s01.n16.combNystrom	4.4514658625871560e-10	portable
+F.F2.B.theta.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.B.theta.graded.s01.n16.combNystrom.residual	8.2378548427186620e-14	residual
+F.F2.B.theta.graded.s01.n16.iterCombNystrom	1.3625545136619621e-11	portable
+F.F2.B.theta.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.theta.graded.s01.n16.iterCombNystrom.residual	8.2378548427186620e-14	residual
+F.F2.B.theta.graded.s01.n16.kulkarni	2.3650748026682322e-11	portable
+F.F2.B.theta.graded.s01.n8.base	0.00023614362227830643	portable
+F.F2.B.theta.graded.s01.n8.combNystrom	2.1103346403705814e-08	portable
+F.F2.B.theta.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.B.theta.graded.s01.n8.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.theta.graded.s01.n8.iterCombNystrom	1.2525180892453136e-09	portable
+F.F2.B.theta.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.theta.graded.s01.n8.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.theta.graded.s01.n8.kulkarni	1.6332505348159998e-09	portable
+F.F2.B.theta.quasi.s01.n16.base	2.5252026114586100e-05	portable
+F.F2.B.theta.quasi.s01.n16.combNystrom	4.4128145582078560e-10	portable
+F.F2.B.theta.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.B.theta.quasi.s01.n16.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.theta.quasi.s01.n16.iterCombNystrom	1.5618062398914390e-11	portable
+F.F2.B.theta.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.theta.quasi.s01.n16.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.B.theta.quasi.s01.n16.kulkarni	4.5980996787875480e-12	portable
+F.F2.B.theta.quasi.s01.n8.base	0.00020498892395748314	portable
+F.F2.B.theta.quasi.s01.n8.combNystrom	4.7439976502694490e-08	portable
+F.F2.B.theta.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.B.theta.quasi.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.theta.quasi.s01.n8.iterCombNystrom	3.3917189057319774e-09	portable
+F.F2.B.theta.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.theta.quasi.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.theta.quasi.s01.n8.kulkarni	6.2786997823138790e-10	portable
+F.F2.B.theta.uniform.s01.n16.base	1.2463532695905500e-05	portable
+F.F2.B.theta.uniform.s01.n16.combNystrom	8.5836004970474280e-11	portable
+F.F2.B.theta.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.B.theta.uniform.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.theta.uniform.s01.n16.iterCombNystrom	2.2559731860383180e-12	portable
+F.F2.B.theta.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.B.theta.uniform.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.B.theta.uniform.s01.n16.kulkarni	4.7317705309524170e-13	portable
+F.F2.B.theta.uniform.s01.n8.base	0.00010143452655420049	portable
+F.F2.B.theta.uniform.s01.n8.combNystrom	1.1166149449515217e-08	portable
+F.F2.B.theta.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.B.theta.uniform.s01.n8.combNystrom.residual	8.1823436914874040e-14	residual
+F.F2.B.theta.uniform.s01.n8.iterCombNystrom	6.3024718777171530e-10	portable
+F.F2.B.theta.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.B.theta.uniform.s01.n8.iterCombNystrom.residual	8.1823436914874040e-14	residual
+F.F2.B.theta.uniform.s01.n8.kulkarni	7.7496675743304880e-11	portable
+F.F2.B.theta.uniform.s02.n16.base	0.00010545924440752419	portable
+F.F2.B.theta.uniform.s02.n16.combNystrom	1.1637951824461368e-08	portable
+F.F2.B.theta.uniform.s02.n16.combNystrom.iters	107	exact
+F.F2.B.theta.uniform.s02.n16.combNystrom.residual	8.0047080075473790e-14	residual
+F.F2.B.theta.uniform.s02.n16.iterCombNystrom	1.1813743316935188e-09	portable
+F.F2.B.theta.uniform.s02.n16.iterCombNystrom.iters	107	exact
+F.F2.B.theta.uniform.s02.n16.iterCombNystrom.residual	8.0047080075473790e-14	residual
+F.F2.B.theta.uniform.s02.n16.kulkarni	7.9005024744560610e-11	portable
+F.F2.B.theta.uniform.s02.n8.base	0.00083458088000987200	portable
+F.F2.B.theta.uniform.s02.n8.combNystrom	1.0291280351237830e-06	portable
+F.F2.B.theta.uniform.s02.n8.combNystrom.iters	107	exact
+F.F2.B.theta.uniform.s02.n8.combNystrom.residual	7.9491968563161210e-14	residual
+F.F2.B.theta.uniform.s02.n8.iterCombNystrom	1.9352701741137680e-07	portable
+F.F2.B.theta.uniform.s02.n8.iterCombNystrom.iters	107	exact
+F.F2.B.theta.uniform.s02.n8.iterCombNystrom.residual	7.9491968563161210e-14	residual
+F.F2.B.theta.uniform.s02.n8.kulkarni	6.9319344708773656e-09	portable
+F.F2.H.lambda.geom.s01.n16.base	3.3986578913403065e-06	portable
+F.F2.H.lambda.geom.s01.n16.combNystrom	3.0385693960965910e-11	portable
+F.F2.H.lambda.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.H.lambda.geom.s01.n16.combNystrom.residual	8.2156503822261580e-14	residual
+F.F2.H.lambda.geom.s01.n16.iterCombNystrom	2.6011415243942793e-12	portable
+F.F2.H.lambda.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.geom.s01.n16.iterCombNystrom.residual	8.2156503822261580e-14	residual
+F.F2.H.lambda.geom.s01.n16.kulkarni	1.8907098109366416e-13	portable
+F.F2.H.lambda.geom.s01.n8.base	2.6934827827673757e-05	portable
+F.F2.H.lambda.geom.s01.n8.combNystrom	3.2861248167037616e-09	portable
+F.F2.H.lambda.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.H.lambda.geom.s01.n8.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.H.lambda.geom.s01.n8.iterCombNystrom	4.5788661751089420e-10	portable
+F.F2.H.lambda.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.geom.s01.n8.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.H.lambda.geom.s01.n8.kulkarni	8.1584738964579630e-12	portable
+F.F2.H.lambda.graded.s01.n16.base	3.0092493556121980e-05	portable
+F.F2.H.lambda.graded.s01.n16.combNystrom	4.8580584000035290e-11	portable
+F.F2.H.lambda.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.H.lambda.graded.s01.n16.combNystrom.residual	8.2378548427186620e-14	residual
+F.F2.H.lambda.graded.s01.n16.iterCombNystrom	1.1635137298071640e-13	portable
+F.F2.H.lambda.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.graded.s01.n16.iterCombNystrom.residual	8.2378548427186620e-14	residual
+F.F2.H.lambda.graded.s01.n16.kulkarni	9.6406216343325470e-12	portable
+F.F2.H.lambda.graded.s01.n8.base	0.00017230825435721187	portable
+F.F2.H.lambda.graded.s01.n8.combNystrom	4.2229022501061310e-09	portable
+F.F2.H.lambda.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.H.lambda.graded.s01.n8.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.lambda.graded.s01.n8.iterCombNystrom	1.7016166253824850e-11	portable
+F.F2.H.lambda.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.graded.s01.n8.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.lambda.graded.s01.n8.kulkarni	6.4374006125689220e-10	portable
+F.F2.H.lambda.quasi.s01.n16.base	2.4331942769739712e-05	portable
+F.F2.H.lambda.quasi.s01.n16.combNystrom	1.3722710745511790e-09	portable
+F.F2.H.lambda.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.H.lambda.quasi.s01.n16.combNystrom.residual	8.1601392309949000e-14	residual
+F.F2.H.lambda.quasi.s01.n16.iterCombNystrom	1.2906942181700742e-10	portable
+F.F2.H.lambda.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.quasi.s01.n16.iterCombNystrom.residual	8.1601392309949000e-14	residual
+F.F2.H.lambda.quasi.s01.n16.kulkarni	1.4485412869191805e-11	portable
+F.F2.H.lambda.quasi.s01.n8.base	0.00019984091486069389	portable
+F.F2.H.lambda.quasi.s01.n8.combNystrom	1.0944453709971214e-07	portable
+F.F2.H.lambda.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.H.lambda.quasi.s01.n8.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.lambda.quasi.s01.n8.iterCombNystrom	1.4630416989014350e-08	portable
+F.F2.H.lambda.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.quasi.s01.n8.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.lambda.quasi.s01.n8.kulkarni	1.1676527522652690e-09	portable
+F.F2.H.lambda.uniform.s01.n16.base	1.1869378819251430e-05	portable
+F.F2.H.lambda.uniform.s01.n16.combNystrom	3.3206581928624246e-10	portable
+F.F2.H.lambda.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.H.lambda.uniform.s01.n16.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.lambda.uniform.s01.n16.iterCombNystrom	2.9757973862842846e-11	portable
+F.F2.H.lambda.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.uniform.s01.n16.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.lambda.uniform.s01.n16.kulkarni	2.8729241208225176e-12	portable
+F.F2.H.lambda.uniform.s01.n8.base	0.00010098491514076713	portable
+F.F2.H.lambda.uniform.s01.n8.combNystrom	3.3494274132017665e-08	portable
+F.F2.H.lambda.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.H.lambda.uniform.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.lambda.uniform.s01.n8.iterCombNystrom	4.6495134409241246e-09	portable
+F.F2.H.lambda.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.lambda.uniform.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.lambda.uniform.s01.n8.kulkarni	2.6714130907379285e-10	portable
+F.F2.H.mu.geom.s01.n16.base	6.2451946318820010e-06	portable
+F.F2.H.mu.geom.s01.n16.combNystrom	1.5856982393813723e-11	portable
+F.F2.H.mu.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.H.mu.geom.s01.n16.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.mu.geom.s01.n16.iterCombNystrom	3.8857805861880480e-14	portable
+F.F2.H.mu.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.mu.geom.s01.n16.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.mu.geom.s01.n16.kulkarni	1.2442269436974130e-12	portable
+F.F2.H.mu.geom.s01.n8.base	4.6583210295048080e-05	portable
+F.F2.H.mu.geom.s01.n8.combNystrom	1.3872065718345539e-09	portable
+F.F2.H.mu.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.H.mu.geom.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.mu.geom.s01.n8.iterCombNystrom	1.5785150964120476e-11	portable
+F.F2.H.mu.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.mu.geom.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.mu.geom.s01.n8.kulkarni	1.1910439301487940e-10	portable
+F.F2.H.mu.graded.s01.n16.base	3.5663771722704850e-05	portable
+F.F2.H.mu.graded.s01.n16.combNystrom	7.6869732801299050e-11	portable
+F.F2.H.mu.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.H.mu.graded.s01.n16.combNystrom.residual	8.2156503822261580e-14	residual
+F.F2.H.mu.graded.s01.n16.iterCombNystrom	1.0681455719918631e-12	portable
+F.F2.H.mu.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.mu.graded.s01.n16.iterCombNystrom.residual	8.2156503822261580e-14	residual
+F.F2.H.mu.graded.s01.n16.kulkarni	2.0938806244430452e-11	portable
+F.F2.H.mu.graded.s01.n8.base	0.00020806099528725142	portable
+F.F2.H.mu.graded.s01.n8.combNystrom	5.0789782379823120e-09	portable
+F.F2.H.mu.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.H.mu.graded.s01.n8.combNystrom.residual	8.2378548427186620e-14	residual
+F.F2.H.mu.graded.s01.n8.iterCombNystrom	1.6876389175024542e-10	portable
+F.F2.H.mu.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.mu.graded.s01.n8.iterCombNystrom.residual	8.2378548427186620e-14	residual
+F.F2.H.mu.graded.s01.n8.kulkarni	1.4630018307926207e-09	portable
+F.F2.H.mu.quasi.s01.n16.base	2.9886740365747677e-05	portable
+F.F2.H.mu.quasi.s01.n16.combNystrom	5.9402671670483190e-10	portable
+F.F2.H.mu.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.H.mu.quasi.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.mu.quasi.s01.n16.iterCombNystrom	1.2601697463310302e-11	portable
+F.F2.H.mu.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.mu.quasi.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.mu.quasi.s01.n16.kulkarni	1.1310397063368782e-11	portable
+F.F2.H.mu.quasi.s01.n8.base	0.00017583734788717553	portable
+F.F2.H.mu.quasi.s01.n8.combNystrom	3.3276140620763783e-08	portable
+F.F2.H.mu.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.H.mu.quasi.s01.n8.combNystrom.residual	8.1490370007486490e-14	residual
+F.F2.H.mu.quasi.s01.n8.iterCombNystrom	1.3462325698654354e-09	portable
+F.F2.H.mu.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.mu.quasi.s01.n8.iterCombNystrom.residual	8.1490370007486490e-14	residual
+F.F2.H.mu.quasi.s01.n8.kulkarni	5.8488969223446930e-10	portable
+F.F2.H.mu.uniform.s01.n16.base	1.6724727815997653e-05	portable
+F.F2.H.mu.uniform.s01.n16.combNystrom	1.5829604294026467e-10	portable
+F.F2.H.mu.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.H.mu.uniform.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.mu.uniform.s01.n16.iterCombNystrom	2.0462520566866260e-12	portable
+F.F2.H.mu.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.mu.uniform.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.mu.uniform.s01.n16.kulkarni	5.0677240182039895e-12	portable
+F.F2.H.mu.uniform.s01.n8.base	0.00011203699101036690	portable
+F.F2.H.mu.uniform.s01.n8.combNystrom	1.1786918108214195e-08	portable
+F.F2.H.mu.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.H.mu.uniform.s01.n8.combNystrom.residual	8.1601392309949000e-14	residual
+F.F2.H.mu.uniform.s01.n8.iterCombNystrom	2.6776647565895930e-10	portable
+F.F2.H.mu.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.mu.uniform.s01.n8.iterCombNystrom.residual	8.1601392309949000e-14	residual
+F.F2.H.mu.uniform.s01.n8.kulkarni	3.9314262956224866e-10	portable
+F.F2.H.theta.geom.s01.n16.base	3.0872463550046803e-06	portable
+F.F2.H.theta.geom.s01.n16.combNystrom	4.7398751590321810e-12	portable
+F.F2.H.theta.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.H.theta.geom.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.theta.geom.s01.n16.iterCombNystrom	1.0891287871572786e-13	portable
+F.F2.H.theta.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.theta.geom.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.theta.geom.s01.n16.kulkarni	4.1411318818518340e-14	portable
+F.F2.H.theta.geom.s01.n8.base	2.3155681587727628e-05	portable
+F.F2.H.theta.geom.s01.n8.combNystrom	6.4038707670022180e-10	portable
+F.F2.H.theta.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.H.theta.geom.s01.n8.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.theta.geom.s01.n8.iterCombNystrom	1.9896528868912355e-11	portable
+F.F2.H.theta.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.theta.geom.s01.n8.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.H.theta.geom.s01.n8.kulkarni	4.4796388820600440e-12	portable
+F.F2.H.theta.geom.s02.n16.base	2.6624422716170493e-05	portable
+F.F2.H.theta.geom.s02.n16.combNystrom	7.4277806128009160e-10	portable
+F.F2.H.theta.geom.s02.n16.combNystrom.iters	107	exact
+F.F2.H.theta.geom.s02.n16.combNystrom.residual	7.9936057773011270e-14	residual
+F.F2.H.theta.geom.s02.n16.iterCombNystrom	4.8220094583939500e-11	portable
+F.F2.H.theta.geom.s02.n16.iterCombNystrom.iters	107	exact
+F.F2.H.theta.geom.s02.n16.iterCombNystrom.residual	7.9936057773011270e-14	residual
+F.F2.H.theta.geom.s02.n16.kulkarni	1.0977885267493548e-12	portable
+F.F2.H.theta.geom.s02.n8.base	0.00021059164152104070	portable
+F.F2.H.theta.geom.s02.n8.combNystrom	8.3792232818957760e-08	portable
+F.F2.H.theta.geom.s02.n8.combNystrom.iters	107	exact
+F.F2.H.theta.geom.s02.n8.combNystrom.residual	7.9825035470548760e-14	residual
+F.F2.H.theta.geom.s02.n8.iterCombNystrom	1.1299217672622320e-08	portable
+F.F2.H.theta.geom.s02.n8.iterCombNystrom.iters	107	exact
+F.F2.H.theta.geom.s02.n8.iterCombNystrom.residual	7.9825035470548760e-14	residual
+F.F2.H.theta.geom.s02.n8.kulkarni	1.8755080821719616e-10	portable
+F.F2.H.theta.graded.s01.n16.base	3.0993026321479710e-05	portable
+F.F2.H.theta.graded.s01.n16.combNystrom	4.0172432047569373e-10	portable
+F.F2.H.theta.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.H.theta.graded.s01.n16.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.H.theta.graded.s01.n16.iterCombNystrom	1.2214673716925972e-11	portable
+F.F2.H.theta.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.theta.graded.s01.n16.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.H.theta.graded.s01.n16.kulkarni	1.5157430865997412e-11	portable
+F.F2.H.theta.graded.s01.n8.base	0.00018191509120213390	portable
+F.F2.H.theta.graded.s01.n8.combNystrom	1.8241079757785883e-08	portable
+F.F2.H.theta.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.H.theta.graded.s01.n8.combNystrom.residual	8.1490370007486490e-14	residual
+F.F2.H.theta.graded.s01.n8.iterCombNystrom	1.0676290962408075e-09	portable
+F.F2.H.theta.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.theta.graded.s01.n8.iterCombNystrom.residual	8.1490370007486490e-14	residual
+F.F2.H.theta.graded.s01.n8.kulkarni	9.5061025717768640e-10	portable
+F.F2.H.theta.quasi.s01.n16.base	2.1088755955744887e-05	portable
+F.F2.H.theta.quasi.s01.n16.combNystrom	4.1132541817034960e-10	portable
+F.F2.H.theta.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.H.theta.quasi.s01.n16.combNystrom.residual	8.1379347705023970e-14	residual
+F.F2.H.theta.quasi.s01.n16.iterCombNystrom	1.4686252214346496e-11	portable
+F.F2.H.theta.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.theta.quasi.s01.n16.iterCombNystrom.residual	8.1379347705023970e-14	residual
+F.F2.H.theta.quasi.s01.n16.kulkarni	3.1709079806319096e-12	portable
+F.F2.H.theta.quasi.s01.n8.base	0.00016892145898972366	portable
+F.F2.H.theta.quasi.s01.n8.combNystrom	4.3451480635781080e-08	portable
+F.F2.H.theta.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.H.theta.quasi.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.theta.quasi.s01.n8.iterCombNystrom	3.1236837561010590e-09	portable
+F.F2.H.theta.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.theta.quasi.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.theta.quasi.s01.n8.kulkarni	3.9412539898364685e-10	portable
+F.F2.H.theta.uniform.s01.n16.base	1.0431537389887780e-05	portable
+F.F2.H.theta.uniform.s01.n16.combNystrom	8.0284667802743570e-11	portable
+F.F2.H.theta.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.H.theta.uniform.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.theta.uniform.s01.n16.iterCombNystrom	2.1385115900329765e-12	portable
+F.F2.H.theta.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.H.theta.uniform.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.H.theta.uniform.s01.n16.kulkarni	3.5760283623176290e-13	portable
+F.F2.H.theta.uniform.s01.n8.base	8.4713295728011670e-05	portable
+F.F2.H.theta.uniform.s01.n8.combNystrom	1.0346192791388376e-08	portable
+F.F2.H.theta.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.H.theta.uniform.s01.n8.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.H.theta.uniform.s01.n8.iterCombNystrom	5.8993188112310690e-10	portable
+F.F2.H.theta.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.H.theta.uniform.s01.n8.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.H.theta.uniform.s01.n8.kulkarni	5.5118687392052834e-11	portable
+F.F2.H.theta.uniform.s02.n16.base	8.8305562707891030e-05	portable
+F.F2.H.theta.uniform.s02.n16.combNystrom	1.0791577742530478e-08	portable
+F.F2.H.theta.uniform.s02.n16.combNystrom.iters	107	exact
+F.F2.H.theta.uniform.s02.n16.combNystrom.residual	8.0269124680398820e-14	residual
+F.F2.H.theta.uniform.s02.n16.iterCombNystrom	1.1059533289170531e-09	portable
+F.F2.H.theta.uniform.s02.n16.iterCombNystrom.iters	107	exact
+F.F2.H.theta.uniform.s02.n16.iterCombNystrom.residual	8.0269124680398820e-14	residual
+F.F2.H.theta.uniform.s02.n16.kulkarni	5.7020499433235730e-11	portable
+F.F2.H.theta.uniform.s02.n8.base	0.00068816719178221850	portable
+F.F2.H.theta.uniform.s02.n8.combNystrom	9.2626040104626380e-07	portable
+F.F2.H.theta.uniform.s02.n8.combNystrom.iters	107	exact
+F.F2.H.theta.uniform.s02.n8.combNystrom.residual	7.9936057773011270e-14	residual
+F.F2.H.theta.uniform.s02.n8.iterCombNystrom	1.7520336803578118e-07	portable
+F.F2.H.theta.uniform.s02.n8.iterCombNystrom.iters	107	exact
+F.F2.H.theta.uniform.s02.n8.iterCombNystrom.residual	7.9936057773011270e-14	residual
+F.F2.H.theta.uniform.s02.n8.kulkarni	4.2037030523189856e-09	portable
+F.F2.T.lambda.geom.s01.n16.base	4.4177955232926890e-06	portable
+F.F2.T.lambda.geom.s01.n16.combNystrom	3.4802161152924780e-11	portable
+F.F2.T.lambda.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.T.lambda.geom.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.lambda.geom.s01.n16.iterCombNystrom	2.8479441027684516e-12	portable
+F.F2.T.lambda.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.geom.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.lambda.geom.s01.n16.kulkarni	1.5443202272535927e-13	portable
+F.F2.T.lambda.geom.s01.n8.base	3.2371682316956196e-05	portable
+F.F2.T.lambda.geom.s01.n8.combNystrom	3.7630603078042670e-09	portable
+F.F2.T.lambda.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.T.lambda.geom.s01.n8.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.lambda.geom.s01.n8.iterCombNystrom	5.0267279227966810e-10	portable
+F.F2.T.lambda.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.geom.s01.n8.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.lambda.geom.s01.n8.kulkarni	8.9389606827694480e-12	portable
+F.F2.T.lambda.graded.s01.n16.base	4.4950872405413730e-05	portable
+F.F2.T.lambda.graded.s01.n16.combNystrom	5.2812643147603920e-11	portable
+F.F2.T.lambda.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.T.lambda.graded.s01.n16.combNystrom.residual	8.2156503822261580e-14	residual
+F.F2.T.lambda.graded.s01.n16.iterCombNystrom	1.0991207943789050e-13	portable
+F.F2.T.lambda.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.graded.s01.n16.iterCombNystrom.residual	8.2156503822261580e-14	residual
+F.F2.T.lambda.graded.s01.n16.kulkarni	2.1040724718091042e-11	portable
+F.F2.T.lambda.graded.s01.n8.base	0.00027753622984438840	portable
+F.F2.T.lambda.graded.s01.n8.combNystrom	4.5717978292003640e-09	portable
+F.F2.T.lambda.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.T.lambda.graded.s01.n8.combNystrom.residual	8.1823436914874040e-14	residual
+F.F2.T.lambda.graded.s01.n8.iterCombNystrom	1.1643130903848942e-11	portable
+F.F2.T.lambda.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.graded.s01.n8.iterCombNystrom.residual	8.1823436914874040e-14	residual
+F.F2.T.lambda.graded.s01.n8.kulkarni	1.6248519196793154e-09	portable
+F.F2.T.lambda.quasi.s01.n16.base	3.3715099918896210e-05	portable
+F.F2.T.lambda.quasi.s01.n16.combNystrom	1.5965490041125463e-09	portable
+F.F2.T.lambda.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.T.lambda.quasi.s01.n16.combNystrom.residual	8.2378548427186620e-14	residual
+F.F2.T.lambda.quasi.s01.n16.iterCombNystrom	1.4990442220863542e-10	portable
+F.F2.T.lambda.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.quasi.s01.n16.iterCombNystrom.residual	8.2378548427186620e-14	residual
+F.F2.T.lambda.quasi.s01.n16.kulkarni	3.0263014316744830e-11	portable
+F.F2.T.lambda.quasi.s01.n8.base	0.00028434933000442975	portable
+F.F2.T.lambda.quasi.s01.n8.combNystrom	1.3144880894877530e-07	portable
+F.F2.T.lambda.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.T.lambda.quasi.s01.n8.combNystrom.residual	8.1490370007486490e-14	residual
+F.F2.T.lambda.quasi.s01.n8.iterCombNystrom	1.7540328967058372e-08	portable
+F.F2.T.lambda.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.quasi.s01.n8.iterCombNystrom.residual	8.1490370007486490e-14	residual
+F.F2.T.lambda.quasi.s01.n8.kulkarni	2.7596003260299540e-09	portable
+F.F2.T.lambda.uniform.s01.n16.base	1.6327733830312496e-05	portable
+F.F2.T.lambda.uniform.s01.n16.combNystrom	3.8518088718575427e-10	portable
+F.F2.T.lambda.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.T.lambda.uniform.s01.n16.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.lambda.uniform.s01.n16.iterCombNystrom	3.4408031979182850e-11	portable
+F.F2.T.lambda.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.uniform.s01.n16.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.lambda.uniform.s01.n16.kulkarni	5.6342708276702070e-12	portable
+F.F2.T.lambda.uniform.s01.n8.base	0.00013945626282363400	portable
+F.F2.T.lambda.uniform.s01.n8.combNystrom	3.9618133329533120e-08	portable
+F.F2.T.lambda.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.T.lambda.uniform.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.lambda.uniform.s01.n8.iterCombNystrom	5.5035812573933640e-09	portable
+F.F2.T.lambda.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.lambda.uniform.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.lambda.uniform.s01.n8.kulkarni	5.6631566103249040e-10	portable
+F.F2.T.mu.geom.s01.n16.base	9.1817103599067800e-06	portable
+F.F2.T.mu.geom.s01.n16.combNystrom	1.8186341321779764e-11	portable
+F.F2.T.mu.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.T.mu.geom.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.mu.geom.s01.n16.iterCombNystrom	5.3179682879545000e-14	portable
+F.F2.T.mu.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.mu.geom.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.mu.geom.s01.n16.kulkarni	3.1006308631731370e-12	portable
+F.F2.T.mu.geom.s01.n8.base	7.1923648118255020e-05	portable
+F.F2.T.mu.geom.s01.n8.combNystrom	1.5942406283997457e-09	portable
+F.F2.T.mu.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.T.mu.geom.s01.n8.combNystrom.residual	8.1490370007486490e-14	residual
+F.F2.T.mu.geom.s01.n8.iterCombNystrom	2.2417623313231160e-11	portable
+F.F2.T.mu.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.mu.geom.s01.n8.iterCombNystrom.residual	8.1490370007486490e-14	residual
+F.F2.T.mu.geom.s01.n8.kulkarni	3.3982505698304520e-10	portable
+F.F2.T.mu.graded.s01.n16.base	5.3157048634178140e-05	portable
+F.F2.T.mu.graded.s01.n16.combNystrom	9.4181107357371730e-11	portable
+F.F2.T.mu.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.T.mu.graded.s01.n16.combNystrom.residual	8.2045481519799070e-14	residual
+F.F2.T.mu.graded.s01.n16.iterCombNystrom	1.3656853425914050e-12	portable
+F.F2.T.mu.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.mu.graded.s01.n16.iterCombNystrom.residual	8.2045481519799070e-14	residual
+F.F2.T.mu.graded.s01.n16.kulkarni	4.4816372835043694e-11	portable
+F.F2.T.mu.graded.s01.n8.base	0.00033226559693222413	portable
+F.F2.T.mu.graded.s01.n8.combNystrom	6.6618708327581540e-09	portable
+F.F2.T.mu.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.T.mu.graded.s01.n8.combNystrom.residual	8.1823436914874040e-14	residual
+F.F2.T.mu.graded.s01.n8.iterCombNystrom	2.3161605966492970e-10	portable
+F.F2.T.mu.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.mu.graded.s01.n8.iterCombNystrom.residual	8.1823436914874040e-14	residual
+F.F2.T.mu.graded.s01.n8.kulkarni	3.5083254079637527e-09	portable
+F.F2.T.mu.quasi.s01.n16.base	4.3609716005921230e-05	portable
+F.F2.T.mu.quasi.s01.n16.combNystrom	7.0554972975145350e-10	portable
+F.F2.T.mu.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.T.mu.quasi.s01.n16.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.mu.quasi.s01.n16.iterCombNystrom	1.4262591108149536e-11	portable
+F.F2.T.mu.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.mu.quasi.s01.n16.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.mu.quasi.s01.n16.kulkarni	2.0589752125488303e-11	portable
+F.F2.T.mu.quasi.s01.n8.base	0.00026579893444855784	portable
+F.F2.T.mu.quasi.s01.n8.combNystrom	4.0837440207219800e-08	portable
+F.F2.T.mu.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.T.mu.quasi.s01.n8.combNystrom.residual	8.1601392309949000e-14	residual
+F.F2.T.mu.quasi.s01.n8.iterCombNystrom	1.5726341340283057e-09	portable
+F.F2.T.mu.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.mu.quasi.s01.n8.iterCombNystrom.residual	8.1601392309949000e-14	residual
+F.F2.T.mu.quasi.s01.n8.kulkarni	1.0677412287662946e-09	portable
+F.F2.T.mu.uniform.s01.n16.base	2.4289582909675644e-05	portable
+F.F2.T.mu.uniform.s01.n16.combNystrom	1.8721579841951552e-10	portable
+F.F2.T.mu.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.T.mu.uniform.s01.n16.combNystrom.residual	8.1268325402561460e-14	residual
+F.F2.T.mu.uniform.s01.n16.iterCombNystrom	2.1541657346801912e-12	portable
+F.F2.T.mu.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.mu.uniform.s01.n16.iterCombNystrom.residual	8.1268325402561460e-14	residual
+F.F2.T.mu.uniform.s01.n16.kulkarni	1.0460188271110837e-11	portable
+F.F2.T.mu.uniform.s01.n8.base	0.00016862646023962924	portable
+F.F2.T.mu.uniform.s01.n8.combNystrom	1.4347840915363008e-08	portable
+F.F2.T.mu.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.T.mu.uniform.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.mu.uniform.s01.n8.iterCombNystrom	2.8216595726604510e-10	portable
+F.F2.T.mu.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.mu.uniform.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.mu.uniform.s01.n8.kulkarni	8.7020357586453660e-10	portable
+F.F2.T.theta.geom.s01.n16.base	4.2558492706623600e-06	portable
+F.F2.T.theta.geom.s01.n16.combNystrom	5.3286264289909010e-12	portable
+F.F2.T.theta.geom.s01.n16.combNystrom.iters	47	exact
+F.F2.T.theta.geom.s01.n16.combNystrom.residual	8.1823436914874040e-14	residual
+F.F2.T.theta.geom.s01.n16.iterCombNystrom	1.1046719095020308e-13	portable
+F.F2.T.theta.geom.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.theta.geom.s01.n16.iterCombNystrom.residual	8.1823436914874040e-14	residual
+F.F2.T.theta.geom.s01.n16.kulkarni	1.3355982986240633e-13	portable
+F.F2.T.theta.geom.s01.n8.base	3.2028335642420025e-05	portable
+F.F2.T.theta.geom.s01.n8.combNystrom	7.2395078820619570e-10	portable
+F.F2.T.theta.geom.s01.n8.combNystrom.iters	47	exact
+F.F2.T.theta.geom.s01.n8.combNystrom.residual	8.2156503822261580e-14	residual
+F.F2.T.theta.geom.s01.n8.iterCombNystrom	2.0621726548597508e-11	portable
+F.F2.T.theta.geom.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.theta.geom.s01.n8.iterCombNystrom.residual	8.2156503822261580e-14	residual
+F.F2.T.theta.geom.s01.n8.kulkarni	1.6419088311181440e-11	portable
+F.F2.T.theta.geom.s02.n16.base	3.5892076838406340e-05	portable
+F.F2.T.theta.geom.s02.n16.combNystrom	8.4677542755429160e-10	portable
+F.F2.T.theta.geom.s02.n16.combNystrom.iters	107	exact
+F.F2.T.theta.geom.s02.n16.combNystrom.residual	8.0380146982861330e-14	residual
+F.F2.T.theta.geom.s02.n16.iterCombNystrom	5.2428505981083620e-11	portable
+F.F2.T.theta.geom.s02.n16.iterCombNystrom.iters	107	exact
+F.F2.T.theta.geom.s02.n16.iterCombNystrom.residual	8.0380146982861330e-14	residual
+F.F2.T.theta.geom.s02.n16.kulkarni	3.3979485891677540e-12	portable
+F.F2.T.theta.geom.s02.n8.base	0.00027326126503701700	portable
+F.F2.T.theta.geom.s02.n8.combNystrom	9.7571536961105210e-08	portable
+F.F2.T.theta.geom.s02.n8.combNystrom.iters	107	exact
+F.F2.T.theta.geom.s02.n8.combNystrom.residual	8.0380146982861330e-14	residual
+F.F2.T.theta.geom.s02.n8.iterCombNystrom	1.2550699035607238e-08	portable
+F.F2.T.theta.geom.s02.n8.iterCombNystrom.iters	107	exact
+F.F2.T.theta.geom.s02.n8.iterCombNystrom.residual	8.0380146982861330e-14	residual
+F.F2.T.theta.geom.s02.n8.kulkarni	3.8893999132483260e-10	portable
+F.F2.T.theta.graded.s01.n16.base	4.6131955771300250e-05	portable
+F.F2.T.theta.graded.s01.n16.combNystrom	4.9294346382566800e-10	portable
+F.F2.T.theta.graded.s01.n16.combNystrom.iters	47	exact
+F.F2.T.theta.graded.s01.n16.combNystrom.residual	8.1601392309949000e-14	residual
+F.F2.T.theta.graded.s01.n16.iterCombNystrom	1.5192513913575567e-11	portable
+F.F2.T.theta.graded.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.theta.graded.s01.n16.iterCombNystrom.residual	8.1601392309949000e-14	residual
+F.F2.T.theta.graded.s01.n16.kulkarni	3.4125813286323137e-11	portable
+F.F2.T.theta.graded.s01.n8.base	0.00029053693551195360	portable
+F.F2.T.theta.graded.s01.n8.combNystrom	2.4364839812385242e-08	portable
+F.F2.T.theta.graded.s01.n8.combNystrom.iters	47	exact
+F.F2.T.theta.graded.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.theta.graded.s01.n8.iterCombNystrom	1.4658926295041397e-09	portable
+F.F2.T.theta.graded.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.theta.graded.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.theta.graded.s01.n8.kulkarni	2.5147899318511690e-09	portable
+F.F2.T.theta.quasi.s01.n16.base	2.9419241466377420e-05	portable
+F.F2.T.theta.quasi.s01.n16.combNystrom	4.7312553874689910e-10	portable
+F.F2.T.theta.quasi.s01.n16.combNystrom.iters	47	exact
+F.F2.T.theta.quasi.s01.n16.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.theta.quasi.s01.n16.iterCombNystrom	1.6599277508078103e-11	portable
+F.F2.T.theta.quasi.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.theta.quasi.s01.n16.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.theta.quasi.s01.n16.kulkarni	6.2837512970759235e-12	portable
+F.F2.T.theta.quasi.s01.n8.base	0.00024114521735829620	portable
+F.F2.T.theta.quasi.s01.n8.combNystrom	5.1739051931676270e-08	portable
+F.F2.T.theta.quasi.s01.n8.combNystrom.iters	47	exact
+F.F2.T.theta.quasi.s01.n8.combNystrom.residual	8.1490370007486490e-14	residual
+F.F2.T.theta.quasi.s01.n8.iterCombNystrom	3.6787621837675033e-09	portable
+F.F2.T.theta.quasi.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.theta.quasi.s01.n8.iterCombNystrom.residual	8.1490370007486490e-14	residual
+F.F2.T.theta.quasi.s01.n8.kulkarni	9.1244900524145580e-10	portable
+F.F2.T.theta.uniform.s01.n16.base	1.4496041698119910e-05	portable
+F.F2.T.theta.uniform.s01.n16.combNystrom	9.1721186201709770e-11	portable
+F.F2.T.theta.uniform.s01.n16.combNystrom.iters	47	exact
+F.F2.T.theta.uniform.s01.n16.combNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.theta.uniform.s01.n16.iterCombNystrom	2.3785418079569354e-12	portable
+F.F2.T.theta.uniform.s01.n16.iterCombNystrom.iters	47	exact
+F.F2.T.theta.uniform.s01.n16.iterCombNystrom.residual	8.1934459217336550e-14	residual
+F.F2.T.theta.uniform.s01.n16.kulkarni	6.0285110237146000e-13	portable
+F.F2.T.theta.uniform.s01.n8.base	0.00011817647318890234	portable
+F.F2.T.theta.uniform.s01.n8.combNystrom	1.2041050712063850e-08	portable
+F.F2.T.theta.uniform.s01.n8.combNystrom.iters	47	exact
+F.F2.T.theta.uniform.s01.n8.combNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.theta.uniform.s01.n8.iterCombNystrom	6.7274474879752690e-10	portable
+F.F2.T.theta.uniform.s01.n8.iterCombNystrom.iters	47	exact
+F.F2.T.theta.uniform.s01.n8.iterCombNystrom.residual	8.1712414612411520e-14	residual
+F.F2.T.theta.uniform.s01.n8.kulkarni	1.0353062851464756e-10	portable
+F.F2.T.theta.uniform.s02.n16.base	0.00012263383958543983	portable
+F.F2.T.theta.uniform.s02.n16.combNystrom	1.2540523286475036e-08	portable
+F.F2.T.theta.uniform.s02.n16.combNystrom.iters	107	exact
+F.F2.T.theta.uniform.s02.n16.combNystrom.residual	8.0713213890248880e-14	residual
+F.F2.T.theta.uniform.s02.n16.iterCombNystrom	1.2608689647919391e-09	portable
+F.F2.T.theta.uniform.s02.n16.iterCombNystrom.iters	107	exact
+F.F2.T.theta.uniform.s02.n16.iterCombNystrom.residual	8.0713213890248880e-14	residual
+F.F2.T.theta.uniform.s02.n16.kulkarni	1.0432976704777275e-10	portable
+F.F2.T.theta.uniform.s02.n8.base	0.00098203179423106410	portable
+F.F2.T.theta.uniform.s02.n8.combNystrom	1.1414474853088663e-06	portable
+F.F2.T.theta.uniform.s02.n8.combNystrom.iters	107	exact
+F.F2.T.theta.uniform.s02.n8.combNystrom.residual	7.9825035470548760e-14	residual
+F.F2.T.theta.uniform.s02.n8.iterCombNystrom	2.1339208589044034e-07	portable
+F.F2.T.theta.uniform.s02.n8.iterCombNystrom.iters	107	exact
+F.F2.T.theta.uniform.s02.n8.iterCombNystrom.residual	7.9825035470548760e-14	residual
+F.F2.T.theta.uniform.s02.n8.kulkarni	1.0290941765411787e-08	portable
+V.V2.B.lambda.geom.s01.n16.base	3.6285254902956865e-06	portable
+V.V2.B.lambda.geom.s01.n16.combNystrom	3.6054932273099640e-07	portable
+V.V2.B.lambda.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.B.lambda.geom.s01.n16.combNystrom.residual	3.6581848661398910e-14	residual
+V.V2.B.lambda.geom.s01.n16.iterCombNystrom	7.1945171042919750e-08	portable
+V.V2.B.lambda.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.geom.s01.n16.iterCombNystrom.residual	3.6581848661398910e-14	residual
+V.V2.B.lambda.geom.s01.n16.kulkarni	9.4827516505802120e-08	portable
+V.V2.B.lambda.geom.s01.n8.base	2.7025050146844976e-05	portable
+V.V2.B.lambda.geom.s01.n8.combNystrom	4.8867113877637540e-06	portable
+V.V2.B.lambda.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.B.lambda.geom.s01.n8.combNystrom.residual	3.7858605139717840e-14	residual
+V.V2.B.lambda.geom.s01.n8.iterCombNystrom	1.0512154898778547e-06	portable
+V.V2.B.lambda.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.geom.s01.n8.iterCombNystrom.residual	3.7858605139717840e-14	residual
+V.V2.B.lambda.geom.s01.n8.kulkarni	1.3348667800006098e-06	portable
+V.V2.B.lambda.graded.s01.n16.base	3.8321901153270940e-05	portable
+V.V2.B.lambda.graded.s01.n16.combNystrom	1.6787781440541494e-06	portable
+V.V2.B.lambda.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.B.lambda.graded.s01.n16.combNystrom.residual	3.6637359812630166e-14	residual
+V.V2.B.lambda.graded.s01.n16.iterCombNystrom	1.8415492231138586e-07	portable
+V.V2.B.lambda.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.graded.s01.n16.iterCombNystrom.residual	3.6637359812630166e-14	residual
+V.V2.B.lambda.graded.s01.n16.kulkarni	4.5273867721462580e-07	portable
+V.V2.B.lambda.graded.s01.n8.base	0.00023266636169438915	portable
+V.V2.B.lambda.graded.s01.n8.combNystrom	1.7568305284765273e-05	portable
+V.V2.B.lambda.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.B.lambda.graded.s01.n8.combNystrom.residual	4.0800696154974500e-14	residual
+V.V2.B.lambda.graded.s01.n8.iterCombNystrom	2.3825698531876327e-06	portable
+V.V2.B.lambda.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.graded.s01.n8.iterCombNystrom.residual	4.0800696154974500e-14	residual
+V.V2.B.lambda.graded.s01.n8.kulkarni	5.0987480130215700e-06	portable
+V.V2.B.lambda.quasi.s01.n16.base	2.5782600280410684e-05	portable
+V.V2.B.lambda.quasi.s01.n16.combNystrom	2.8646023464418136e-06	portable
+V.V2.B.lambda.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.B.lambda.quasi.s01.n16.combNystrom.residual	3.6526337510167650e-14	residual
+V.V2.B.lambda.quasi.s01.n16.iterCombNystrom	2.3277674821020610e-07	portable
+V.V2.B.lambda.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.quasi.s01.n16.iterCombNystrom.residual	3.6526337510167650e-14	residual
+V.V2.B.lambda.quasi.s01.n16.kulkarni	7.6881964372610410e-07	portable
+V.V2.B.lambda.quasi.s01.n8.base	0.00020703847868497327	portable
+V.V2.B.lambda.quasi.s01.n8.combNystrom	2.8953275790888355e-05	portable
+V.V2.B.lambda.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.B.lambda.quasi.s01.n8.combNystrom.residual	4.0523140398818214e-14	residual
+V.V2.B.lambda.quasi.s01.n8.iterCombNystrom	2.7397601749523660e-06	portable
+V.V2.B.lambda.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.quasi.s01.n8.iterCombNystrom.residual	4.0523140398818214e-14	residual
+V.V2.B.lambda.quasi.s01.n8.kulkarni	7.9619221176052690e-06	portable
+V.V2.B.lambda.uniform.s01.n16.base	1.2580066729439565e-05	portable
+V.V2.B.lambda.uniform.s01.n16.combNystrom	1.3329346695289956e-06	portable
+V.V2.B.lambda.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.B.lambda.uniform.s01.n16.combNystrom.residual	3.6470826358936390e-14	residual
+V.V2.B.lambda.uniform.s01.n16.iterCombNystrom	1.3764830519846782e-07	portable
+V.V2.B.lambda.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.uniform.s01.n16.iterCombNystrom.residual	3.6470826358936390e-14	residual
+V.V2.B.lambda.uniform.s01.n16.kulkarni	3.5492057193220460e-07	portable
+V.V2.B.lambda.uniform.s01.n8.base	0.00010086805292319756	portable
+V.V2.B.lambda.uniform.s01.n8.combNystrom	1.6061675418344024e-05	portable
+V.V2.B.lambda.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.B.lambda.uniform.s01.n8.combNystrom.residual	3.9190872769268026e-14	residual
+V.V2.B.lambda.uniform.s01.n8.iterCombNystrom	1.8700990912501325e-06	portable
+V.V2.B.lambda.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.lambda.uniform.s01.n8.iterCombNystrom.residual	3.9190872769268026e-14	residual
+V.V2.B.lambda.uniform.s01.n8.kulkarni	4.4235260708846980e-06	portable
+V.V2.B.mu.geom.s01.n16.base	7.5318091019571650e-06	portable
+V.V2.B.mu.geom.s01.n16.combNystrom	1.8979788196649140e-07	portable
+V.V2.B.mu.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.B.mu.geom.s01.n16.combNystrom.residual	3.6359804056473877e-14	residual
+V.V2.B.mu.geom.s01.n16.iterCombNystrom	2.2754684358972100e-08	portable
+V.V2.B.mu.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.mu.geom.s01.n16.iterCombNystrom.residual	3.6359804056473877e-14	residual
+V.V2.B.mu.geom.s01.n16.kulkarni	5.2085903479159870e-08	portable
+V.V2.B.mu.geom.s01.n8.base	5.6235240228463820e-05	portable
+V.V2.B.mu.geom.s01.n8.combNystrom	2.4676779083465660e-06	portable
+V.V2.B.mu.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.B.mu.geom.s01.n8.combNystrom.residual	3.6470826358936390e-14	residual
+V.V2.B.mu.geom.s01.n8.iterCombNystrom	3.3031273372063907e-07	portable
+V.V2.B.mu.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.mu.geom.s01.n8.iterCombNystrom.residual	3.6470826358936390e-14	residual
+V.V2.B.mu.geom.s01.n8.kulkarni	7.2570702303043080e-07	portable
+V.V2.B.mu.graded.s01.n16.base	4.4975337140873430e-05	portable
+V.V2.B.mu.graded.s01.n16.combNystrom	1.2420753487951686e-06	portable
+V.V2.B.mu.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.B.mu.graded.s01.n16.combNystrom.residual	3.6415315207705135e-14	residual
+V.V2.B.mu.graded.s01.n16.iterCombNystrom	8.1269881269108170e-08	portable
+V.V2.B.mu.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.mu.graded.s01.n16.iterCombNystrom.residual	3.6415315207705135e-14	residual
+V.V2.B.mu.graded.s01.n16.kulkarni	3.2972902741512655e-07	portable
+V.V2.B.mu.graded.s01.n8.base	0.00027500863772633720	portable
+V.V2.B.mu.graded.s01.n8.combNystrom	1.3197524269203953e-05	portable
+V.V2.B.mu.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.B.mu.graded.s01.n8.combNystrom.residual	3.8358205500799160e-14	residual
+V.V2.B.mu.graded.s01.n8.iterCombNystrom	9.8701706707782220e-07	portable
+V.V2.B.mu.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.mu.graded.s01.n8.iterCombNystrom.residual	3.8358205500799160e-14	residual
+V.V2.B.mu.graded.s01.n8.kulkarni	3.7373701902154720e-06	portable
+V.V2.B.mu.quasi.s01.n16.base	3.7962719087181185e-05	portable
+V.V2.B.mu.quasi.s01.n16.combNystrom	9.6742782451642030e-07	portable
+V.V2.B.mu.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.B.mu.quasi.s01.n16.combNystrom.residual	3.6193270602780103e-14	residual
+V.V2.B.mu.quasi.s01.n16.iterCombNystrom	7.4576345765464680e-08	portable
+V.V2.B.mu.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.mu.quasi.s01.n16.iterCombNystrom.residual	3.6193270602780103e-14	residual
+V.V2.B.mu.quasi.s01.n16.kulkarni	2.7686837955620547e-07	portable
+V.V2.B.mu.quasi.s01.n8.base	0.00023499055384323952	portable
+V.V2.B.mu.quasi.s01.n8.combNystrom	1.0698437762579616e-05	portable
+V.V2.B.mu.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.B.mu.quasi.s01.n8.combNystrom.residual	3.7969627442180354e-14	residual
+V.V2.B.mu.quasi.s01.n8.iterCombNystrom	9.5086211482353630e-07	portable
+V.V2.B.mu.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.mu.quasi.s01.n8.iterCombNystrom.residual	3.7969627442180354e-14	residual
+V.V2.B.mu.quasi.s01.n8.kulkarni	2.7978545444895530e-06	portable
+V.V2.B.mu.uniform.s01.n16.base	2.0888100098148676e-05	portable
+V.V2.B.mu.uniform.s01.n16.combNystrom	5.4818073569329330e-07	portable
+V.V2.B.mu.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.B.mu.uniform.s01.n16.combNystrom.residual	3.6026737149086330e-14	residual
+V.V2.B.mu.uniform.s01.n16.iterCombNystrom	4.3667218951881640e-08	portable
+V.V2.B.mu.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.mu.uniform.s01.n16.iterCombNystrom.residual	3.6026737149086330e-14	residual
+V.V2.B.mu.uniform.s01.n16.kulkarni	1.5436688505232610e-07	portable
+V.V2.B.mu.uniform.s01.n8.base	0.00014525008586685484	portable
+V.V2.B.mu.uniform.s01.n8.combNystrom	5.3629391406628810e-06	portable
+V.V2.B.mu.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.B.mu.uniform.s01.n8.combNystrom.residual	3.7192471324942744e-14	residual
+V.V2.B.mu.uniform.s01.n8.iterCombNystrom	6.0425804992991770e-07	portable
+V.V2.B.mu.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.mu.uniform.s01.n8.iterCombNystrom.residual	3.7192471324942744e-14	residual
+V.V2.B.mu.uniform.s01.n8.kulkarni	1.5336400824850216e-06	portable
+V.V2.B.theta.geom.s01.n16.base	3.6314450582164426e-06	portable
+V.V2.B.theta.geom.s01.n16.combNystrom	2.7108066635861405e-07	portable
+V.V2.B.theta.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.B.theta.geom.s01.n16.combNystrom.residual	3.6082248300317590e-14	residual
+V.V2.B.theta.geom.s01.n16.iterCombNystrom	2.0944918355247920e-08	portable
+V.V2.B.theta.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.theta.geom.s01.n16.iterCombNystrom.residual	3.6082248300317590e-14	residual
+V.V2.B.theta.geom.s01.n16.kulkarni	7.0291662823684930e-08	portable
+V.V2.B.theta.geom.s01.n8.base	2.7050063674982640e-05	portable
+V.V2.B.theta.geom.s01.n8.combNystrom	3.7584675965929293e-06	portable
+V.V2.B.theta.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.B.theta.geom.s01.n8.combNystrom.residual	3.6692870963861424e-14	residual
+V.V2.B.theta.geom.s01.n8.iterCombNystrom	3.7439300559771740e-07	portable
+V.V2.B.theta.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.theta.geom.s01.n8.iterCombNystrom.residual	3.6692870963861424e-14	residual
+V.V2.B.theta.geom.s01.n8.kulkarni	1.0034913288103908e-06	portable
+V.V2.B.theta.geom.s02.n16.base	2.9075144692747300e-05	portable
+V.V2.B.theta.geom.s02.n16.combNystrom	3.6546128426850900e-06	portable
+V.V2.B.theta.geom.s02.n16.combNystrom.iters	15	exact
+V.V2.B.theta.geom.s02.n16.combNystrom.residual	1.2156942119645464e-14	residual
+V.V2.B.theta.geom.s02.n16.iterCombNystrom	2.5290538141486960e-07	portable
+V.V2.B.theta.geom.s02.n16.iterCombNystrom.iters	15	exact
+V.V2.B.theta.geom.s02.n16.iterCombNystrom.residual	1.2156942119645464e-14	residual
+V.V2.B.theta.geom.s02.n16.kulkarni	9.7479708971448530e-07	portable
+V.V2.B.theta.geom.s02.n8.base	0.00020864554730348760	portable
+V.V2.B.theta.geom.s02.n8.combNystrom	4.4309608167480974e-05	portable
+V.V2.B.theta.geom.s02.n8.combNystrom.iters	15	exact
+V.V2.B.theta.geom.s02.n8.combNystrom.residual	1.2490009027033011e-14	residual
+V.V2.B.theta.geom.s02.n8.iterCombNystrom	4.2070287398221495e-06	portable
+V.V2.B.theta.geom.s02.n8.iterCombNystrom.iters	15	exact
+V.V2.B.theta.geom.s02.n8.iterCombNystrom.residual	1.2490009027033011e-14	residual
+V.V2.B.theta.geom.s02.n8.kulkarni	1.2323084155552166e-05	portable
+V.V2.B.theta.graded.s01.n16.base	3.8400509997482680e-05	portable
+V.V2.B.theta.graded.s01.n16.combNystrom	1.1990802227801467e-06	portable
+V.V2.B.theta.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.B.theta.graded.s01.n16.combNystrom.residual	3.6137759451548845e-14	residual
+V.V2.B.theta.graded.s01.n16.iterCombNystrom	7.4007146633192630e-08	portable
+V.V2.B.theta.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.theta.graded.s01.n16.iterCombNystrom.residual	3.6137759451548845e-14	residual
+V.V2.B.theta.graded.s01.n16.kulkarni	3.4428718842516304e-07	portable
+V.V2.B.theta.graded.s01.n8.base	0.00023369853710553112	portable
+V.V2.B.theta.graded.s01.n8.combNystrom	1.1726250940591320e-05	portable
+V.V2.B.theta.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.B.theta.graded.s01.n8.combNystrom.residual	3.8524738954492930e-14	residual
+V.V2.B.theta.graded.s01.n8.iterCombNystrom	1.1175391085860298e-06	portable
+V.V2.B.theta.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.theta.graded.s01.n8.iterCombNystrom.residual	3.8524738954492930e-14	residual
+V.V2.B.theta.graded.s01.n8.kulkarni	3.6645241382471383e-06	portable
+V.V2.B.theta.quasi.s01.n16.base	2.3913301005373810e-05	portable
+V.V2.B.theta.quasi.s01.n16.combNystrom	2.3470934944480604e-06	portable
+V.V2.B.theta.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.B.theta.quasi.s01.n16.combNystrom.residual	3.6359804056473877e-14	residual
+V.V2.B.theta.quasi.s01.n16.iterCombNystrom	1.1548140943506979e-07	portable
+V.V2.B.theta.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.theta.quasi.s01.n16.iterCombNystrom.residual	3.6359804056473877e-14	residual
+V.V2.B.theta.quasi.s01.n16.kulkarni	6.2218876895059340e-07	portable
+V.V2.B.theta.quasi.s01.n8.base	0.00018657849419534410	portable
+V.V2.B.theta.quasi.s01.n8.combNystrom	2.5150806316820430e-05	portable
+V.V2.B.theta.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.B.theta.quasi.s01.n8.combNystrom.residual	3.8913317013111737e-14	residual
+V.V2.B.theta.quasi.s01.n8.iterCombNystrom	1.9225391286736837e-06	portable
+V.V2.B.theta.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.theta.quasi.s01.n8.iterCombNystrom.residual	3.8913317013111737e-14	residual
+V.V2.B.theta.quasi.s01.n8.kulkarni	6.8795759310402715e-06	portable
+V.V2.B.theta.uniform.s01.n16.base	1.1939361908686053e-05	portable
+V.V2.B.theta.uniform.s01.n16.combNystrom	1.0577457492111364e-06	portable
+V.V2.B.theta.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.B.theta.uniform.s01.n16.combNystrom.residual	3.5971225997855070e-14	residual
+V.V2.B.theta.uniform.s01.n16.iterCombNystrom	5.3434406344088360e-08	portable
+V.V2.B.theta.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.B.theta.uniform.s01.n16.iterCombNystrom.residual	3.5971225997855070e-14	residual
+V.V2.B.theta.uniform.s01.n16.kulkarni	2.7779677336248200e-07	portable
+V.V2.B.theta.uniform.s01.n8.base	9.3402936026665270e-05	portable
+V.V2.B.theta.uniform.s01.n8.combNystrom	1.3381993650862789e-05	portable
+V.V2.B.theta.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.B.theta.uniform.s01.n8.combNystrom.residual	3.7636560534792807e-14	residual
+V.V2.B.theta.uniform.s01.n8.iterCombNystrom	9.4049874688195700e-07	portable
+V.V2.B.theta.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.B.theta.uniform.s01.n8.iterCombNystrom.residual	3.7636560534792807e-14	residual
+V.V2.B.theta.uniform.s01.n8.kulkarni	3.6306810182740180e-06	portable
+V.V2.B.theta.uniform.s02.n16.base	9.3402936026665270e-05	portable
+V.V2.B.theta.uniform.s02.n16.combNystrom	1.3381993650973811e-05	portable
+V.V2.B.theta.uniform.s02.n16.combNystrom.iters	15	exact
+V.V2.B.theta.uniform.s02.n16.combNystrom.residual	1.1990408665951690e-14	residual
+V.V2.B.theta.uniform.s02.n16.iterCombNystrom	9.4049891863345890e-07	portable
+V.V2.B.theta.uniform.s02.n16.iterCombNystrom.iters	15	exact
+V.V2.B.theta.uniform.s02.n16.iterCombNystrom.residual	1.1990408665951690e-14	residual
+V.V2.B.theta.uniform.s02.n16.kulkarni	3.6306810182740180e-06	portable
+V.V2.B.theta.uniform.s02.n8.base	0.00066914855798083650	portable
+V.V2.B.theta.uniform.s02.n8.combNystrom	0.00014289164875147530	portable
+V.V2.B.theta.uniform.s02.n8.combNystrom.iters	15	exact
+V.V2.B.theta.uniform.s02.n8.combNystrom.residual	1.3766765505351941e-14	residual
+V.V2.B.theta.uniform.s02.n8.iterCombNystrom	1.5778906939711845e-05	portable
+V.V2.B.theta.uniform.s02.n8.iterCombNystrom.iters	15	exact
+V.V2.B.theta.uniform.s02.n8.iterCombNystrom.residual	1.3766765505351941e-14	residual
+V.V2.B.theta.uniform.s02.n8.kulkarni	4.0638583296725980e-05	portable
+V.V2.H.lambda.geom.s01.n16.base	3.0579553254028724e-06	portable
+V.V2.H.lambda.geom.s01.n16.combNystrom	3.2699266383495740e-07	portable
+V.V2.H.lambda.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.H.lambda.geom.s01.n16.combNystrom.residual	3.6193270602780103e-14	residual
+V.V2.H.lambda.geom.s01.n16.iterCombNystrom	5.8733809593647380e-08	portable
+V.V2.H.lambda.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.geom.s01.n16.iterCombNystrom.residual	3.6193270602780103e-14	residual
+V.V2.H.lambda.geom.s01.n16.kulkarni	7.7836470935288560e-08	portable
+V.V2.H.lambda.geom.s01.n8.base	2.2479242532957855e-05	portable
+V.V2.H.lambda.geom.s01.n8.combNystrom	4.3850504838349735e-06	portable
+V.V2.H.lambda.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.H.lambda.geom.s01.n8.combNystrom.residual	3.7969627442180354e-14	residual
+V.V2.H.lambda.geom.s01.n8.iterCombNystrom	8.5173871178234610e-07	portable
+V.V2.H.lambda.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.geom.s01.n8.iterCombNystrom.residual	3.7969627442180354e-14	residual
+V.V2.H.lambda.geom.s01.n8.kulkarni	1.0792156812655662e-06	portable
+V.V2.H.lambda.graded.s01.n16.base	3.0816760065000004e-05	portable
+V.V2.H.lambda.graded.s01.n16.combNystrom	1.5075614332449305e-06	portable
+V.V2.H.lambda.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.H.lambda.graded.s01.n16.combNystrom.residual	3.6470826358936390e-14	residual
+V.V2.H.lambda.graded.s01.n16.iterCombNystrom	1.5952787379980293e-07	portable
+V.V2.H.lambda.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.graded.s01.n16.iterCombNystrom.residual	3.6470826358936390e-14	residual
+V.V2.H.lambda.graded.s01.n16.kulkarni	3.6445151829767040e-07	portable
+V.V2.H.lambda.graded.s01.n8.base	0.00017945866780233466	portable
+V.V2.H.lambda.graded.s01.n8.combNystrom	1.5377607228583834e-05	portable
+V.V2.H.lambda.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.H.lambda.graded.s01.n8.combNystrom.residual	4.0800696154974500e-14	residual
+V.V2.H.lambda.graded.s01.n8.iterCombNystrom	2.0280121453275513e-06	portable
+V.V2.H.lambda.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.graded.s01.n8.iterCombNystrom.residual	4.0800696154974500e-14	residual
+V.V2.H.lambda.graded.s01.n8.kulkarni	3.9409162159165230e-06	portable
+V.V2.H.lambda.quasi.s01.n16.base	2.1587305254255895e-05	portable
+V.V2.H.lambda.quasi.s01.n16.combNystrom	2.5801557982374490e-06	portable
+V.V2.H.lambda.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.H.lambda.quasi.s01.n16.combNystrom.residual	3.6748382115092680e-14	residual
+V.V2.H.lambda.quasi.s01.n16.iterCombNystrom	2.0600686556626613e-07	portable
+V.V2.H.lambda.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.quasi.s01.n16.iterCombNystrom.residual	3.6748382115092680e-14	residual
+V.V2.H.lambda.quasi.s01.n16.kulkarni	6.2383206167471170e-07	portable
+V.V2.H.lambda.quasi.s01.n8.base	0.00017065072305844087	portable
+V.V2.H.lambda.quasi.s01.n8.combNystrom	2.5749621862636296e-05	portable
+V.V2.H.lambda.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.H.lambda.quasi.s01.n8.combNystrom.residual	4.0356606945124440e-14	residual
+V.V2.H.lambda.quasi.s01.n8.iterCombNystrom	2.4099670826727150e-06	portable
+V.V2.H.lambda.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.quasi.s01.n8.iterCombNystrom.residual	4.0356606945124440e-14	residual
+V.V2.H.lambda.quasi.s01.n8.kulkarni	6.3203768072561670e-06	portable
+V.V2.H.lambda.uniform.s01.n16.base	1.0570077929261679e-05	portable
+V.V2.H.lambda.uniform.s01.n16.combNystrom	1.2041621828551285e-06	portable
+V.V2.H.lambda.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.H.lambda.uniform.s01.n16.combNystrom.residual	3.6137759451548845e-14	residual
+V.V2.H.lambda.uniform.s01.n16.iterCombNystrom	1.1927238752207359e-07	portable
+V.V2.H.lambda.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.uniform.s01.n16.iterCombNystrom.residual	3.6137759451548845e-14	residual
+V.V2.H.lambda.uniform.s01.n16.kulkarni	2.8945865959695283e-07	portable
+V.V2.H.lambda.uniform.s01.n8.base	8.4611818481739040e-05	portable
+V.V2.H.lambda.uniform.s01.n8.combNystrom	1.4324708149549004e-05	portable
+V.V2.H.lambda.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.H.lambda.uniform.s01.n8.combNystrom.residual	3.9190872769268026e-14	residual
+V.V2.H.lambda.uniform.s01.n8.iterCombNystrom	1.6051548304973906e-06	portable
+V.V2.H.lambda.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.lambda.uniform.s01.n8.iterCombNystrom.residual	3.9190872769268026e-14	residual
+V.V2.H.lambda.uniform.s01.n8.kulkarni	3.5339498432040983e-06	portable
+V.V2.H.mu.geom.s01.n16.base	6.1948503613518110e-06	portable
+V.V2.H.mu.geom.s01.n16.combNystrom	1.7025507181855914e-07	portable
+V.V2.H.mu.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.H.mu.geom.s01.n16.combNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.mu.geom.s01.n16.iterCombNystrom	1.8561335912714583e-08	portable
+V.V2.H.mu.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.mu.geom.s01.n16.iterCombNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.mu.geom.s01.n16.kulkarni	4.2015884549329030e-08	portable
+V.V2.H.mu.geom.s01.n8.base	4.5607668733405050e-05	portable
+V.V2.H.mu.geom.s01.n8.combNystrom	2.1610297505914033e-06	portable
+V.V2.H.mu.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.H.mu.geom.s01.n8.combNystrom.residual	3.6748382115092680e-14	residual
+V.V2.H.mu.geom.s01.n8.iterCombNystrom	2.6753863813233636e-07	portable
+V.V2.H.mu.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.mu.geom.s01.n8.iterCombNystrom.residual	3.6748382115092680e-14	residual
+V.V2.H.mu.geom.s01.n8.kulkarni	5.6444709339853460e-07	portable
+V.V2.H.mu.graded.s01.n16.base	3.6176709928281700e-05	portable
+V.V2.H.mu.graded.s01.n16.combNystrom	1.1177779617455030e-06	portable
+V.V2.H.mu.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.H.mu.graded.s01.n16.combNystrom.residual	3.6526337510167650e-14	residual
+V.V2.H.mu.graded.s01.n16.iterCombNystrom	7.0252911266166510e-08	portable
+V.V2.H.mu.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.mu.graded.s01.n16.iterCombNystrom.residual	3.6526337510167650e-14	residual
+V.V2.H.mu.graded.s01.n16.kulkarni	2.6616537895929326e-07	portable
+V.V2.H.mu.graded.s01.n8.base	0.00021256301974603709	portable
+V.V2.H.mu.graded.s01.n8.combNystrom	1.1611230462782451e-05	portable
+V.V2.H.mu.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.H.mu.graded.s01.n8.combNystrom.residual	3.8469227803261674e-14	residual
+V.V2.H.mu.graded.s01.n8.iterCombNystrom	8.3377596160616460e-07	portable
+V.V2.H.mu.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.mu.graded.s01.n8.iterCombNystrom.residual	3.8469227803261674e-14	residual
+V.V2.H.mu.graded.s01.n8.kulkarni	2.9087331433474972e-06	portable
+V.V2.H.mu.quasi.s01.n16.base	3.0956446544605500e-05	portable
+V.V2.H.mu.quasi.s01.n16.combNystrom	8.5508791158872550e-07	portable
+V.V2.H.mu.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.H.mu.quasi.s01.n16.combNystrom.residual	3.6193270602780103e-14	residual
+V.V2.H.mu.quasi.s01.n16.iterCombNystrom	6.6093987172166630e-08	portable
+V.V2.H.mu.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.mu.quasi.s01.n16.iterCombNystrom.residual	3.6193270602780103e-14	residual
+V.V2.H.mu.quasi.s01.n16.kulkarni	2.1804967820227006e-07	portable
+V.V2.H.mu.quasi.s01.n8.base	0.00018812155426961574	portable
+V.V2.H.mu.quasi.s01.n8.combNystrom	9.5988989045059370e-06	portable
+V.V2.H.mu.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.H.mu.quasi.s01.n8.combNystrom.residual	3.7858605139717840e-14	residual
+V.V2.H.mu.quasi.s01.n8.iterCombNystrom	8.4190329718847320e-07	portable
+V.V2.H.mu.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.mu.quasi.s01.n8.iterCombNystrom.residual	3.7858605139717840e-14	residual
+V.V2.H.mu.quasi.s01.n8.kulkarni	2.2394130608782703e-06	portable
+V.V2.H.mu.uniform.s01.n16.base	1.7096277639572220e-05	portable
+V.V2.H.mu.uniform.s01.n16.combNystrom	4.8752284842468190e-07	portable
+V.V2.H.mu.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.H.mu.uniform.s01.n16.combNystrom.residual	3.6470826358936390e-14	residual
+V.V2.H.mu.uniform.s01.n16.iterCombNystrom	3.7860431678637950e-08	portable
+V.V2.H.mu.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.mu.uniform.s01.n16.iterCombNystrom.residual	3.6470826358936390e-14	residual
+V.V2.H.mu.uniform.s01.n16.kulkarni	1.2281299133221069e-07	portable
+V.V2.H.mu.uniform.s01.n8.base	0.00011680549396775320	portable
+V.V2.H.mu.uniform.s01.n8.combNystrom	4.8004282263702790e-06	portable
+V.V2.H.mu.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.H.mu.uniform.s01.n8.combNystrom.residual	3.7359004778636520e-14	residual
+V.V2.H.mu.uniform.s01.n8.iterCombNystrom	5.1980748994040480e-07	portable
+V.V2.H.mu.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.mu.uniform.s01.n8.iterCombNystrom.residual	3.7359004778636520e-14	residual
+V.V2.H.mu.uniform.s01.n8.kulkarni	1.1611959335189326e-06	portable
+V.V2.H.theta.geom.s01.n16.base	3.0060529325748320e-06	portable
+V.V2.H.theta.geom.s01.n16.combNystrom	2.4664188147394130e-07	portable
+V.V2.H.theta.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.H.theta.geom.s01.n16.combNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.theta.geom.s01.n16.iterCombNystrom	1.7247809847020790e-08	portable
+V.V2.H.theta.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.theta.geom.s01.n16.iterCombNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.theta.geom.s01.n16.kulkarni	5.8011933923296510e-08	portable
+V.V2.H.theta.geom.s01.n8.base	2.2161511598506323e-05	portable
+V.V2.H.theta.geom.s01.n8.combNystrom	3.3948332810451730e-06	portable
+V.V2.H.theta.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.H.theta.geom.s01.n8.combNystrom.residual	3.6748382115092680e-14	residual
+V.V2.H.theta.geom.s01.n8.iterCombNystrom	3.0605675949146870e-07	portable
+V.V2.H.theta.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.theta.geom.s01.n8.iterCombNystrom.residual	3.6748382115092680e-14	residual
+V.V2.H.theta.geom.s01.n8.kulkarni	8.2076340590653270e-07	portable
+V.V2.H.theta.geom.s02.n16.base	2.4400272483071640e-05	portable
+V.V2.H.theta.geom.s02.n16.combNystrom	3.2994592173984927e-06	portable
+V.V2.H.theta.geom.s02.n16.combNystrom.iters	15	exact
+V.V2.H.theta.geom.s02.n16.combNystrom.residual	1.2156942119645464e-14	residual
+V.V2.H.theta.geom.s02.n16.iterCombNystrom	2.1895783430814220e-07	portable
+V.V2.H.theta.geom.s02.n16.iterCombNystrom.iters	15	exact
+V.V2.H.theta.geom.s02.n16.iterCombNystrom.residual	1.2156942119645464e-14	residual
+V.V2.H.theta.geom.s02.n16.kulkarni	7.9578996758922220e-07	portable
+V.V2.H.theta.geom.s02.n8.base	0.00017602243290026910	portable
+V.V2.H.theta.geom.s02.n8.combNystrom	3.9385831324900700e-05	portable
+V.V2.H.theta.geom.s02.n8.combNystrom.iters	15	exact
+V.V2.H.theta.geom.s02.n8.combNystrom.residual	1.2601031329495527e-14	residual
+V.V2.H.theta.geom.s02.n8.iterCombNystrom	3.6285229210175630e-06	portable
+V.V2.H.theta.geom.s02.n8.iterCombNystrom.iters	15	exact
+V.V2.H.theta.geom.s02.n8.iterCombNystrom.residual	1.2601031329495527e-14	residual
+V.V2.H.theta.geom.s02.n8.kulkarni	9.8492835743924090e-06	portable
+V.V2.H.theta.graded.s01.n16.base	3.0899467824196950e-05	portable
+V.V2.H.theta.graded.s01.n16.combNystrom	1.0711082969461216e-06	portable
+V.V2.H.theta.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.H.theta.graded.s01.n16.combNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.theta.graded.s01.n16.iterCombNystrom	6.4937153654298640e-08	portable
+V.V2.H.theta.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.theta.graded.s01.n16.iterCombNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.theta.graded.s01.n16.kulkarni	2.7807326274942310e-07	portable
+V.V2.H.theta.graded.s01.n8.base	0.00018052936630774674	portable
+V.V2.H.theta.graded.s01.n8.combNystrom	1.0223116230667628e-05	portable
+V.V2.H.theta.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.H.theta.graded.s01.n8.combNystrom.residual	3.8524738954492930e-14	residual
+V.V2.H.theta.graded.s01.n8.iterCombNystrom	9.7930626352660250e-07	portable
+V.V2.H.theta.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.theta.graded.s01.n8.iterCombNystrom.residual	3.8524738954492930e-14	residual
+V.V2.H.theta.graded.s01.n8.kulkarni	2.8733453240059603e-06	portable
+V.V2.H.theta.quasi.s01.n16.base	1.9957738664366786e-05	portable
+V.V2.H.theta.quasi.s01.n16.combNystrom	2.1213558576427260e-06	portable
+V.V2.H.theta.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.H.theta.quasi.s01.n16.combNystrom.residual	3.6415315207705135e-14	residual
+V.V2.H.theta.quasi.s01.n16.iterCombNystrom	1.0340632039529396e-07	portable
+V.V2.H.theta.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.theta.quasi.s01.n16.iterCombNystrom.residual	3.6415315207705135e-14	residual
+V.V2.H.theta.quasi.s01.n16.kulkarni	5.0807575724398650e-07	portable
+V.V2.H.theta.quasi.s01.n8.base	0.00015353619526770057	portable
+V.V2.H.theta.quasi.s01.n8.combNystrom	2.2438014531056538e-05	portable
+V.V2.H.theta.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.H.theta.quasi.s01.n8.combNystrom.residual	3.9024339315574250e-14	residual
+V.V2.H.theta.quasi.s01.n8.iterCombNystrom	1.7148045462489492e-06	portable
+V.V2.H.theta.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.theta.quasi.s01.n8.iterCombNystrom.residual	3.9024339315574250e-14	residual
+V.V2.H.theta.quasi.s01.n8.kulkarni	5.4998828860064460e-06	portable
+V.V2.H.theta.uniform.s01.n16.base	9.9824564743222770e-06	portable
+V.V2.H.theta.uniform.s01.n16.combNystrom	9.5892025731014740e-07	portable
+V.V2.H.theta.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.H.theta.uniform.s01.n16.combNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.theta.uniform.s01.n16.iterCombNystrom	4.7332244013098546e-08	portable
+V.V2.H.theta.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.H.theta.uniform.s01.n16.iterCombNystrom.residual	3.6359804056473877e-14	residual
+V.V2.H.theta.uniform.s01.n16.kulkarni	2.2796498777566399e-07	portable
+V.V2.H.theta.uniform.s01.n8.base	7.7887298398859880e-05	portable
+V.V2.H.theta.uniform.s01.n8.combNystrom	1.1997970109312028e-05	portable
+V.V2.H.theta.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.H.theta.uniform.s01.n8.combNystrom.residual	3.7525538232330290e-14	residual
+V.V2.H.theta.uniform.s01.n8.iterCombNystrom	8.2965506031928980e-07	portable
+V.V2.H.theta.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.H.theta.uniform.s01.n8.iterCombNystrom.residual	3.7525538232330290e-14	residual
+V.V2.H.theta.uniform.s01.n8.kulkarni	2.9306763179581807e-06	portable
+V.V2.H.theta.uniform.s02.n16.base	7.7887298398859880e-05	portable
+V.V2.H.theta.uniform.s02.n16.combNystrom	1.1997970109534073e-05	portable
+V.V2.H.theta.uniform.s02.n16.combNystrom.iters	15	exact
+V.V2.H.theta.uniform.s02.n16.combNystrom.residual	1.1990408665951690e-14	residual
+V.V2.H.theta.uniform.s02.n16.iterCombNystrom	8.2965506709165030e-07	portable
+V.V2.H.theta.uniform.s02.n16.iterCombNystrom.iters	15	exact
+V.V2.H.theta.uniform.s02.n16.iterCombNystrom.residual	1.1990408665951690e-14	residual
+V.V2.H.theta.uniform.s02.n16.kulkarni	2.9306763179581807e-06	portable
+V.V2.H.theta.uniform.s02.n8.base	0.00054927067332233290	portable
+V.V2.H.theta.uniform.s02.n8.combNystrom	0.00012518875319755818	portable
+V.V2.H.theta.uniform.s02.n8.combNystrom.iters	15	exact
+V.V2.H.theta.uniform.s02.n8.combNystrom.residual	1.3766765505351941e-14	residual
+V.V2.H.theta.uniform.s02.n8.iterCombNystrom	1.3816987915915568e-05	portable
+V.V2.H.theta.uniform.s02.n8.iterCombNystrom.iters	15	exact
+V.V2.H.theta.uniform.s02.n8.iterCombNystrom.residual	1.3766765505351941e-14	residual
+V.V2.H.theta.uniform.s02.n8.kulkarni	3.1696945273274046e-05	portable
+V.V2.T.lambda.geom.s01.n16.base	4.2607111000458890e-06	portable
+V.V2.T.lambda.geom.s01.n16.combNystrom	3.9411742158712570e-07	portable
+V.V2.T.lambda.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.T.lambda.geom.s01.n16.combNystrom.residual	3.6526337510167650e-14	residual
+V.V2.T.lambda.geom.s01.n16.iterCombNystrom	8.5195496213330560e-08	portable
+V.V2.T.lambda.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.geom.s01.n16.iterCombNystrom.residual	3.6526337510167650e-14	residual
+V.V2.T.lambda.geom.s01.n16.kulkarni	1.1182428227840546e-07	portable
+V.V2.T.lambda.geom.s01.n8.base	3.1932398637413150e-05	portable
+V.V2.T.lambda.geom.s01.n8.combNystrom	5.3890789077915000e-06	portable
+V.V2.T.lambda.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.T.lambda.geom.s01.n8.combNystrom.residual	3.7914116290949096e-14	residual
+V.V2.T.lambda.geom.s01.n8.iterCombNystrom	1.2520820864558857e-06	portable
+V.V2.T.lambda.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.geom.s01.n8.iterCombNystrom.residual	3.7914116290949096e-14	residual
+V.V2.T.lambda.geom.s01.n8.kulkarni	1.6207117644606583e-06	portable
+V.V2.T.lambda.graded.s01.n16.base	4.5832556722080750e-05	portable
+V.V2.T.lambda.graded.s01.n16.combNystrom	1.8501207256216290e-06	portable
+V.V2.T.lambda.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.T.lambda.graded.s01.n16.combNystrom.residual	3.6470826358936390e-14	residual
+V.V2.T.lambda.graded.s01.n16.iterCombNystrom	2.0890098162418270e-07	portable
+V.V2.T.lambda.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.graded.s01.n16.iterCombNystrom.residual	3.6470826358936390e-14	residual
+V.V2.T.lambda.graded.s01.n16.kulkarni	5.4109207647812240e-07	portable
+V.V2.T.lambda.graded.s01.n8.base	0.00028602982039982460	portable
+V.V2.T.lambda.graded.s01.n8.combNystrom	1.9765843315089350e-05	portable
+V.V2.T.lambda.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.T.lambda.graded.s01.n8.combNystrom.residual	4.0689673852511990e-14	residual
+V.V2.T.lambda.graded.s01.n8.iterCombNystrom	2.7386420939912170e-06	portable
+V.V2.T.lambda.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.graded.s01.n8.iterCombNystrom.residual	4.0689673852511990e-14	residual
+V.V2.T.lambda.graded.s01.n8.kulkarni	6.2602811456979880e-06	portable
+V.V2.T.lambda.quasi.s01.n16.base	2.9980804556073437e-05	portable
+V.V2.T.lambda.quasi.s01.n16.combNystrom	3.1493585068709250e-06	portable
+V.V2.T.lambda.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.T.lambda.quasi.s01.n16.combNystrom.residual	3.6859404417555200e-14	residual
+V.V2.T.lambda.quasi.s01.n16.iterCombNystrom	2.5967715433505845e-07	portable
+V.V2.T.lambda.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.quasi.s01.n16.iterCombNystrom.residual	3.6859404417555200e-14	residual
+V.V2.T.lambda.quasi.s01.n16.kulkarni	9.1396449541925050e-07	portable
+V.V2.T.lambda.quasi.s01.n8.base	0.00024357988845480350	portable
+V.V2.T.lambda.quasi.s01.n8.combNystrom	3.2169449149188620e-05	portable
+V.V2.T.lambda.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.T.lambda.quasi.s01.n8.combNystrom.residual	4.0634162701280730e-14	residual
+V.V2.T.lambda.quasi.s01.n8.iterCombNystrom	3.0880926047416324e-06	portable
+V.V2.T.lambda.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.quasi.s01.n8.iterCombNystrom.residual	4.0634162701280730e-14	residual
+V.V2.T.lambda.quasi.s01.n8.kulkarni	9.6109399967403420e-06	portable
+V.V2.T.lambda.uniform.s01.n16.base	1.4594822195679313e-05	portable
+V.V2.T.lambda.uniform.s01.n16.combNystrom	1.4617982885267722e-06	portable
+V.V2.T.lambda.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.T.lambda.uniform.s01.n16.combNystrom.residual	3.6415315207705135e-14	residual
+V.V2.T.lambda.uniform.s01.n16.iterCombNystrom	1.5621457705172760e-07	portable
+V.V2.T.lambda.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.uniform.s01.n16.iterCombNystrom.residual	3.6415315207705135e-14	residual
+V.V2.T.lambda.uniform.s01.n16.kulkarni	4.2042845382894710e-07	portable
+V.V2.T.lambda.uniform.s01.n8.base	0.00011714777836302481	portable
+V.V2.T.lambda.uniform.s01.n8.combNystrom	1.7803647164527092e-05	portable
+V.V2.T.lambda.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.T.lambda.uniform.s01.n8.combNystrom.residual	3.9190872769268026e-14	residual
+V.V2.T.lambda.uniform.s01.n8.iterCombNystrom	2.1378285128825780e-06	portable
+V.V2.T.lambda.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.lambda.uniform.s01.n8.iterCombNystrom.residual	3.9190872769268026e-14	residual
+V.V2.T.lambda.uniform.s01.n8.kulkarni	5.3156528816433735e-06	portable
+V.V2.T.mu.geom.s01.n16.base	8.8692383103383680e-06	portable
+V.V2.T.mu.geom.s01.n16.combNystrom	2.0934665334593205e-07	portable
+V.V2.T.mu.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.T.mu.geom.s01.n16.combNystrom.residual	3.6248781754011360e-14	residual
+V.V2.T.mu.geom.s01.n16.iterCombNystrom	2.6949589781999350e-08	portable
+V.V2.T.mu.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.mu.geom.s01.n16.iterCombNystrom.residual	3.6248781754011360e-14	residual
+V.V2.T.mu.geom.s01.n16.kulkarni	6.2158878155749160e-08	portable
+V.V2.T.mu.geom.s01.n8.base	6.6878466308151200e-05	portable
+V.V2.T.mu.geom.s01.n8.combNystrom	2.7746871769096515e-06	portable
+V.V2.T.mu.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.T.mu.geom.s01.n8.combNystrom.residual	3.6859404417555200e-14	residual
+V.V2.T.mu.geom.s01.n8.iterCombNystrom	3.9316314670578834e-07	portable
+V.V2.T.mu.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.mu.geom.s01.n8.iterCombNystrom.residual	3.6859404417555200e-14	residual
+V.V2.T.mu.geom.s01.n8.kulkarni	8.8713373147530920e-07	portable
+V.V2.T.mu.graded.s01.n16.base	5.3781349430459535e-05	portable
+V.V2.T.mu.graded.s01.n16.combNystrom	1.3664436767646393e-06	portable
+V.V2.T.mu.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.T.mu.graded.s01.n16.combNystrom.residual	3.6470826358936390e-14	residual
+V.V2.T.mu.graded.s01.n16.iterCombNystrom	9.2494989778479920e-08	portable
+V.V2.T.mu.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.mu.graded.s01.n16.iterCombNystrom.residual	3.6470826358936390e-14	residual
+V.V2.T.mu.graded.s01.n16.kulkarni	3.9333063517332790e-07	portable
+V.V2.T.mu.graded.s01.n8.base	0.00033767209721635716	portable
+V.V2.T.mu.graded.s01.n8.combNystrom	1.4789338632748006e-05	portable
+V.V2.T.mu.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.T.mu.graded.s01.n8.combNystrom.residual	3.8247183198336640e-14	residual
+V.V2.T.mu.graded.s01.n8.iterCombNystrom	1.1414492167016732e-06	portable
+V.V2.T.mu.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.mu.graded.s01.n8.iterCombNystrom.residual	3.8247183198336640e-14	residual
+V.V2.T.mu.graded.s01.n8.kulkarni	4.5681216085391440e-06	portable
+V.V2.T.mu.quasi.s01.n16.base	4.4975765352561760e-05	portable
+V.V2.T.mu.quasi.s01.n16.combNystrom	1.0798791981736500e-06	portable
+V.V2.T.mu.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.T.mu.quasi.s01.n16.combNystrom.residual	3.6082248300317590e-14	residual
+V.V2.T.mu.quasi.s01.n16.iterCombNystrom	8.3062026146052400e-08	portable
+V.V2.T.mu.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.mu.quasi.s01.n16.iterCombNystrom.residual	3.6082248300317590e-14	residual
+V.V2.T.mu.quasi.s01.n16.kulkarni	3.3574764657373635e-07	portable
+V.V2.T.mu.quasi.s01.n8.base	0.00028203323150788330	portable
+V.V2.T.mu.quasi.s01.n8.combNystrom	1.1799775397114410e-05	portable
+V.V2.T.mu.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.T.mu.quasi.s01.n8.combNystrom.residual	3.8025138593411610e-14	residual
+V.V2.T.mu.quasi.s01.n8.iterCombNystrom	1.0601917734831545e-06	portable
+V.V2.T.mu.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.mu.quasi.s01.n8.iterCombNystrom.residual	3.8025138593411610e-14	residual
+V.V2.T.mu.quasi.s01.n8.kulkarni	3.3572098036005470e-06	portable
+V.V2.T.mu.uniform.s01.n16.base	2.4682448806823132e-05	portable
+V.V2.T.mu.uniform.s01.n16.combNystrom	6.0887973374335050e-07	portable
+V.V2.T.mu.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.T.mu.uniform.s01.n16.combNystrom.residual	3.6082248300317590e-14	residual
+V.V2.T.mu.uniform.s01.n16.iterCombNystrom	4.9533336432538990e-08	portable
+V.V2.T.mu.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.mu.uniform.s01.n16.iterCombNystrom.residual	3.6082248300317590e-14	residual
+V.V2.T.mu.uniform.s01.n16.kulkarni	1.8594222117584990e-07	portable
+V.V2.T.mu.uniform.s01.n8.base	0.00017376687485226583	portable
+V.V2.T.mu.uniform.s01.n8.combNystrom	5.9256348110547920e-06	portable
+V.V2.T.mu.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.T.mu.uniform.s01.n8.combNystrom.residual	3.7359004778636520e-14	residual
+V.V2.T.mu.uniform.s01.n8.iterCombNystrom	6.8885284121300570e-07	portable
+V.V2.T.mu.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.mu.uniform.s01.n8.iterCombNystrom.residual	3.7359004778636520e-14	residual
+V.V2.T.mu.uniform.s01.n8.kulkarni	1.9071799383096888e-06	portable
+V.V2.T.theta.geom.s01.n16.base	4.2627733501943155e-06	portable
+V.V2.T.theta.geom.s01.n16.combNystrom	2.9552507330166120e-07	portable
+V.V2.T.theta.geom.s01.n16.combNystrom.iters	13	exact
+V.V2.T.theta.geom.s01.n16.combNystrom.residual	3.6193270602780103e-14	residual
+V.V2.T.theta.geom.s01.n16.iterCombNystrom	2.4642484941495013e-08	portable
+V.V2.T.theta.geom.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.theta.geom.s01.n16.iterCombNystrom.residual	3.6193270602780103e-14	residual
+V.V2.T.theta.geom.s01.n16.kulkarni	8.2574165727322680e-08	portable
+V.V2.T.theta.geom.s01.n8.base	3.1945133843080950e-05	portable
+V.V2.T.theta.geom.s01.n8.combNystrom	4.1224370432857430e-06	portable
+V.V2.T.theta.geom.s01.n8.combNystrom.iters	13	exact
+V.V2.T.theta.geom.s01.n8.combNystrom.residual	3.6914915568786455e-14	residual
+V.V2.T.theta.geom.s01.n8.iterCombNystrom	4.4280305244726037e-07	portable
+V.V2.T.theta.geom.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.theta.geom.s01.n8.iterCombNystrom.residual	3.6914915568786455e-14	residual
+V.V2.T.theta.geom.s01.n8.kulkarni	1.1863803501821480e-06	portable
+V.V2.T.theta.geom.s02.n16.base	3.3751784617286340e-05	portable
+V.V2.T.theta.geom.s02.n16.combNystrom	4.0101184474172770e-06	portable
+V.V2.T.theta.geom.s02.n16.combNystrom.iters	15	exact
+V.V2.T.theta.geom.s02.n16.combNystrom.residual	1.1879386363489175e-14	residual
+V.V2.T.theta.geom.s02.n16.iterCombNystrom	2.8839546295511553e-07	portable
+V.V2.T.theta.geom.s02.n16.iterCombNystrom.iters	15	exact
+V.V2.T.theta.geom.s02.n16.iterCombNystrom.residual	1.1879386363489175e-14	residual
+V.V2.T.theta.geom.s02.n16.kulkarni	1.1539771384017072e-06	portable
+V.V2.T.theta.geom.s02.n8.base	0.00024149389836303214	portable
+V.V2.T.theta.geom.s02.n8.combNystrom	4.9254349694383140e-05	portable
+V.V2.T.theta.geom.s02.n8.combNystrom.iters	15	exact
+V.V2.T.theta.geom.s02.n8.combNystrom.residual	1.2490009027033011e-14	residual
+V.V2.T.theta.geom.s02.n8.iterCombNystrom	4.8169612580362120e-06	portable
+V.V2.T.theta.geom.s02.n8.iterCombNystrom.iters	15	exact
+V.V2.T.theta.geom.s02.n8.iterCombNystrom.residual	1.2490009027033011e-14	residual
+V.V2.T.theta.geom.s02.n8.kulkarni	1.4806914680143280e-05	portable
+V.V2.T.theta.graded.s01.n16.base	4.5907062584560340e-05	portable
+V.V2.T.theta.graded.s01.n16.combNystrom	1.3271184209351360e-06	portable
+V.V2.T.theta.graded.s01.n16.combNystrom.iters	13	exact
+V.V2.T.theta.graded.s01.n16.combNystrom.residual	3.6248781754011360e-14	residual
+V.V2.T.theta.graded.s01.n16.iterCombNystrom	8.3133716133332310e-08	portable
+V.V2.T.theta.graded.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.theta.graded.s01.n16.iterCombNystrom.residual	3.6248781754011360e-14	residual
+V.V2.T.theta.graded.s01.n16.kulkarni	4.1053373300847795e-07	portable
+V.V2.T.theta.graded.s01.n8.base	0.00028702329599172850	portable
+V.V2.T.theta.graded.s01.n8.combNystrom	1.3232257946027559e-05	portable
+V.V2.T.theta.graded.s01.n8.combNystrom.iters	13	exact
+V.V2.T.theta.graded.s01.n8.combNystrom.residual	3.8469227803261674e-14	residual
+V.V2.T.theta.graded.s01.n8.iterCombNystrom	1.2560546942541606e-06	portable
+V.V2.T.theta.graded.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.theta.graded.s01.n8.iterCombNystrom.residual	3.8469227803261674e-14	residual
+V.V2.T.theta.graded.s01.n8.kulkarni	4.4570640828078820e-06	portable
+V.V2.T.theta.quasi.s01.n16.base	2.7876256829428847e-05	portable
+V.V2.T.theta.quasi.s01.n16.combNystrom	2.5730169456172902e-06	portable
+V.V2.T.theta.quasi.s01.n16.combNystrom.iters	13	exact
+V.V2.T.theta.quasi.s01.n16.combNystrom.residual	3.6692870963861424e-14	residual
+V.V2.T.theta.quasi.s01.n16.iterCombNystrom	1.2756397549384957e-07	portable
+V.V2.T.theta.quasi.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.theta.quasi.s01.n16.iterCombNystrom.residual	3.6692870963861424e-14	residual
+V.V2.T.theta.quasi.s01.n16.kulkarni	7.3639486997123530e-07	portable
+V.V2.T.theta.quasi.s01.n8.base	0.00021969867896332040	portable
+V.V2.T.theta.quasi.s01.n8.combNystrom	2.7872254024341460e-05	portable
+V.V2.T.theta.quasi.s01.n8.combNystrom.iters	13	exact
+V.V2.T.theta.quasi.s01.n8.combNystrom.residual	3.8857805861880480e-14	residual
+V.V2.T.theta.quasi.s01.n8.iterCombNystrom	2.1310664793938727e-06	portable
+V.V2.T.theta.quasi.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.theta.quasi.s01.n8.iterCombNystrom.residual	3.8857805861880480e-14	residual
+V.V2.T.theta.quasi.s01.n8.kulkarni	8.2636763993892970e-06	portable
+V.V2.T.theta.uniform.s01.n16.base	1.3896756917652908e-05	portable
+V.V2.T.theta.uniform.s01.n16.combNystrom	1.1566222178904795e-06	portable
+V.V2.T.theta.uniform.s01.n16.combNystrom.iters	13	exact
+V.V2.T.theta.uniform.s01.n16.combNystrom.residual	3.6359804056473877e-14	residual
+V.V2.T.theta.uniform.s01.n16.iterCombNystrom	5.9565707033470970e-08	portable
+V.V2.T.theta.uniform.s01.n16.iterCombNystrom.iters	13	exact
+V.V2.T.theta.uniform.s01.n16.iterCombNystrom.residual	3.6359804056473877e-14	residual
+V.V2.T.theta.uniform.s01.n16.kulkarni	3.2765386248634343e-07	portable
+V.V2.T.theta.uniform.s01.n8.base	0.00010893702436121089	portable
+V.V2.T.theta.uniform.s01.n8.combNystrom	1.4769046570162203e-05	portable
+V.V2.T.theta.uniform.s01.n8.combNystrom.iters	13	exact
+V.V2.T.theta.uniform.s01.n8.combNystrom.residual	3.7692071686024065e-14	residual
+V.V2.T.theta.uniform.s01.n8.iterCombNystrom	1.0515682510314761e-06	portable
+V.V2.T.theta.uniform.s01.n8.iterCombNystrom.iters	13	exact
+V.V2.T.theta.uniform.s01.n8.iterCombNystrom.residual	3.7692071686024065e-14	residual
+V.V2.T.theta.uniform.s01.n8.kulkarni	4.3321929099615630e-06	portable
+V.V2.T.theta.uniform.s02.n16.base	0.00010893702436121089	portable
+V.V2.T.theta.uniform.s02.n16.combNystrom	1.4769046570717315e-05	portable
+V.V2.T.theta.uniform.s02.n16.combNystrom.iters	15	exact
+V.V2.T.theta.uniform.s02.n16.combNystrom.residual	1.2101430968414206e-14	residual
+V.V2.T.theta.uniform.s02.n16.iterCombNystrom	1.0515685052725487e-06	portable
+V.V2.T.theta.uniform.s02.n16.iterCombNystrom.iters	15	exact
+V.V2.T.theta.uniform.s02.n16.iterCombNystrom.residual	1.2101430968414206e-14	residual
+V.V2.T.theta.uniform.s02.n16.kulkarni	4.3321929100725850e-06	portable
+V.V2.T.theta.uniform.s02.n8.base	0.00079012058464045240	portable
+V.V2.T.theta.uniform.s02.n8.combNystrom	0.00016078186967172226	portable
+V.V2.T.theta.uniform.s02.n8.combNystrom.iters	15	exact
+V.V2.T.theta.uniform.s02.n8.combNystrom.residual	1.3711254354120683e-14	residual
+V.V2.T.theta.uniform.s02.n8.iterCombNystrom	1.7762661653764056e-05	portable
+V.V2.T.theta.uniform.s02.n8.iterCombNystrom.iters	15	exact
+V.V2.T.theta.uniform.s02.n8.iterCombNystrom.residual	1.3711254354120683e-14	residual
+V.V2.T.theta.uniform.s02.n8.kulkarni	4.9663301056601660e-05	portable

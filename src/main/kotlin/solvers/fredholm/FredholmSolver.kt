@@ -29,10 +29,10 @@ import solvers.core.SecondKindSolverCore
  * функционалов её не использует: иначе система будет построена неверно без какой-либо
  * диагностики.
  */
-class KernelF(
-    val k: (Double, Double) -> Double,
-    val kT: (Double, Double) -> Double = { _, _ -> 0.0 },
-    val kTT: (Double, Double) -> Double = { _, _ -> 0.0 },
+public class KernelF(
+    public val k: (Double, Double) -> Double,
+    public val kT: (Double, Double) -> Double = { _, _ -> 0.0 },
+    public val kTT: (Double, Double) -> Double = { _, _ -> 0.0 },
 )
 
 /**
@@ -48,7 +48,7 @@ class KernelF(
  * @param grid сетка, задающая отрезок `[a,b]` и точки разбиения для составной квадратуры.
  * @param quad квадратурная формула Гаусса–Лежандра на ячейке.
  */
-class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegendre) {
+public class FredholmOperator(public val kernel: KernelF, public val grid: Grid, public val quad: GaussLegendre) {
     /**
      * Глобальные узлы составной квадратуры.
      *
@@ -57,10 +57,10 @@ class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegen
      * [applyDerivNodes], [applyDeriv2Nodes] и при сборке матриц — копирование на каждом
      * обращении дало бы квадратичный рост аллокаций. Записей в проекте нет.
      */
-    val gNode: DoubleArray
+    public val gNode: DoubleArray
 
     /** Веса квадратуры при узлах [gNode]. READ-ONLY по соглашению (горячее, см. [gNode]). */
-    val gW: DoubleArray
+    public val gW: DoubleArray
 
     init {
         val (rn, rw) = quad.refNodesWeights()
@@ -78,33 +78,33 @@ class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegen
     }
 
     /** (\mathcal K u)(t) для произвольной u(s). */
-    fun apply(t: Double, u: (Double) -> Double): Double =
+    public fun apply(t: Double, u: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.k(t, s) * u(s) }
 
     /** d/dt (\mathcal K u)(t) = \int_a^b dK/dt(t,s) u(s) ds (для xi-функционалов). */
-    fun applyDeriv(t: Double, u: (Double) -> Double): Double =
+    public fun applyDeriv(t: Double, u: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.kT(t, s) * u(s) }
 
     /** d^2/dt^2 (\mathcal K u)(t) = \int_a^b d^2K/dt^2(t,s) u(s) ds (для xi^<0>). */
-    fun applyDeriv2(t: Double, u: (Double) -> Double): Double =
+    public fun applyDeriv2(t: Double, u: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.kTT(t, s) * u(s) }
 
     /** (\mathcal K u)(tau) по предвычисленным значениям u в глобальных узлах. */
-    fun applyNodes(tau: Double, uNodes: DoubleArray): Double {
+    public fun applyNodes(tau: Double, uNodes: DoubleArray): Double {
         var s = 0.0
         for (k in gNode.indices) s += gW[k] * kernel.k(tau, gNode[k]) * uNodes[k]
         return s
     }
 
     /** d/dt (\mathcal K u)(tau) по предвычисленным uNodes. */
-    fun applyDerivNodes(tau: Double, uNodes: DoubleArray): Double {
+    public fun applyDerivNodes(tau: Double, uNodes: DoubleArray): Double {
         var s = 0.0
         for (k in gNode.indices) s += gW[k] * kernel.kT(tau, gNode[k]) * uNodes[k]
         return s
     }
 
     /** d^2/dt^2 (\mathcal K u)(tau) по предвычисленным uNodes (для xi^<0>). */
-    fun applyDeriv2Nodes(tau: Double, uNodes: DoubleArray): Double {
+    public fun applyDeriv2Nodes(tau: Double, uNodes: DoubleArray): Double {
         var s = 0.0
         for (k in gNode.indices) s += gW[k] * kernel.kTT(tau, gNode[k]) * uNodes[k]
         return s
@@ -129,10 +129,10 @@ class FredholmOperator(val kernel: KernelF, val grid: Grid, val quad: GaussLegen
  *        а не каждого метода: это политика обработки ошибок, а не свойство
  *        отдельной схемы.
  */
-class FredholmSecondKindSolver(
+public class FredholmSecondKindSolver(
     basis: MinimalSplineBasis,
     funcs: FunctionalFamily,
-    val op: FredholmOperator,
+    public val op: FredholmOperator,
     cL: Double,
     rhs: RhsWithDerivatives,
     throwOnDivergence: Boolean = true,
@@ -318,12 +318,12 @@ class FredholmSecondKindSolver(
     }
 
     /** Матрица (I - A^N): A^N_{rho,r} = cL b_r K(eta_rho, eta_r). */
-    private fun nystromMatrix(pts: DoubleArray, bAgg: DoubleArray): Array<DoubleArray> {
+    private fun nystromMatrix(pts: DoubleArray, bAgg: DoubleArray): DenseMatrix {
         val p = pts.size
-        val a = LinearAlgebra.zeros(p, p)
+        val a = DenseMatrix.zeros(p, p)
         for (rho in 0 until p) {
-            for (r in 0 until p) a[rho][r] = -cL * bAgg[r] * op.kernel.k(pts[rho], pts[r])
-            a[rho][rho] += 1.0
+            for (r in 0 until p) a[rho, r] = -cL * bAgg[r] * op.kernel.k(pts[rho], pts[r])
+            a[rho, rho] += 1.0
         }
         return a
     }
@@ -339,7 +339,7 @@ class FredholmSecondKindSolver(
      * НЕ повышает порядок. Опубликованные оценки суперсходимости O(h^7)/O(h^8)
      * относятся НЕ к ней, а к комбинированному оператору — см. [combinedNystrom].
      */
-    fun nystrom(): SolutionFunc {
+    public fun nystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
         val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) }, ctx.backend)
         return SolutionFunc(eval = { t -> nystromEval(t, pts, bAgg, uHat) })
@@ -350,7 +350,7 @@ class FredholmSecondKindSolver(
      * ТОЧНЫМ оператором L (высокоточная квадратура op.applyNodes, как в sloan()). Одно
      * интегрирование найденного u^N_h, новой системы не требуется (аналог итерации Слоана).
      */
-    fun iteratedNystrom(): SolutionFunc {
+    public fun iteratedNystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
         val uHat = LinearAlgebra.solve(nystromMatrix(pts, bAgg), DoubleArray(pts.size) { fEff(pts[it]) }, ctx.backend)
         val uNodes = DoubleArray(ng) { nystromEval(op.gNode[it], pts, bAgg, uHat) }
@@ -382,7 +382,7 @@ class FredholmSecondKindSolver(
      *
      * @throws IllegalStateException если итерация не сошлась и [throwOnDivergence] равно `true`.
      */
-    fun combinedNystrom(): SolutionFunc {
+    public fun combinedNystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
         var uFun: (Double) -> Double = { t -> fEff(t) }
         var uAtNodes = DoubleArray(ng) { uFun(op.gNode[it]) }
@@ -433,7 +433,7 @@ class FredholmSecondKindSolver(
      * Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с ТОЧНЫМ
      * оператором L (аналог итерации Слоана; новой системы не требует).
      */
-    fun iteratedCombinedNystrom(): SolutionFunc {
+    public fun iteratedCombinedNystrom(): SolutionFunc {
         val combined = combinedNystrom()
         val uNodes = DoubleArray(ng) { combined.eval(op.gNode[it]) }
         // Признак сходимости наследуется от исходного комбинированного оператора.
@@ -503,18 +503,18 @@ class FredholmSecondKindSolver(
  *        схемами внутреннего решателя; см. [FredholmSecondKindSolver.throwOnDivergence].
  * @throws IllegalArgumentException если `alpha <= 0`.
  */
-class FredholmFirstKindSolver(
-    val basis: MinimalSplineBasis,
-    val funcs: FunctionalFamily,
-    val op: FredholmOperator,
+public class FredholmFirstKindSolver(
+    public val basis: MinimalSplineBasis,
+    public val funcs: FunctionalFamily,
+    public val op: FredholmOperator,
     rhs: (Double) -> Double,
     rhsDeriv: (Double) -> Double,
     rhsDeriv2: (Double) -> Double = { 0.0 },
-    val alpha: Double = DEFAULT_REGULARIZATION,
-    val throwOnDivergence: Boolean = true,
-    val ctx: NumericsContext = NumericsContext.default(),
+    public val alpha: Double = DEFAULT_REGULARIZATION,
+    public val throwOnDivergence: Boolean = true,
+    public val ctx: NumericsContext = NumericsContext.default(),
 ) {
-    companion object {
+    public companion object {
         /**
          * Значение параметра регуляризации по умолчанию.
          *
@@ -530,7 +530,7 @@ class FredholmFirstKindSolver(
          * (его менять нельзя — оно воспроизводит публикацию), но принимать его
          * молча не следует: если задача терпит большее `alpha`, точность выше.
          */
-        const val DEFAULT_REGULARIZATION = 1e-10
+        public const val DEFAULT_REGULARIZATION: Double = 1e-10
     }
 
     init {
@@ -555,7 +555,7 @@ class FredholmFirstKindSolver(
     )
 
     /** Базовая коллокационная схема для регуляризованного уравнения. */
-    fun base(): SolutionFunc = inner.base()
+    public fun base(): SolutionFunc = inner.base()
 
     /**
      * Число обусловленности `cond_inf` СОБРАННОЙ матрицы базовой схемы `I - M`
@@ -576,12 +576,12 @@ class FredholmFirstKindSolver(
      * а не `Double`: печатать его можно только после проверки
      * [ConditionEstimate.isReliable] (либо через [ConditionEstimate.valueOrNull]).
      */
-    fun baseCondition(
+    public fun baseCondition(
         tolerance: Double = Conditioning.INVERSION_RESIDUAL_TOLERANCE,
     ): ConditionEstimate = Conditioning.conditionInf(inner.baseMatrix(), tolerance)
 
     /** Итерация Слоана, применённая к регуляризованному уравнению. */
-    fun sloan(): SolutionFunc = inner.sloan()
+    public fun sloan(): SolutionFunc = inner.sloan()
 
     /**
      * Схема Кулкарни для регуляризованного уравнения.
@@ -590,8 +590,8 @@ class FredholmFirstKindSolver(
      * растут как `alpha^{-2}`, что при типичных `alpha ~ 1e-10` делает систему
      * численно неразрешимой. Метод сохранён для полноты API и экспериментов.
      */
-    fun kulkarni(): SolutionFunc = inner.kulkarni()
+    public fun kulkarni(): SolutionFunc = inner.kulkarni()
 
     /** Итерированная схема Кулкарни; те же ограничения, что и у [kulkarni]. */
-    fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
+    public fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
 }

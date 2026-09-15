@@ -13,7 +13,10 @@ import splines.metrics.errorEh
 import solvers.core.RhsWithDerivatives
 import solvers.fredholm.FredholmSecondKindSolver
 import solvers.volterra.VolterraSecondKindSolver
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.TestInstance
 import java.io.File
+import java.util.Locale
 import kotlin.test.Test
 
 /**
@@ -30,28 +33,75 @@ import kotlin.test.Test
  * Через `test --tests ...` запустить НЕЛЬЗЯ: этот класс намеренно исключён из
  * всех проверочных задач фильтром, и Gradle ответит `No tests found for given includes`.
  *
- * Формат строки вывода: `SNAP<TAB>ключ<TAB>значение`, где значение печатается с 12
- * значащими цифрами — этого достаточно, чтобы отличить «то же самое вычисление»
- * от «изменившейся арифметики», но с запасом на недетерминизм параллельной сборки.
+ * Результат — файл `build/baseline/baseline-eh.tsv`, который после осмотра копируется
+ * в `src/test/resources/characterization/baseline-eh.tsv`. Имя ДЕТЕРМИНИРОВАНО, файл
+ * ПЕРЕЗАПИСЫВАЕТСЯ одной операцией, строки ОТСОРТИРОВАНЫ по ключу — то же устройство,
+ * что и у [ExtraBaselineSnapshotTool], и по тем же причинам:
+ *  - прежнее имя `snapshot-<имя потока>.tsv` зависело от планировщика JUnit, из-за чего
+ *    снимки приходилось собирать шаблоном `snapshot-*.tsv`;
+ *  - прежняя запись шла режимом `appendText`, поэтому повторный запуск без ручного
+ *    `rm -rf build/baseline` удваивал содержимое файла;
+ *  - прежний порядок строк был порядком вычисления, поэтому дифф двух снимков показывал
+ *    перестановку строк вперемешку с изменением чисел.
+ *
+ * Формат строки: `ключ<TAB>значение`, где значение печатается с 17 значащими цифрами.
+ * 17 — минимальная точность, при которой десятичная запись `double` восстанавливается
+ * ПОБИТОВО. Прежние 12 цифр round-trip НЕ дают: `"%.12g".format(0.1 + 0.2)` = `0.300000000000`,
+ * что не равно `0.1 + 0.2`. То есть сам эталон вносил относительную погрешность хранения
+ * ~1e-12 — грубее, чем реальное расхождение бэкендов (максимум 1.0e-14 на не-F1 ключах),
+ * и грубее допуска гейта 1e-9 на ключах с сокращением. Хранить ровно то, что вычислено, —
+ * единственный способ разделить «изменилась арифметика» и «изменилась запись числа».
+ *
+ * Локаль [Locale.ROOT] задана явно: `"%.17g".format(x)` берёт локаль по умолчанию и на
+ * машине с русской локалью пишет запятую вместо точки, после чего снимок не читается.
  */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BaselineSnapshotTool {
 
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = familyFor(name, basis)
 
     /**
-     * Пишет пару «ключ-значение» в файл `build/baseline/<поток>.tsv`.
+     * Буфер снимка: снятые пары «ключ - значение» всех тест-методов класса.
      *
-     * Вывод идёт ТОЛЬКО в файл, а не в stdout: печать более тысячи строк ломает
-     * формирование XML-отчё1та Gradle. Каталог `build/` не попадает в систему
+     * Накопление в памяти, а не дозапись в файл, — ровно то, что делает файл
+     * перезаписываемым и отсортированным. Жизненный цикл [TestInstance.Lifecycle.PER_CLASS]
+     * обязателен: при стандартном `PER_METHOD` JUnit создаёт по экземпляру на тест-метод,
+     * и буфер каждого из пяти методов терялся бы до записи.
+     */
+    private val rows = mutableListOf<Pair<String, String>>()
+
+    /**
+     * Кладёт пару «ключ-значение» в буфер [rows].
+     *
+     * Вывод идёт ТОЛЬКО в файл (в [writeSnapshot]), а не в stdout: печать более тысячи
+     * строк ломает формирование XML-отчёта Gradle. Каталог `build/` не попадает в систему
      * контроля версий, что для временного артефакта и требуется.
+     *
+     * `synchronized` — страховка на случай включения параллельного выполнения тестов
+     * JUnit: сегодня методы класса идут последовательно, но цена страховки нулевая,
+     * а её отсутствие проявилось бы как молча потерянные строки снимка.
      */
     private fun emit(key: String, value: Double) {
-        sink.appendText("$key\t%.12g".format(value) + "\n")
+        val formatted = String.format(Locale.ROOT, "%.17g", value)
+        synchronized(rows) { rows += key to formatted }
     }
 
-    private val sink: File by lazy {
-        val dir = File("build/baseline").apply { mkdirs() }
-        File(dir, "snapshot-${Thread.currentThread().name.replace(Regex("[^A-Za-z0-9]"), "_")}.tsv")
+    /**
+     * Пишет весь снимок ОДНОЙ операцией после последнего тест-метода.
+     *
+     * Одна запись вместо тысячи дозаписей: и быстрее, и исключает частично записанный
+     * файл при падении посреди снятия. Сортировка по ключу делает дифф двух снимков
+     * содержательным.
+     */
+    @AfterAll
+    fun writeSnapshot() {
+        // Каталог вывода задаётся свойством: задача `classifyBaseline` снимает матрицу
+        // ДВАЖДЫ (backend=java и backend=native) и обязана положить снимки в РАЗНЫЕ каталоги.
+        val dir = File(System.getProperty("baseline.output.dir")?.takeIf { it.isNotBlank() } ?: "build/baseline").apply { mkdirs() }
+        val target = File(dir, "baseline-eh.tsv")
+        val sorted = rows.sortedBy { it.first }
+        target.writeText(sorted.joinToString(separator = "") { (key, value) -> "$key\t$value\n" })
+        println("Снимок матрицы E_h: ${sorted.size} строк -> ${target.absolutePath}")
     }
 
     /** Снимок линейного решателя Фредгольма. */

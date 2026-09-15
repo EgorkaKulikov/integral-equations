@@ -32,8 +32,8 @@ package solvers.core
  *        сохранено с прежней сигнатуры: его используют вызывающие, работающие с
  *        семействами, которым вторая производная не нужна.
  */
-class RhsWithDerivatives(
-    val value: (Double) -> Double,
-    val deriv: (Double) -> Double,
-    val deriv2: (Double) -> Double = { 0.0 },
+public class RhsWithDerivatives(
+    public val value: (Double) -> Double,
+    public val deriv: (Double) -> Double,
+    public val deriv2: (Double) -> Double = { 0.0 },
 )

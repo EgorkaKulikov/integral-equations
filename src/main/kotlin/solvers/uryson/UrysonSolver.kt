@@ -1,6 +1,7 @@
 package solvers.uryson
 
 import kotlin.math.abs
+import numerics.DenseMatrix
 import numerics.GaussLegendre
 import splines.Grid
 import numerics.LinearAlgebra
@@ -45,14 +46,14 @@ internal fun ProjFunctionals.valueFunctional(j: Int): ValueFunctional =
  * @param basis базис минимальных сплайнов.
  * @param quad квадратура для интегралов по сеточным интервалам.
  */
-class SplineSpace(
-    val basis: MinimalSplineBasis,
-    val quad: GaussLegendre,
-    val ctx: NumericsContext = NumericsContext.default(),
+public class SplineSpace(
+    public val basis: MinimalSplineBasis,
+    public val quad: GaussLegendre,
+    public val ctx: NumericsContext = NumericsContext.default(),
 ) {
-    val grid = basis.grid
-    val n = grid.n
-    val dim = n + 2
+    public val grid: Grid = basis.grid
+    public val n: Int = grid.n
+    public val dim: Int = n + 2
 
     /**
      * Допуск отбрасывания узлов, совпавших с концами подынтервала.
@@ -83,7 +84,7 @@ class SplineSpace(
      * Поле ХОЛОДНОЕ: все вызывающие читают его один раз и сохраняют в своё поле
      * (см. `TikhonovSolver`), поэтому копия не попадает в горячий цикл.
      */
-    val weights: DoubleArray get() = weightsInternal.copyOf()
+    public val weights: DoubleArray get() = weightsInternal.copyOf()
 
     /** Веса метода Nyström `W_j = \int_a^b omega_j(s) ds`. */
     private val wIntInternal: DoubleArray = DoubleArray(dim) { k ->
@@ -97,7 +98,7 @@ class SplineSpace(
      * Единственный боевой читатель — `UrysonSecondKindSolver.nystrom`, где значение берётся
      * в локальную переменную ДО цикла Ньютона.
      */
-    val wInt: DoubleArray get() = wIntInternal.copyOf()
+    public val wInt: DoubleArray get() = wIntInternal.copyOf()
 
     /**
      * Матрица Грама стабилизатора: `[R]_{i,j} = \int (omega_i omega_j + omega_i' omega_j') ds`.
@@ -107,19 +108,19 @@ class SplineSpace(
      * Матрица симметрична, положительно определена и полосная: `|i-j| <= 2`, поскольку
      * носители сплайнов, отстоящих дальше, не пересекаются.
      */
-    private val gramRInternal: Array<DoubleArray> = buildGram()
+    private val gramRInternal: DenseMatrix = buildGram()
 
     /**
-     * Матрица Грама стабилизатора (ГЛУБОКАЯ КОПИЯ, см. обоснование у [weights]).
+     * Матрица Грама стабилизатора (КОПИЯ, см. обоснование у [weights]).
      *
-     * Копируются именно строки, а не только внешний массив: `copyOf()` на
-     * `Array<DoubleArray>` даёт ПОВЕРХНОСТНУЮ копию, через которую содержимое
-     * по-прежнему правилось бы насквозь — то есть защита была бы мнимой.
+     * У [DenseMatrix] значения лежат в ОДНОМ плоском массиве, поэтому различие
+     * «поверхностная/глубокая копия» здесь исчезает вместе со строками-массивами:
+     * `copy()` копирует всё содержимое, и сквозной записи в поле больше нет.
      */
-    val gramR: Array<DoubleArray> get() = Array(gramRInternal.size) { gramRInternal[it].copyOf() }
+    public val gramR: DenseMatrix get() = gramRInternal.copy()
 
-    private fun buildGram(): Array<DoubleArray> {
-        val r = LinearAlgebra.zeros(dim, dim)
+    private fun buildGram(): DenseMatrix {
+        val r = DenseMatrix.zeros(dim, dim)
         for (ki in 0 until dim) {
             val i = ki - 2
             for (kj in ki until dim) {
@@ -133,8 +134,8 @@ class SplineSpace(
                     basis.omega(i, t) * basis.omega(j, t) +
                         basis.omegaDeriv(i, t) * basis.omegaDeriv(j, t)
                 }
-                r[ki][kj] = value
-                r[kj][ki] = value
+                r[ki, kj] = value
+                r[kj, ki] = value
             }
         }
         return r
@@ -153,10 +154,10 @@ class SplineSpace(
     }
 
     /** Сумма весов `sum_j w_j`; по построению должна равняться длине отрезка `b - a`. */
-    fun weightsSum(): Double = weightsInternal.sum()
+    public fun weightsSum(): Double = weightsInternal.sum()
 
     /** Квадратичная форма стабилизатора `Omega(x_h) = c^T R_h c`. */
-    fun omegaReg(c: DoubleArray): Double {
+    public fun omegaReg(c: DoubleArray): Double {
         // Внутри класса читаем бэкинг-поле напрямую: копия здесь была бы лишней.
         val rc = LinearAlgebra.matVec(gramRInternal, c, ctx.backend)
         var s = 0.0
@@ -172,12 +173,12 @@ class SplineSpace(
  * Производная `dK/du` нужна для производной Фреше оператора, а через неё — для
  * аналитического якобиана метода Ньютона.
  */
-interface Kernel {
+public interface Kernel {
     /** Значение ядра `K(t, s, u)`. */
-    fun k(t: Double, s: Double, u: Double): Double
+    public fun k(t: Double, s: Double, u: Double): Double
 
     /** Частная производная `dK/du(t, s, u)`. */
-    fun dkdu(t: Double, s: Double, u: Double): Double
+    public fun dkdu(t: Double, s: Double, u: Double): Double
 }
 
 /**
@@ -189,9 +190,9 @@ interface Kernel {
  * @param grid сетка, задающая отрезок интегрирования и разбиение для квадратуры.
  * @param quad квадратурная формула.
  */
-class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendre) {
+public class UrysohnOperator(public val kernel: Kernel, public val grid: Grid, public val quad: GaussLegendre) {
     /** Значение `(U x)(t)` для произвольной функции `x(s)`. */
-    fun apply(t: Double, x: (Double) -> Double): Double =
+    public fun apply(t: Double, x: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.k(t, s, x(s)) }
 
     /**
@@ -201,7 +202,7 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
      * якобиан [CollocationCore.bMatrix], который вычисляется эффективнее — за один
      * проход по узлам квадратуры сразу для всех базисных функций.
      */
-    fun frechet(t: Double, x: (Double) -> Double, h: (Double) -> Double): Double =
+    public fun frechet(t: Double, x: (Double) -> Double, h: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.dkdu(t, s, x(s)) * h(s) }
 
     /**
@@ -214,10 +215,10 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
      * возвращается сознательно: массив читается в цикле [applyNodes] и на каждой
      * итерации квази-Ньютона. Записей в проекте нет.
      */
-    val gNode: DoubleArray
+    public val gNode: DoubleArray
 
     /** Веса квадратуры, соответствующие узлам [gNode]. READ-ONLY по соглашению (горячее). */
-    val gW: DoubleArray
+    public val gW: DoubleArray
 
     init {
         val (referenceNodes, referenceWeights) = quad.refNodesWeights()
@@ -240,7 +241,7 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
     }
 
     /** Значение `(U x)(tau)` по предвычисленным значениям `x` в узлах [gNode]. */
-    fun applyNodes(tau: Double, xNodes: DoubleArray): Double {
+    public fun applyNodes(tau: Double, xNodes: DoubleArray): Double {
         var s = 0.0
         for (k in gNode.indices) s += gW[k] * kernel.k(tau, gNode[k], xNodes[k])
         return s
@@ -266,11 +267,11 @@ class UrysohnOperator(val kernel: Kernel, val grid: Grid, val quad: GaussLegendr
  *        ПЕРЕД ПОСЛЕДНИМ шагом, а НЕ в возвращаемой точке: сознательное ограничение,
  *        полное обоснование — в KDoc [runNewtonIterations] и [NewtonRun.residual].
  */
-class NewtonResult(
-    val coeffs: DoubleArray,
-    val converged: Boolean,
-    val iterations: Int,
-    val residual: Double,
+public class NewtonResult(
+    public val coeffs: DoubleArray,
+    public val converged: Boolean,
+    public val iterations: Int,
+    public val residual: Double,
 )
 
 /**
@@ -280,14 +281,14 @@ class NewtonResult(
  * Используется и схемами второго рода (метод Ньютона), и регуляризованной схемой
  * первого рода (метод Гаусса–Ньютона).
  */
-class CollocationCore(
-    val basis: MinimalSplineBasis,
-    val funcs: ProjFunctionals,
-    val op: UrysohnOperator,
-    val ctx: NumericsContext = NumericsContext.default(),
+public class CollocationCore(
+    public val basis: MinimalSplineBasis,
+    public val funcs: ProjFunctionals,
+    public val op: UrysohnOperator,
+    public val ctx: NumericsContext = NumericsContext.default(),
 ) {
-    val grid = basis.grid
-    val n = grid.n
+    public val grid: Grid = basis.grid
+    public val n: Int = grid.n
     private val quad = op.quad
     private val kernel = op.kernel
 
@@ -311,7 +312,7 @@ class CollocationCore(
      * Порядок — часть контракта, а не деталь реализации: от него зависят нумерация
      * строк `G` в [bMatrix] и порядок суммирования в [xiVector]. READ-ONLY по соглашению.
      */
-    val supportPts: DoubleArray
+    public val supportPts: DoubleArray
 
     /**
      * Индексация опорных точек по паре (номер функционала `j+2`, номер узла).
@@ -332,11 +333,11 @@ class CollocationCore(
     }
 
     /** Значения `(U x_h)` в опорных точках (по одному интегралу на точку). */
-    fun uAtSupport(c: DoubleArray): DoubleArray =
+    public fun uAtSupport(c: DoubleArray): DoubleArray =
         DoubleArray(supportPts.size) { p -> op.apply(supportPts[p]) { s -> basis.evalSpline(c, s) } }
 
     /** Вектор `Xi(c)_j = theta_j(U x_h)`, `j = -2..n-1` (индекс массива `j+2`). */
-    fun xiVector(c: DoubleArray): DoubleArray {
+    public fun xiVector(c: DoubleArray): DoubleArray {
         val uVals = uAtSupport(c)
         return DoubleArray(n + 2) { k ->
             val th = funcs.valueFunctional(k - 2)
@@ -354,9 +355,9 @@ class CollocationCore(
      * ненулевыми являются лишь три базисных сплайна), затем строки `B` собираются как
      * линейные комбинации строк `G` с коэффициентами функционалов.
      */
-    fun bMatrix(c: DoubleArray): Array<DoubleArray> {
+    public fun bMatrix(c: DoubleArray): DenseMatrix {
         val np = supportPts.size
-        val g = LinearAlgebra.zeros(np, n + 2)
+        val g = DenseMatrix.zeros(np, n + 2)
         // Узлы/веса получены однократно в init: [refNodesWeights] отдаёт копии, а этот
         // метод вызывается на каждой итерации Ньютона / Гаусса–Ньютона.
         val nodes = refNodes
@@ -375,23 +376,19 @@ class CollocationCore(
                 for (p in 0 until np) {
                     val dk = kernel.dkdu(supportPts[p], s, splineValue) * weight
                     if (dk == 0.0) continue
-                    val row = g[p]
-                    row[m] += dk * activeOmega[0]
-                    row[m + 1] += dk * activeOmega[1]
-                    row[m + 2] += dk * activeOmega[2]
+                    g[p, m] += dk * activeOmega[0]
+                    g[p, m + 1] += dk * activeOmega[1]
+                    g[p, m + 2] += dk * activeOmega[2]
                 }
             }
         }
-        // Строки B независимы: каждая задача пишет в свою строку, g только читается.
-        return ParallelAssembly.assembleRows(n + 2, n + 2, ctx.parallel) { k ->
+        // Элементы B независимы: каждая задача пишет в свою ячейку, g только читается.
+        // Порядок сложений сохранён дословно (по q возрастающе), поэтому числа те же.
+        return ParallelAssembly.assembleDense(n + 2, n + 2, ctx.parallel) { k, i ->
             val th = funcs.valueFunctional(k - 2)
-            val row = DoubleArray(n + 2)
-            for (q in th.nodes.indices) {
-                val gRow = g[support.indexOf(k, q)]
-                val coefficient = th.coeffs[q]
-                for (i in 0 until n + 2) row[i] += coefficient * gRow[i]
-            }
-            row
+            var acc = 0.0
+            for (q in th.nodes.indices) acc += th.coeffs[q] * g[support.indexOf(k, q), i]
+            acc
         }
     }
 }
@@ -425,19 +422,19 @@ class CollocationCore(
  *        в лог и возвращали результат: при программном использовании библиотеки
  *        такое предупреждение оставалось незамеченным.
  */
-class UrysonSecondKindSolver(
-    val basis: MinimalSplineBasis,
-    val funcs: ProjFunctionals,
-    val space: SplineSpace,
-    val op: UrysohnOperator,
-    val lambda: Double,
-    val rhs: (Double) -> Double,
-    val tol: Double = DEFAULT_TOLERANCE,
-    val maxIter: Int = DEFAULT_MAX_ITERATIONS,
-    val kulkarniMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
-    val nystromMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
-    val throwOnDivergence: Boolean = true,
-    val ctx: NumericsContext = NumericsContext.default(),
+public class UrysonSecondKindSolver(
+    public val basis: MinimalSplineBasis,
+    public val funcs: ProjFunctionals,
+    public val space: SplineSpace,
+    public val op: UrysohnOperator,
+    public val lambda: Double,
+    public val rhs: (Double) -> Double,
+    public val tol: Double = DEFAULT_TOLERANCE,
+    public val maxIter: Int = DEFAULT_MAX_ITERATIONS,
+    public val kulkarniMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
+    public val nystromMaxIter: Int = DEFAULT_FIXED_POINT_MAX_ITERATIONS,
+    public val throwOnDivergence: Boolean = true,
+    public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     init {
         // Семейство и сплайн-пространство считают ЧАСТИ ТОЙ ЖЕ задачи — тем же бэкендом.
@@ -445,16 +442,16 @@ class UrysonSecondKindSolver(
         NumericsContext.requireSame("UrysonSecondKindSolver", ctx, "space", space.ctx)
     }
 
-    companion object {
+    public companion object {
         /** Критерий останова по умолчанию: близко к машинной точности. */
-        const val DEFAULT_TOLERANCE = 1e-12
+        public const val DEFAULT_TOLERANCE: Double = 1e-12
 
         /**
          * Предел итераций Ньютона в базовой схеме. Взят с большим запасом: метод
          * квадратично сходится за единицы итераций, а предел защищает лишь от
          * зацикливания на вырожденных данных.
          */
-        const val DEFAULT_MAX_ITERATIONS = 10_000
+        public const val DEFAULT_MAX_ITERATIONS: Int = 10_000
 
         /**
          * Предел итераций для схем Кулкарни и Nyström.
@@ -466,7 +463,7 @@ class UrysonSecondKindSolver(
          * константой, из-за чего параметр `maxIter` на данные схемы не влиял вопреки
          * документации.
          */
-        const val DEFAULT_FIXED_POINT_MAX_ITERATIONS = 60
+        public const val DEFAULT_FIXED_POINT_MAX_ITERATIONS: Int = 60
 
         /** Нижняя граница критерия останова для схем, использующих аналитический якобиан. */
         private const val NEWTON_TOLERANCE_FLOOR = 1e-13
@@ -484,8 +481,8 @@ class UrysonSecondKindSolver(
         private const val JACOBIAN_RELATIVE_STEP = 1e-7
     }
 
-    val grid = basis.grid
-    val n = grid.n
+    public val grid: Grid = basis.grid
+    public val n: Int = grid.n
 
     /** Предвычисленные значения `theta_j(f)` для точной правой части. */
     private val thetaF: DoubleArray = DoubleArray(n + 2) { k -> funcs.valueFunctional(k - 2).applyTo(rhs) }
@@ -503,7 +500,7 @@ class UrysonSecondKindSolver(
      * @return коэффициенты сплайна вместе со сведениями о сходимости Ньютона.
      * @throws IllegalStateException при недостижении сходимости, если [throwOnDivergence].
      */
-    fun solveBase(): NewtonResult {
+    public fun solveBase(): NewtonResult {
         val c = thetaF.copyOf()
         val newtonTol = maxOf(tol, NEWTON_TOLERANCE_FLOOR)
         val run = runNewtonIterations(
@@ -566,10 +563,9 @@ class UrysonSecondKindSolver(
     /** Шаг Ньютона с якобианом `J = I - lambda B(c)` (строки собираются независимо). */
     private fun newtonStep(c: DoubleArray, negativeResidual: DoubleArray): DoubleArray {
         val b = collocation.bMatrix(c)
-        val jacobian = ParallelAssembly.assembleRows(n + 2, n + 2, ctx.parallel) { r ->
-            val row = DoubleArray(n + 2) { col -> -lambda * b[r][col] }
-            row[r] += 1.0
-            row
+        val jacobian = ParallelAssembly.assembleDense(n + 2, n + 2, ctx.parallel) { r, col ->
+            val value = -lambda * b[r, col]
+            if (r == col) value + 1.0 else value
         }
         return LinearAlgebra.solve(jacobian, negativeResidual, ctx.backend)
     }
@@ -594,7 +590,7 @@ class UrysonSecondKindSolver(
     }
 
     /** Базовое приближение `x_h` как сплайн. */
-    fun base(): SolutionFunc {
+    public fun base(): SolutionFunc {
         val newton = solveBase()
         val c = newton.coeffs
         return SolutionFunc(
@@ -606,7 +602,7 @@ class UrysonSecondKindSolver(
     }
 
     /** Итерация Слоана: `\tilde x_h(t) = f(t) + lambda (U x_h)(t)`. */
-    fun sloan(): SolutionFunc {
+    public fun sloan(): SolutionFunc {
         val newton = solveBase()
         val c = newton.coeffs
         val splineSolution = { t: Double -> basis.evalSpline(c, t) }
@@ -630,7 +626,7 @@ class UrysonSecondKindSolver(
      *
      * Итоговое приближение восстанавливается как `x_h^K = y_h + (I - P_theta)[f + lambda U(y_h)]`.
      */
-    fun kulkarni(): SolutionFunc {
+    public fun kulkarni(): SolutionFunc {
         val fNodes = DoubleArray(op.gNode.size) { rhs(op.gNode[it]) }
 
         /** Правая часть системы Кулкарни `G_K(c)`. */
@@ -695,7 +691,7 @@ class UrysonSecondKindSolver(
      * непригоден: для ядер с `dK/du(t,s,0) = 0` (например, кубических) якобиан в нуле
      * вырождается и метод не сдвигается с места.
      */
-    fun nystrom(): SolutionFunc {
+    public fun nystrom(): SolutionFunc {
         // Порядок точек — ПОРЯДОК ПЕРВОГО ВХОЖДЕНИЯ при обходе `j = -2..n-1`: он задаёт
         // нумерацию неизвестных, порядок строк якобиана и вектор начального приближения.
         // Индексация — по паре (номер функционала, номер узла), а НЕ поиском по значению
@@ -751,7 +747,7 @@ class UrysonSecondKindSolver(
                         "Нарушена гарантия порядка вызовов runNewtonIterations: stepAt вызван без " +
                             "предшествующего residualAt, поэтому G(x) в текущей точке неизвестна.",
                     )
-                val jacobian = LinearAlgebra.zeros(p, p)
+                val jacobian = DenseMatrix.zeros(p, p)
                 for (col in 0 until p) {
                     val saved = current[col]
                     // Шаг масштабируется величиной переменной, чтобы сохранять точность
@@ -763,7 +759,7 @@ class UrysonSecondKindSolver(
                     // F(x) = x - G(x), поэтому dF[row]/dx[col] = [row == col] - dG[row]/dx[col].
                     for (row in 0 until p) {
                         val identity = if (row == col) 1.0 else 0.0
-                        jacobian[row][col] = (identity * step - (perturbed[row] - gx[row])) / step
+                        jacobian[row, col] = (identity * step - (perturbed[row] - gx[row])) / step
                     }
                 }
                 LinearAlgebra.solve(jacobian, DoubleArray(p) { -residual[it] }, ctx.backend)
@@ -798,19 +794,19 @@ class UrysonSecondKindSolver(
      * Система решается методом Ньютона с аналитическим якобианом по значениям решения
      * в опорных точках функционалов и в узлах квадратуры; подробности — [CombinedNystromSolver].
      */
-    fun combinedNystrom(): SolutionFunc = CombinedNystromSolver(this).combined()
+    public fun combinedNystrom(): SolutionFunc = CombinedNystromSolver(this).combined()
 
     /**
      * Итерированный комбинированный Nyström: `\hat u^N_h = f + lambda L u^N_h`, где `u^N_h` —
      * решение [combinedNystrom]; однократное применение точного оператора без новой системы.
      */
-    fun iteratedNystrom(): SolutionFunc = CombinedNystromSolver(this).iterated()
+    public fun iteratedNystrom(): SolutionFunc = CombinedNystromSolver(this).iterated()
 
     /**
      * Итерированный метод Кулкарни: `\hat u^K_h = f + lambda L u^K_h`, где `u^K_h` — решение
      * [kulkarni]; аналог итерации Слоана, применённой к приближению Кулкарни.
      */
-    fun iteratedKulkarni(): SolutionFunc {
+    public fun iteratedKulkarni(): SolutionFunc {
         val k = kulkarni()
         val uNodes = DoubleArray(op.gNode.size) { k.eval(op.gNode[it]) }
         return SolutionFunc(
@@ -831,12 +827,12 @@ class UrysonSecondKindSolver(
  * @param resid дискретная невязка при этом параметре.
  * @param omega значение стабилизатора `c^T R_h c`.
  */
-class FirstKindSolution(
-    val coeffs: DoubleArray,
-    val eval: (Double) -> Double,
-    val alpha: Double,
-    val resid: Double,
-    val omega: Double,
+public class FirstKindSolution(
+    public val coeffs: DoubleArray,
+    public val eval: (Double) -> Double,
+    public val alpha: Double,
+    public val resid: Double,
+    public val omega: Double,
 )
 
 /**
@@ -864,16 +860,16 @@ class FirstKindSolution(
  *        а не ошибка: итоговое решение выбирается по принципу невязки Морозова.
  *        Предупреждение в лог пишется в любом случае.
  */
-class UrysonFirstKindSolver(
-    val basis: MinimalSplineBasis,
-    val funcs: ProjFunctionals,
-    val space: SplineSpace,
-    val op: UrysohnOperator,
-    val tau: Double = DEFAULT_TAU,
-    val gnTol: Double = DEFAULT_GN_TOLERANCE,
-    val gnMaxIter: Int = DEFAULT_GN_MAX_ITERATIONS,
-    val throwOnDivergence: Boolean = false,
-    val ctx: NumericsContext = NumericsContext.default(),
+public class UrysonFirstKindSolver(
+    public val basis: MinimalSplineBasis,
+    public val funcs: ProjFunctionals,
+    public val space: SplineSpace,
+    public val op: UrysohnOperator,
+    public val tau: Double = DEFAULT_TAU,
+    public val gnTol: Double = DEFAULT_GN_TOLERANCE,
+    public val gnMaxIter: Int = DEFAULT_GN_MAX_ITERATIONS,
+    public val throwOnDivergence: Boolean = false,
+    public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     init {
         // КРИТИЧНО именно здесь: [solveMorozov] считает стабилизатор `Omega` через
@@ -884,7 +880,7 @@ class UrysonFirstKindSolver(
         NumericsContext.requireSame("UrysonFirstKindSolver", ctx, "space", space.ctx)
     }
 
-    companion object {
+    public companion object {
         /**
          * Коэффициент запаса в принципе невязки Морозова.
          *
@@ -892,17 +888,17 @@ class UrysonFirstKindSolver(
          * чем оно ближе к единице, тем меньше сглаживание, но тем выше чувствительность
          * к неточности оценки уровня шума.
          */
-        const val DEFAULT_TAU = 1.1
+        public const val DEFAULT_TAU: Double = 1.1
 
         /** Критерий останова Гаусса–Ньютона по равномерной норме шага. */
-        const val DEFAULT_GN_TOLERANCE = 1e-10
+        public const val DEFAULT_GN_TOLERANCE: Double = 1e-10
 
         /**
          * Предел итераций Гаусса–Ньютона при фиксированном `alpha`. Метод применяется
          * внутри гомотопии по параметру регуляризации, где каждый следующий запуск
          * стартует с предыдущего решения, поэтому большого числа итераций не требуется.
          */
-        const val DEFAULT_GN_MAX_ITERATIONS = 50
+        public const val DEFAULT_GN_MAX_ITERATIONS: Int = 50
 
         /** Верхняя граница показателя степени в логарифмической сетке параметра `alpha`. */
         private const val ALPHA_MAX_EXPONENT = 2.0
@@ -925,14 +921,14 @@ class UrysonFirstKindSolver(
         private const val DEGENERATE_START_THRESHOLD = 1e-8
     }
 
-    val grid = basis.grid
-    val n = grid.n
+    public val grid: Grid = basis.grid
+    public val n: Int = grid.n
     private val core = CollocationCore(basis, funcs, op, ctx)
     private val weights = space.weights
     private val gramR = space.gramR
 
     /** Вектор значений функционалов `theta_j(f)` для произвольной правой части. */
-    fun thetaOf(f: (Double) -> Double): DoubleArray =
+    public fun thetaOf(f: (Double) -> Double): DoubleArray =
         DoubleArray(n + 2) { funcs.valueFunctional(it - 2).applyTo(f) }
 
     /**
@@ -945,7 +941,7 @@ class UrysonFirstKindSolver(
      * @param alpha параметр регуляризации, строго положительный.
      * @param c0 начальное приближение коэффициентов.
      */
-    fun solveFixedAlpha(thetaFDelta: DoubleArray, alpha: Double, c0: DoubleArray): DoubleArray {
+    public fun solveFixedAlpha(thetaFDelta: DoubleArray, alpha: Double, c0: DoubleArray): DoubleArray {
         require(alpha > 0.0) { "Параметр регуляризации alpha должен быть положительным, получено alpha=$alpha" }
         val c = c0.copyOf()
         var lastStep = Double.NaN
@@ -978,7 +974,7 @@ class UrysonFirstKindSolver(
     }
 
     /** Дискретная невязка `res_h = ||Theta_h(U x_h) - Theta_h(f^delta)||` во взвешенной норме. */
-    fun residual(c: DoubleArray, thetaFDelta: DoubleArray): Double {
+    public fun residual(c: DoubleArray, thetaFDelta: DoubleArray): Double {
         val xi = core.xiVector(c)
         var s = 0.0
         for (j in 0 until n + 2) {
@@ -1014,7 +1010,7 @@ class UrysonFirstKindSolver(
      * @param thetaFDelta вектор `theta_j(f^delta)` зашумлённых данных.
      * @param delta уровень шума в норме `L^2`; при `delta = 0` путь проходится целиком.
      */
-    fun solveMorozov(thetaFDelta: DoubleArray, delta: Double): FirstKindSolution {
+    public fun solveMorozov(thetaFDelta: DoubleArray, delta: Double): FirstKindSolution {
         // Корректность cChi() как коэффициента усиления шума держится на том, что
         // funcs — ProjFunctionals (функционалы-значения). См. KDoc метода.
         val barDelta = funcs.cChi() * Math.sqrt(grid.b - grid.a) * delta

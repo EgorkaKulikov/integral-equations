@@ -58,6 +58,8 @@ numerical-core  <--  minimal-splines  <--  integral-equations (этот репо
 ## 3. Политика видимости
 
 Приложение, не библиотека: модификатор `public` не является обещанием совместимости.
+Наборы `main`, `problems`, `demo` и `benchmark` собираются в режиме `explicitApi()`,
+поэтому видимость каждого объявления указывается явно.
 Символы, помеченные `internal` (`solvers.core.SecondKindDefaults`,
 `solvers.core.IterationStopCriterion`, `solvers.uryson.NewtonRun`,
 `solvers.uryson.runNewtonIterations`, `VolterraOperator.IntegrandCache` и его члены),
@@ -82,8 +84,11 @@ numerical-core  <--  minimal-splines  <--  integral-equations (этот репо
 Перед первой сборкой библиотеки должны быть в `mavenLocal()`: в каждой из них
 `./gradlew publishToMavenLocal`. Альтернатива — `-PnumericsRepositoryUrl=<url>`.
 
-Все тестовые задачи получают `-Dnumerics.backend=multik` по умолчанию; внешнее
-значение уважается. Эталоны привязаны к бэкенду multik.
+Все тестовые задачи получают `-Dnumerics.backend=auto` по умолчанию; внешнее значение
+уважается. Допустимые значения — `native` (системная реализация BLAS/LAPACK), `java`
+(переносимая реализация netlib) и `auto` (выбор при запуске). Эталоны сняты на системной
+реализации машины разработчика; прогон с `-Dnumerics.backend=java` расходится с ними
+на ключах уравнения F1 первого рода.
 
 ## 5. Численные инварианты, которые нельзя нарушать
 
@@ -118,8 +123,8 @@ numerical-core  <--  minimal-splines  <--  integral-equations (этот репо
 4. **Подгонять допуски (1e-9, 2 %, 8 %) ради зелёной сборки ЗАПРЕЩЕНО.**
 5. Машинно-зависимые гейты (`@Tag("machine")`: оба характеризационных класса и
    `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`) работают только на
-   машине снятия эталона (macOS aarch64, multik). Локально включены всегда; в CI —
-   `-PmachineDependentGates=false`. Различие архитектуры CPU не является
+   машине снятия эталона (macOS aarch64, системная реализация BLAS/LAPACK). Локально
+   включены всегда; в CI — `-PmachineDependentGates=false`. Различие архитектуры CPU не является
    доказательством математической регрессии — см. `docs/TESTING.md`.
 
 Процедура при изменении библиотеки: изменил `numerical-core` или `minimal-splines` →
@@ -164,17 +169,18 @@ KDoc объясняет **почему** принято решение и как
 | `integral-equations` (этот) | решатели, задачи, верификация | обеих библиотек |
 | будущий четвёртый проект | другие численные методы на сплайнах | `numerical-core`, `minimal-splines`; **не** от этого репозитория |
 
-Правила библиотек — в их собственных `AGENTS.md`. План и обоснование разделения —
-[`docs/REPOSITORY_SPLIT_PLAN.md`](docs/REPOSITORY_SPLIT_PLAN.md).
+Правила библиотек — в их собственных `CONTRIBUTING.md`. Разделение выполнено полностью:
+код сплайнов и численной инфраструктуры здесь отсутствует.
 
 ## 11. Документы
 
 | Файл | Назначение |
 |---|---|
-| [`README.md`](README.md) | обзор, быстрый старт, API, верификация |
+| [`README.md`](README.md) | назначение проекта, сборка, запуск, состав документации |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | правила изменения кода и документации |
 | [`docs/TESTING.md`](docs/TESTING.md) | задачи Gradle, состав `check`, машинно-зависимые гейты, CI, зависимости-артефакты |
 | [`docs/REFERENCES.md`](docs/REFERENCES.md) | источники схем, регуляризации, верификации |
 | [`docs/ACCURACY.md`](docs/ACCURACY.md) | граница по `alpha` для уравнений первого рода |
 | [`docs/HPC.md`](docs/HPC.md) | бенчмарк и параллельная сборка в решателях |
 | [`docs/baseline-changes.md`](docs/baseline-changes.md) | протокол и история правки эталонов |
-| [`TASK.md`](TASK.md), [`tasks/uryson-task.md`](tasks/uryson-task.md) | исторические задания исходного монорепозитория |
+| [`docs/ABSTRACT.md`](docs/ABSTRACT.md) | реферат программы для государственной регистрации |

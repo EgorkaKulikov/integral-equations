@@ -85,9 +85,9 @@ class UrysonHealthCheckTest {
                     for (j in 0 until space.dim) {
                         if (abs(i - j) > 2) {
                             assertTrue(
-                                abs(gram[i][j]) < EXACT_IDENTITY_TOLERANCE,
+                                abs(gram[i, j]) < EXACT_IDENTITY_TOLERANCE,
                                 "Базис ${system.name}: элемент R_h[$i][$j] вне полосы должен быть " +
-                                    "нулевым, получено ${gram[i][j]}",
+                                    "нулевым, получено ${gram[i, j]}",
                             )
                         }
                     }

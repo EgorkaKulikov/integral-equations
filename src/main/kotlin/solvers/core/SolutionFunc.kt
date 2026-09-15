@@ -62,11 +62,11 @@ private val convergenceLogger: Logger = Logger.getLogger("numerics.Convergence")
  *        значение есть `Inf` или `NaN`, а такое число не несёт сведений о том,
  *        насколько плох результат, и не годится для сравнений.
  */
-class SolutionFunc(
-    val eval: (Double) -> Double,
-    val converged: Boolean = true,
-    val iterations: Int = 0,
-    val residual: Double = 0.0,
+public class SolutionFunc(
+    public val eval: (Double) -> Double,
+    public val converged: Boolean = true,
+    public val iterations: Int = 0,
+    public val residual: Double = 0.0,
 )
 
 /**
@@ -96,7 +96,7 @@ class SolutionFunc(
  *        вызывают функцию без изменений.
  * @throws IllegalStateException если сходимость не достигнута и `throwOnDivergence`.
  */
-fun reportConvergence(
+internal fun reportConvergence(
     converged: Boolean,
     throwOnDivergence: Boolean,
     methodName: String,

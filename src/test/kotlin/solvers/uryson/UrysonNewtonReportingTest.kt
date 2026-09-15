@@ -1,5 +1,6 @@
 package solvers.uryson
 
+import numerics.DenseMatrix
 import numerics.GaussLegendre
 import splines.GeneratingSystem
 import splines.Grid
@@ -143,8 +144,9 @@ class UrysonNewtonReportingTest {
             stepAt = { current, f ->
                 stepCalls++
                 val b = core.bMatrix(current)
-                val jacobian = Array(n + 2) { r ->
-                    DoubleArray(n + 2) { col -> -solver.lambda * b[r][col] }.also { it[r] += 1.0 }
+                val jacobian = DenseMatrix.build(n + 2, n + 2) { r, col ->
+                    val value = -solver.lambda * b[r, col]
+                    if (r == col) value + 1.0 else value
                 }
                 val delta = LinearAlgebra.solve(jacobian, DoubleArray(n + 2) { -f[it] })
                 lastStepNorm = LinearAlgebra.normInf(delta)
