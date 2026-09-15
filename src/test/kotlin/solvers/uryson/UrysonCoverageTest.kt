@@ -4,6 +4,7 @@ import numerics.GaussLegendre
 import splines.GeneratingSystem
 import splines.Grid
 import splines.MinimalSplineBasis
+import solvers.core.FirstKindSolution
 import solvers.core.SolutionFunc
 import splines.functionals.ProjFunctionals
 import splines.metrics.errorEh

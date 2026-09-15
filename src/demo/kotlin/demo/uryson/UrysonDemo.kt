@@ -13,7 +13,7 @@ import problems.uryson.UrysonProblem
 import problems.uryson.firstKindSolver
 import problems.uryson.noisyThetaCoefficients
 import problems.uryson.secondKindSolver
-import solvers.uryson.FirstKindSolution
+import solvers.core.FirstKindSolution
 import solvers.uryson.SplineSpace
 import solvers.uryson.UrysohnOperator
 import solvers.uryson.UrysonSecondKindSolver
