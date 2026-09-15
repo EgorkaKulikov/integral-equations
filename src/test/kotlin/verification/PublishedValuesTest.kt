@@ -222,7 +222,7 @@ class PublishedValuesTest {
          * [NOISE_FLOOR] исключаются из сверки как шум по общему правилу, а ключи с
          * решением вне `span φ` (базисы B и T для exp-задач, H для V2win) сверяются
          * с публикацией допуском 2 %. Обоснование — `docs/baseline-changes.md`
-         * (запись от 2026-09-10) и minimal-splines `docs/ТОЧНОСТЬ.md`.
+         * (запись от 2026-09-10) и minimal-splines `docs/ACCURACY.md`.
          */
         val KNOWN_CONDITIONING_ARTIFACTS = setOf(
             "F.F2exp.H.theta.n16.base.Eh", "F.F2exp.H.theta.n32.base.Eh", "F.F2exp.H.theta.n64.base.Eh",
