@@ -30,7 +30,8 @@ class ExtraBaselineSnapshotTool {
     @Test
     fun captureExtraSnapshot() {
         val rows = ExtraCharacterizationMatrix.collect()
-        val dir = File("build/baseline").apply { mkdirs() }
+        // См. [BaselineSnapshotTool]: каталог задаётся свойством ради двух снимков подряд.
+        val dir = File(System.getProperty("baseline.output.dir")?.takeIf { it.isNotBlank() } ?: "build/baseline").apply { mkdirs() }
         val target = File(dir, "baseline-extra.tsv")
         // Одна операция записи вместо тысячи дозаписей: и быстрее, и исключает
         // частично записанный файл при падении посреди снятия.

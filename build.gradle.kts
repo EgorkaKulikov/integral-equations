@@ -229,35 +229,21 @@ val numericsBackend: String = System.getProperty("numerics.backend") ?: "auto"
 //    образа раннера.
 //
 // РЕШЕНИЕ: разделение ПО ПЕРЕНОСИМОСТИ. Измерено, что машинно-зависимая
-// поверхность УЗКАЯ: из 171 теста полного набора `test` наборы `fastTest`
-// и `scipyVerify` (job'ы `fast` и `scipy` в CI) ЗЕЛЁНЫЕ на чужой
-// архитектуре целиком, а при ПОЛНОЙ замене реализации LU (`-Dnumerics.backend=java`,
-// возмущение грубее смены архитектуры) 644 из 655 опубликованных значений
-// остаются в допуске. Непереносимы только два характеризационных класса и ОДИН
-// метод `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (F1, 11 расхождений
-// до 11.49 % при допуске 2 %). Им и поставлен тег `machine`.
+// поверхность УЗКАЯ, и с 2026-09-16 она сузилась до ОДНОГО метода. Оба
+// характеризационных класса тег `machine` ПОТЕРЯЛИ: эталоны получили колонку
+// `класс`, вычисленную сравнением снимков двух путей LU, и оба гейта зелёные
+// и на `-Dnumerics.backend=native`, и на `java` (см. docs/baseline-changes.md,
+// запись от 2026-09-16). Осталось непереносимым только
+// `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (F1, 11 расхождений
+// до 11.49 % при допуске 2 %) — и вылечить его тем же приёмом НЕЛЬЗЯ: сверка идёт
+// с числами ИЗ СТАТЬИ, а их нельзя «переснять» под платформу.
 //
-// ЛОКАЛЬНО ФЛАГ ВКЛЮЧЁН ПО УМОЛЧАНИЮ: гейты работают в `./gradlew check` и `build`,
-// то есть на том единственном железе, где они осмысленны, и правило 6 раздела
-// «Правила участия» требует прогона `build` перед отправкой изменений. В CI на
-// чужой архитектуре передаётся `-PmachineDependentGates=false`.
+// ЛОКАЛЬНО ФЛАГ ВКЛЮЧЁН ПО УМОЛЧАНИЮ; в CI на чужой архитектуре job `full`
+// исключает тег `machine` через `-PmachineDependentGates=false`. Отдельной
+// функции «пропустить задачу целиком» больше нет: задач, у которых машинно-зависимы
+// ВСЕ тесты, не осталось, а исключения по тегу для одного метода достаточно.
 val machineDependentGates: Boolean =
     (findProperty("machineDependentGates") as String?)?.toBoolean() ?: true
-
-/**
- * Отключает ЦЕЛИКОМ задачу, все тесты которой машинно-зависимы.
- *
- * Почему `onlyIf`, а не `excludeTags("machine")`: у этих задач КАЖДЫЙ тест несёт
- * тег `machine`, и исключение по тегу оставило бы НОЛЬ отобранных тестов, а вместе
- * с активными exclude-фильтрами (см. комментарий о `patternFiltersSpecified` выше)
- * это дало бы падение `No tests found for given includes` — то есть красную сборку
- * вместо осмысленного пропуска. `onlyIf` же помечает задачу как SKIPPED явно.
- */
-fun Test.skipEntirelyIfMachineGatesDisabled() {
-    onlyIf("машинно-зависимые гейты отключены -PmachineDependentGates=false") {
-        machineDependentGates
-    }
-}
 
 // --- Генераторы данных среди тестовых классов --------------------------------
 // Эти четыре класса живут в `src/test`, но проверок не содержат: они СНИМАЮТ
@@ -621,11 +607,12 @@ tasks.register<Test>("slowTest") {
  */
 tasks.register<Test>("characterizationTest") {
     group = "verification"
-    description = "Гейт численной нейтральности: 1366 значений E_h против эталона, допуск 1e-9"
-    // Бэкенд здесь критичен: на `java` гейт падает (см. выше).
+    description = "Гейт численной нейтральности: 1366 значений E_h против эталона (классы portable/sensitive)"
+    // ПЕРЕНОСИМ МЕЖДУ ПУТЯМИ LU: проверено прогоном на `-Dnumerics.backend=java` и `native`.
+    // 52 ключа F1, валившие прежний гейт, выделены в класс `sensitive` и сверяются с
+    // границей `2*cond*max(omega,eps)*||u||inf`, вычисляемой в том же прогоне.
+    // Поэтому `skipEntirelyIfMachineGatesDisabled()` здесь БОЛЬШЕ НЕТ, и задача идёт в CI.
     gateOverTestClass("characterization.EhCharacterizationTest")
-    // Весь класс помечен тегом `machine`: эталон привязан к машине снятия.
-    skipEntirelyIfMachineGatesDisabled()
 }
 
 /**
@@ -650,11 +637,105 @@ tasks.register<Test>("characterizationTest") {
  */
 tasks.register<Test>("extraCharacterizationTest") {
     group = "verification"
-    description = "Гейт combinedNystrom и неравномерных сеток против baseline-extra.tsv, допуск 1e-9"
-    // Тот же довод, что и у `characterizationTest`: снимок привязан к бэкенду.
+    description = "Гейт combinedNystrom и неравномерных сеток против baseline-extra.tsv (классы portable/residual/exact)"
+    // Измерение: 0 падений на обоих бэкендах, то есть привязки к машине здесь не было вовсе.
     gateOverTestClass("characterization.ExtraCharacterizationTest")
-    // Весь класс помечен тегом `machine`: эталон привязан к машине снятия.
-    skipEntirelyIfMachineGatesDisabled()
+}
+
+/**
+ * КЛАССИФИКАЦИЯ ЭТАЛОНА: третья колонка TSV ВЫЧИСЛЯЕТСЯ, а не пишется рукой.
+ *
+ * Снимает обе матрицы ДВАЖДЫ — на `-Dnumerics.backend=java` (netlib F2J, чистая Java) и на
+ * `native` (netlib + системная LAPACK) — и сравнивает снимки: ключ, совпавший в пределах
+ * правила `portable`, получает этот класс; разошедшийся получает `sensitive`, НО только
+ * если у него есть система `(I-M)c=g` (схемы `base`/`sloan` задачи F1). Разошедшийся ключ
+ * любой другой схемы РОНЯЕТ задачу: границы для него не существует, и молчаливое
+ * расширение класса означало бы отключение гейта. Результат —
+ * `build/baseline/classified/baseline-{eh,extra}.tsv`, который после осмотра копируется
+ * в `src/test/resources/characterization/`.
+ *
+ * ПОЧЕМУ ДВА ОТДЕЛЬНЫХ ПРОГОНА: `numericsBackend` вычисляется один раз на конфигурацию
+ * проекта, поэтому разнести бэкенды по задачам внутри одной сборки нельзя — задача
+ * запускает `./gradlew` повторно, дважды, с разными значениями `-Dnumerics.backend`.
+ * Стоимость обоих снятий — около полутора минут.
+ */
+/**
+ * Снятие обеих матриц на ДВУХ бэкендах подряд — предпосылка классификации.
+ *
+ * Отдельный тип задачи, а не `doLast` в обычной: `ExecOperations` доступен только
+ * через инъекцию (в Gradle 8.9 `project.exec` объявлен устаревшим и несовместим с
+ * configuration cache). `numericsBackend` вычисляется один раз на конфигурацию, поэтому
+ * разнести бэкенды по задачам внутри одной сборки нельзя — задача вызывает `./gradlew`
+ * повторно, дважды, с разными `-Dnumerics.backend`.
+ */
+abstract class CaptureBothBackends @Inject constructor(
+    private val execOperations: ExecOperations,
+) : DefaultTask() {
+
+    @get:Internal
+    abstract val gradlewPath: Property<String>
+
+    @get:Internal
+    abstract val projectDirectory: Property<String>
+
+    @get:OutputDirectory
+    abstract val javaDirectory: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val nativeDirectory: DirectoryProperty
+
+    @TaskAction
+    fun capture() {
+        for (target in listOf(javaDirectory.get().asFile to "java", nativeDirectory.get().asFile to "native")) {
+            val (dir, backend) = target
+            dir.mkdirs()
+            execOperations.exec {
+                commandLine(
+                    gradlewPath.get(), "--console=plain", "captureBaseline", "captureExtraBaseline",
+                    "-Dnumerics.backend=$backend", "-Dbaseline.output.dir=${dir.absolutePath}",
+                )
+                workingDir = File(projectDirectory.get())
+            }
+        }
+    }
+}
+
+tasks.register<CaptureBothBackends>("captureBaselineBothBackends") {
+    group = "verification"
+    description = "Снять обе матрицы на -Dnumerics.backend=java и native (предпосылка classifyBaseline)"
+    dependsOn("testClasses")
+    gradlewPath.set(rootDir.resolve("gradlew").absolutePath)
+    projectDirectory.set(projectDir.absolutePath)
+    javaDirectory.set(layout.buildDirectory.dir("baseline/java"))
+    nativeDirectory.set(layout.buildDirectory.dir("baseline/native"))
+    outputs.upToDateWhen { false }
+}
+
+/**
+ * КЛАССИФИКАЦИЯ ЭТАЛОНА: третья колонка TSV ВЫЧИСЛЯЕТСЯ, а не пишется рукой.
+ *
+ * Сравнивает снимки двух бэкендов (см. `captureBaselineBothBackends`): ключ, совпавший
+ * в пределах правила `portable`, получает этот класс; ключи `*.iters` — `exact`, ключи
+ * `*.residual` — `residual`; разошедшийся ключ получает `sensitive`, НО только если у
+ * него есть система `(I-M)c=g` (схемы `base`/`sloan` задачи F1). Разошедшийся ключ любой
+ * другой схемы РОНЯЕТ задачу с явным сообщением: границы `cond*omega` для него не
+ * существует, и молчаливое расширение класса означало бы отключение гейта на этих ключах.
+ *
+ * Результат — `build/baseline/classified/baseline-{eh,extra}.tsv` со значениями НАТИВНОГО
+ * прогона; после осмотра копируется в `src/test/resources/characterization/` по протоколу
+ * `docs/baseline-changes.md`. Полная стоимость — около полутора минут (два снятия).
+ */
+tasks.register<JavaExec>("classifyBaseline") {
+    group = "verification"
+    description = "ВЫЧИСЛИТЬ колонку класса по снимкам обоих бэкендов (build/baseline/classified)"
+    dependsOn("captureBaselineBothBackends")
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("characterization.BaselineClassifier")
+    args(
+        layout.buildDirectory.dir("baseline/java").get().asFile.absolutePath,
+        layout.buildDirectory.dir("baseline/native").get().asFile.absolutePath,
+        layout.buildDirectory.dir("baseline/classified").get().asFile.absolutePath,
+    )
 }
 
 /**
@@ -725,10 +806,13 @@ tasks.register<Test>("scipyVerify") {
 tasks.register<Test>("captureBaseline") {
     group = "verification"
     description = "Снять эталонный снимок E_h всех схем в build/baseline/"
+    // Каталог вывода задаётся снаружи: `classifyBaseline` снимает матрицу дважды подряд.
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
     filter { includeTestsMatching("characterization.BaselineSnapshotTool") }
+    // Каталог вывода задаётся снаружи: `classifyBaseline` снимает матрицу дважды подряд.
+    providers.systemProperty("baseline.output.dir").orNull?.let { systemProperty("baseline.output.dir", it) }
     outputs.upToDateWhen { false }
     // Снимок обязан сниматься на том же бэкенде, с которым его потом сверяют.
     systemProperty("numerics.backend", numericsBackend)
@@ -745,6 +829,7 @@ tasks.register<Test>("captureExtraBaseline") {
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
     filter { includeTestsMatching("characterization.ExtraBaselineSnapshotTool") }
+    providers.systemProperty("baseline.output.dir").orNull?.let { systemProperty("baseline.output.dir", it) }
     outputs.upToDateWhen { false }
     systemProperty("numerics.backend", numericsBackend)
 }

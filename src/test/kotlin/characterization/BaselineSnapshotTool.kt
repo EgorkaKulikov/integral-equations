@@ -95,7 +95,9 @@ class BaselineSnapshotTool {
      */
     @AfterAll
     fun writeSnapshot() {
-        val dir = File("build/baseline").apply { mkdirs() }
+        // Каталог вывода задаётся свойством: задача `classifyBaseline` снимает матрицу
+        // ДВАЖДЫ (backend=java и backend=native) и обязана положить снимки в РАЗНЫЕ каталоги.
+        val dir = File(System.getProperty("baseline.output.dir")?.takeIf { it.isNotBlank() } ?: "build/baseline").apply { mkdirs() }
         val target = File(dir, "baseline-eh.tsv")
         val sorted = rows.sortedBy { it.first }
         target.writeText(sorted.joinToString(separator = "") { (key, value) -> "$key\t$value\n" })

@@ -24,16 +24,20 @@
 # на compile classpath) и `koverVerify` (пороги покрытия). Обе бесплатны: единственный
 # источник покрытия — `fastTest`, который в этом job'е и так исполняется.
 #
-# МАШИННО-ЗАВИСИМЫЕ ГЕЙТЫ ЗДЕСЬ НЕ ГОНЯЮТСЯ — все шаги передают
-# `-PmachineDependentGates=false`. Причина и цена решения — в build.gradle.kts
-# (блок `machineDependentGates`) и docs/TESTING.md. Кратко: эталоны с допуском 1e-9
-# сняты на macOS aarch64, а здесь ubuntu x86_64: другие ядра OpenBLAS дают другой
-# порядок суммирования, и на плохо обусловленных задачах F1 расхождение выходит
-# далеко за допуск. Эти гейты — ЛОКАЛЬНЫЕ, они входят в `./gradlew check`/`build`,
-# прогон которого требуется перед отправкой изменений (правило 6 README).
-# Что CI продолжает проверять: 134 быстрых теста, 9 тестов сверки со SciPy,
-# 168 сочетаний порядка сходимости и 613 из 655 опубликованных значений
-# (всё, кроме 42 ключей F1).
+# ХАРАКТЕРИЗАЦИОННЫЕ ГЕЙТЫ ГОНЯЮТСЯ ЗДЕСЬ — с 2026-09-16 флага отключения
+# машинно-зависимых гейтов в шагах больше нет. Эталоны получили третью колонку
+# `класс`, вычисленную сравнением снимков двух путей LU (`-Dnumerics.backend=java`
+# против `native`): 54 ключа F1 сверяются с границей `2*cond*max(omega,eps)*||u||inf`,
+# считаемой в том же прогоне, остальные 2656 — прежним строгим правилом (отн. 1e-9,
+# пол 6e-13), которое перекрывает измеренное расхождение бэкендов (<= 1.0e-14) в 60 раз.
+# Прогон на ubuntu/OpenBLAS — ТРЕТИЙ независимый путь LU и главное подтверждение
+# классификации. Сам механизм отключения (свойство сборки, см. build.gradle.kts)
+# сохранён: им помечен единственный оставшийся машинно-зависимый метод —
+# `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (сверка с ЧИСЛАМИ ИЗ
+# СТАТЬИ, которые «переснять» под платформу нельзя).
+# Что CI проверяет: быстрый набор, 9 тестов сверки со SciPy, 168 сочетаний порядка
+# сходимости, оба характеризационных гейта (2710 значений) и 613 из 655 опубликованных
+# значений (всё, кроме 42 ключей F1).
 name: CI
 
 on:
@@ -131,7 +135,7 @@ jobs:
         run: >-
           ./gradlew fastTest koverXmlReport koverVerify verifyArtifactDependencies
           compileDemoKotlin compileProblemsKotlin
-          -Dnumerics.backend=${{ matrix.backend }} -PmachineDependentGates=false
+          -Dnumerics.backend=${{ matrix.backend }}
 
       # ДОКАЗАТЕЛЬСТВО ЗАГРУЖЕННОГО БЭКЕНДА БЕЗ ВТОРОГО ЗАПУСКА JVM.
       # Имя бэкенда печатает сам тест (`println("numerical-core: ${Backends.describe()}")`),
@@ -194,14 +198,13 @@ jobs:
       - name: Настройка Gradle с кэшем
         uses: gradle/actions/setup-gradle@v6
 
-      # ГЕЙТ E_h ПРОТИВ ЭТАЛОНА ЗДЕСЬ НЕ ГОНЯЕТСЯ — и это НЕ ослабление проверок.
-      # `EhCharacterizationTest` сверяет 1366 значений с допуском 1e-9 против эталона,
-      # снятого на macOS aarch64. На ubuntu x86_64 он был КРАСНЫМ С ПЕРВОГО ПРОГОНА
-      # (30.07), хотя локально все 5 тестов зелёные: разные ядра OpenBLAS (NEON против
-      # AVX) дают разный порядок блочного суммирования. Постоянно красный гейт
-      # хуже отсутствующего: его перестают читать. Гейт остаётся ЛОКАЛЬНЫМ в
-      # `./gradlew check`/`build` — на том единственном железе, где он осмыслен.
-      # Подробности и отвергнутые альтернативы — docs/TESTING.md.
+      # ГЕЙТЫ E_h ПРОТИВ ЭТАЛОНОВ ГОНЯЮТСЯ ЗДЕСЬ. Прежде они исключались как
+      # машинно-зависимые: эталон, снятый на macOS aarch64, был КРАСНЫМ на ubuntu
+      # x86_64 с первого прогона (30.07). Причина названа и устранена по существу —
+      # расходились 52 ключа задачи F1 (`cond_1 ~ 2.2e10`), и только они; теперь у них
+      # класс `sensitive` и сверка с вычисляемой границей, а не с допуском 1e-9.
+      # Прогон здесь — независимое подтверждение: OpenBLAS x86_64 — третий путь LU
+      # после Accelerate и F2J. Подробности — docs/TESTING.md и docs/baseline-changes.md.
 
       # ГЕЙТ ПОРЯДКА СХОДИМОСТИ (задача 1 `TASK.md`). Полная матрица из 168 сочетаний
       # на сетках до n = 64. Почему ЗДЕСЬ, а не в job `fast`: полная матрица стоит полторы-две
@@ -211,19 +214,20 @@ jobs:
       # покрытия Kover (`disabledForTestTasks` в build.gradle.kts) — она дорожала `check` на
       # полторы-две минуты, не добавляя ни одной покрытой строки. Без этого шага гейт
       # не запускался бы НИ В ОДНОМ job, хотя README и TASK.md утверждают обратное.
-      - name: Гейт порядка сходимости (полная матрица)
-        run: ./gradlew convergenceOrderTest -PmachineDependentGates=false
+      - name: Гейты численной нейтральности и порядка сходимости
+        run: ./gradlew characterizationTest extraCharacterizationTest convergenceOrderTest
 
       - name: Отчёты гейтов
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-reports-characterization
-          # ТОЛЬКО отчёты `convergenceOrderTest`. Пути `build/**/characterizationTest/**`
-          # убраны: задача `characterizationTest` здесь НЕ ЗАПУСКАЕТСЯ (шаги передают
-          # `-PmachineDependentGates=false`), и эти каталоги не создаются никогда —
-          # они давали ложное впечатление, что гейт E_h в CI всё же прогоняется.
+          # Отчёты всех трёх гейтов этого job'а: оба характеризационных и порядок сходимости.
           path: |
+            build/reports/tests/characterizationTest/**
+            build/test-results/characterizationTest/**
+            build/reports/tests/extraCharacterizationTest/**
+            build/test-results/extraCharacterizationTest/**
             build/reports/tests/convergenceOrderTest/**
             build/test-results/convergenceOrderTest/**
           if-no-files-found: warn
@@ -268,7 +272,7 @@ jobs:
       # зелёной сборке. Именно этого job'а не должно быть достаточно «пройти молча».
       # Фактический замер: 9 тестов, 60 проверок, NumPy 2.5.1 / SciPy 1.18.0.
       - name: Внешняя сверка со SciPy/NumPy
-        run: ./gradlew scipyVerify -PmachineDependentGates=false
+        run: ./gradlew scipyVerify
 
       - name: Отчёты сверки
         if: always()
@@ -345,7 +349,7 @@ jobs:
       # `PublishedValuesTest` — сверка с ВНЕШНИМ источником правды, не замкнутая
       # на собственные снимки проекта.
       - name: Медленный набор тестов
-        run: ./gradlew slowTest -PmachineDependentGates=false
+        run: ./gradlew slowTest
 
       # ДИАГНОСТИКА ПАДЕНИЙ ЧЕРЕЗ АННОТАЦИИ — НЕ КОСМЕТИКА, А ЕДИНСТВЕННЫЙ КАНАЛ.
       #
