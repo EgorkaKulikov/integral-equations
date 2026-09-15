@@ -19,10 +19,10 @@ import solvers.core.SecondKindDefaults.KULKARNI_QUASI_TOLERANCE
  * создавать операнд (а вместе с ним — кэш подынтегральной функции) заново,
  * изменив число обращений к ядру.
  */
-class ImageTriple(
-    val value: (Double) -> Double,
-    val deriv: (Double) -> Double,
-    val deriv2: (Double) -> Double,
+public class ImageTriple(
+    public val value: (Double) -> Double,
+    public val deriv: (Double) -> Double,
+    public val deriv2: (Double) -> Double,
 )
 
 /**
@@ -94,13 +94,13 @@ class ImageTriple(
  *        На прямые схемы не влияет. Параметр задан на уровне решателя, а не
  *        каждого метода: это политика обработки ошибок, а не свойство схемы.
  */
-abstract class SecondKindSolverCore<Operand>(
-    val basis: MinimalSplineBasis,
-    val funcs: FunctionalFamily,
-    val cL: Double,
+public abstract class SecondKindSolverCore<Operand>(
+    public val basis: MinimalSplineBasis,
+    public val funcs: FunctionalFamily,
+    public val cL: Double,
     rhs: RhsWithDerivatives,
-    val throwOnDivergence: Boolean,
-    val ctx: NumericsContext = NumericsContext.default(),
+    public val throwOnDivergence: Boolean,
+    public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     init {
         // Семейство функционалов решает СЛАУ при построении — тем же бэкендом, что и решатель.
@@ -118,17 +118,17 @@ abstract class SecondKindSolverCore<Operand>(
     // не занимает поля в объекте.
 
     /** Правая часть `f(t)`. */
-    val fEff: (Double) -> Double = rhs.value
+    public val fEff: (Double) -> Double = rhs.value
 
     /** Первая производная правой части `f'(t)`. */
-    val fEffDeriv: (Double) -> Double = rhs.deriv
+    public val fEffDeriv: (Double) -> Double = rhs.deriv
 
     /** Вторая производная правой части `f''(t)`. */
-    val fEffDeriv2: (Double) -> Double = rhs.deriv2
+    public val fEffDeriv2: (Double) -> Double = rhs.deriv2
 
-    val grid = basis.grid
-    val n = grid.n
-    val dim = n + 2
+    public val grid: Grid = basis.grid
+    public val n: Int = grid.n
+    public val dim: Int = n + 2
 
     // ==== Точки расширения ==================================================
 
@@ -233,25 +233,28 @@ abstract class SecondKindSolverCore<Operand>(
      * независимы по `i`, а построчная запись в общую матрицу из потоков потребовала
      * бы синхронизации. Порядок обхода при копировании сохранён дословно.
      */
-    private fun assembleChiMatrix(images: (Int) -> ImageTriple): Array<DoubleArray> {
+    private fun assembleChiMatrix(images: (Int) -> ImageTriple): DenseMatrix {
         // Столбцы M независимы по i; cols[i] = столбец i.
         val cols = ParallelAssembly.assembleRows(dim, dim, ctx.parallel) { i ->
             val im = images(i)
             DoubleArray(dim) { j -> funcs.chi(j - 2).apply(im.value, im.deriv, im.deriv2) }
         }
-        val m = LinearAlgebra.zeros(dim, dim)
-        for (i in 0 until dim) for (j in 0 until dim) m[j][i] = cols[i][j]
-        return m
+        // DenseMatrix хранится ПО СТОЛБЦАМ, поэтому собранные столбцы просто укладываются
+        // друг за другом: транспонирование, которое требовалось при построчном хранении,
+        // исчезает вместе с ним. Ни одной арифметической операции при переносе не выполняется.
+        val data = DoubleArray(dim * dim)
+        for (i in 0 until dim) cols[i].copyInto(data, i * dim)
+        return DenseMatrix.fromColumnMajor(dim, dim, data)
     }
 
     /** Матрица M_{j,i} = chi_j(L omega_i). Для xi учитывается (L omega_i)', для xi^<0> и (L omega_i)''. */
-    fun matrixM(): Array<DoubleArray> = assembleChiMatrix { i -> omegaImages(i) }
+    public fun matrixM(): DenseMatrix = assembleChiMatrix { i -> omegaImages(i) }
 
     /** Матрица M2_{j,i} = chi_j(L(L omega_i)) (двойное применение L). */
-    fun matrixM2(): Array<DoubleArray> = assembleChiMatrix { i -> doubleOmegaImages(i) }
+    public fun matrixM2(): DenseMatrix = assembleChiMatrix { i -> doubleOmegaImages(i) }
 
     /** g_j = chi_j(f). */
-    fun vectorG(): DoubleArray = chiOf(fEff, fEffDeriv, fEffDeriv2)
+    public fun vectorG(): DoubleArray = chiOf(fEff, fEffDeriv, fEffDeriv2)
 
     /**
      * d_j = chi_j(L f).
@@ -262,7 +265,7 @@ abstract class SecondKindSolverCore<Operand>(
      * ровно по одному разу на каждый функционал, и кэш только добавил бы аллокаций.
      * Факт зафиксирован в KDoc `VolterraOperator.IntegrandCache` и менять его нельзя.
      */
-    fun vectorD(): DoubleArray {
+    public fun vectorD(): DoubleArray {
         val rhsImage = { t: Double -> cL * applyOperator(t) { s -> fEff(s) } }
         val rhsImageDeriv = { t: Double -> cL * applyOperatorDeriv(t) { s -> fEff(s) } }
         // Вторая производная образа правой части требует и f, и f' (член Лейбница у Вольтерры).
@@ -282,24 +285,24 @@ abstract class SecondKindSolverCore<Operand>(
      * Порядок операций сохранён ДОСЛОВНО: выделение этого метода из
      * [solveBaseCoeffs] — чистое перемещение строк, числа от него не меняются.
      */
-    fun baseMatrix(): Array<DoubleArray> {
+    public fun baseMatrix(): DenseMatrix {
         val m = matrixM()
-        val a = LinearAlgebra.zeros(dim, dim)
-        for (r in 0 until dim) { for (c in 0 until dim) a[r][c] = -m[r][c]; a[r][r] += 1.0 }
+        val a = DenseMatrix.zeros(dim, dim)
+        for (r in 0 until dim) { for (c in 0 until dim) a[r, c] = -m[r, c]; a[r, r] += 1.0 }
         return a
     }
 
     /** Базовая схема: (I - M) c = g. */
-    fun solveBaseCoeffs(): DoubleArray =
+    public fun solveBaseCoeffs(): DoubleArray =
         LinearAlgebra.solve(baseMatrix(), vectorG(), ctx.backend)
 
-    fun base(): SolutionFunc {
+    public fun base(): SolutionFunc {
         val c = solveBaseCoeffs()
         return SolutionFunc(eval = { t -> basis.evalSpline(c, t) })
     }
 
     /** Слоан: ~u_h(t) = f(t) + (L u_h)(t). u_h — сплайн, L применяется к подготовленному операнду. */
-    fun sloan(): SolutionFunc {
+    public fun sloan(): SolutionFunc {
         val c = solveBaseCoeffs()
         val splineImage = image(prepare { s -> basis.evalSpline(c, s) })
         return SolutionFunc(eval = { t -> fEff(t) + splineImage(t) })
@@ -310,7 +313,7 @@ abstract class SecondKindSolverCore<Operand>(
      * u_h^K = y_h + (I - P_chi)[f + L y_h]. Для квазиинтерполянтов (mu, lambda) без
      * редукции — прямая итерация конечноранговым U^K_h [численное наблюдение].
      */
-    fun kulkarni(): SolutionFunc {
+    public fun kulkarni(): SolutionFunc {
         return if (funcs.isProjector) kulkarniProjector() else kulkarniQuasi()
     }
 
@@ -318,10 +321,10 @@ abstract class SecondKindSolverCore<Operand>(
         val m = matrixM(); val m2 = matrixM2(); val g = vectorG(); val d = vectorD()
         val mm = LinearAlgebra.matMat(m, m, ctx.backend)
         // A = I - M - M2 + M^2
-        val a = LinearAlgebra.zeros(dim, dim)
+        val a = DenseMatrix.zeros(dim, dim)
         for (r in 0 until dim) {
-            for (c in 0 until dim) a[r][c] = -m[r][c] - m2[r][c] + mm[r][c]
-            a[r][r] += 1.0
+            for (c in 0 until dim) a[r, c] = -m[r, c] - m2[r, c] + mm[r, c]
+            a[r, r] += 1.0
         }
         // rhs = (I - M) g + d
         val mg = LinearAlgebra.matVec(m, g, ctx.backend)
@@ -412,7 +415,7 @@ abstract class SecondKindSolverCore<Operand>(
      * интегрирование без итераций, но её результат осмыслен лишь тогда, когда
      * осмыслено исходное приближение.
      */
-    fun iteratedKulkarni(): SolutionFunc {
+    public fun iteratedKulkarni(): SolutionFunc {
         val kulkarniSolution = kulkarni()
         val kulkarniImage = image(prepare { s -> kulkarniSolution.eval(s) })
         return SolutionFunc(

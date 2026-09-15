@@ -31,12 +31,12 @@ import splines.functionals.ValueFunctional
  *   изменять. Копия не возвращается сознательно — это ГОРЯЧИЕ данные: массив читается
  *   во внутренних циклах сборки матриц Nyström (порядка `P^2` обращений на систему).
  */
-class SupportPoints private constructor(
-    val points: DoubleArray,
+public class SupportPoints private constructor(
+    public val points: DoubleArray,
     private val indexByNode: Array<IntArray>,
 ) {
     /** Число различных опорных точек. */
-    val size: Int get() = points.size
+    public val size: Int get() = points.size
 
     /**
      * Номер точки `nodes[node]` функционала [functional] в наборе [points].
@@ -45,9 +45,9 @@ class SupportPoints private constructor(
      *   (для семейств с математическим индексом `j = -2..n-1` это `j + 2`).
      * @param node номер узла внутри `ValueFunctional.nodes`.
      */
-    fun indexOf(functional: Int, node: Int): Int = indexByNode[functional][node]
+    public fun indexOf(functional: Int, node: Int): Int = indexByNode[functional][node]
 
-    companion object {
+    public companion object {
         /**
          * Набор точек, упорядоченный ПО ВОЗРАСТАНИЮ ЗНАЧЕНИЯ (схемы Nyström Фредгольма
          * и Вольтерры).
@@ -61,7 +61,7 @@ class SupportPoints private constructor(
          * @param mergeEps неотрицательный допуск слияния: точки `u <= v` считаются одной,
          *   если `v - u <= mergeEps`. Осмысленное значение — `Grid.breakpointInclusionEps`.
          */
-        fun byAscendingValue(functionals: Array<ValueFunctional>, mergeEps: Double): SupportPoints {
+        public fun byAscendingValue(functionals: Array<ValueFunctional>, mergeEps: Double): SupportPoints {
             val slots = Slots(functionals)
             val clusters = slots.clusterByValue(mergeEps)
             val index = slots.emptyIndex()
@@ -83,7 +83,7 @@ class SupportPoints private constructor(
          *
          * @param mergeEps неотрицательный допуск слияния (см. [byAscendingValue]).
          */
-        fun byFirstOccurrence(functionals: Array<ValueFunctional>, mergeEps: Double): SupportPoints {
+        public fun byFirstOccurrence(functionals: Array<ValueFunctional>, mergeEps: Double): SupportPoints {
             val slots = Slots(functionals)
             val clusters = slots.clusterByValue(mergeEps)
             val index = slots.emptyIndex()

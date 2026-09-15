@@ -98,7 +98,7 @@ class UrysonCoverageTest {
         val gram = space.gramR
         for (i in 0 until space.dim) {
             for (j in 0 until space.dim) {
-                assertTrue(abs(gram[i][j] - gram[j][i]) < 1e-12)
+                assertTrue(abs(gram[i, j] - gram[j, i]) < 1e-12)
             }
         }
         assertTrue(abs(space.omegaReg(DoubleArray(space.dim))) < 1e-15)
@@ -145,8 +145,8 @@ class UrysonCoverageTest {
         val jacobian = core.bMatrix(coefficients)
         assertTrue(xi.size == grid.n + 2 && xi.all { finite(it) })
         assertTrue(
-            jacobian.size == grid.n + 2 &&
-                jacobian.all { row -> row.size == grid.n + 2 && row.all { finite(it) } },
+            jacobian.rows == grid.n + 2 && jacobian.cols == grid.n + 2 &&
+                jacobian.data.all { finite(it) },
         )
         assertTrue(core.uAtSupport(coefficients).all { finite(it) })
     }

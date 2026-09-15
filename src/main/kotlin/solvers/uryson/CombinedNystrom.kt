@@ -1,5 +1,6 @@
 package solvers.uryson
 
+import numerics.DenseMatrix
 import numerics.LinearAlgebra
 import numerics.ParallelAssembly
 import solvers.core.SolutionFunc
@@ -171,7 +172,7 @@ internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver)
      *  * `dG(t)/dy_r = lambda [ dQ(t)/dy_r - sum_j omega_j(t) theta_j(dQ(.)/dy_r) ]`;
      *  * `dG(t)/dz_k = lambda [ sum_j omega_j(t) theta_j(dE(.)/dz_k) ]`.
      */
-    private fun jacobian(y: DoubleArray, z: DoubleArray): Array<DoubleArray> {
+    private fun jacobian(y: DoubleArray, z: DoubleArray): DenseMatrix {
         val total = p + ng
         val dQpts = Array(p) { rho -> DoubleArray(p) { r -> bAgg[r] * op.kernel.dkdu(pts[rho], pts[r], y[r]) } }
         val dEpts = Array(p) { rho -> DoubleArray(ng) { k -> gW[k] * op.kernel.dkdu(pts[rho], gNode[k], z[k]) } }
@@ -192,23 +193,22 @@ internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver)
                 s
             }
         }
-        return ParallelAssembly.assembleRows(total, total, ctx.parallel) { row ->
-            val out = DoubleArray(total)
+        // Сборка поячеечно: выражение для каждого элемента и порядок сложений в `proj`
+        // дословно те же, что и при построчной сборке, поэтому числа не меняются.
+        return ParallelAssembly.assembleDense(total, total, ctx.parallel) { row, col ->
             val tRow = if (row < p) pts[row] else gNode[row - p]
             val omegaRow = if (row < p) omegaAtPts[row] else omegaAtG[row - p]
-            for (r in 0 until p) {
-                val dq = bAgg[r] * op.kernel.dkdu(tRow, pts[r], y[r])
+            val value = if (col < p) {
+                val dq = bAgg[col] * op.kernel.dkdu(tRow, pts[col], y[col])
                 var proj = 0.0
-                for (j in 0 until dim) proj += omegaRow[j] * cQ[j][r]
-                out[r] = -lambda * (dq - proj)
-            }
-            for (k in 0 until ng) {
+                for (j in 0 until dim) proj += omegaRow[j] * cQ[j][col]
+                -lambda * (dq - proj)
+            } else {
                 var proj = 0.0
-                for (j in 0 until dim) proj += omegaRow[j] * cE[j][k]
-                out[p + k] = -lambda * proj
+                for (j in 0 until dim) proj += omegaRow[j] * cE[j][col - p]
+                -lambda * proj
             }
-            out[row] += 1.0
-            out
+            if (row == col) value + 1.0 else value
         }
     }
 

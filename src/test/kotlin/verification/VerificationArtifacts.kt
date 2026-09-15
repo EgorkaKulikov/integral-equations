@@ -208,8 +208,8 @@ object VerificationArtifacts {
         val file = File(dir, "assembled-system.tsv")
         file.printWriter().use { out ->
             out.println("# kind\trow\tcol\tvalue")
-            for (r in m.indices) for (c in m[r].indices) out.println("M\t$r\t$c\t${m[r][c].full()}")
-            for (r in m2.indices) for (c in m2[r].indices) out.println("M2\t$r\t$c\t${m2[r][c].full()}")
+            for (r in 0 until m.rows) for (c in 0 until m.cols) out.println("M\t$r\t$c\t${m[r, c].full()}")
+            for (r in 0 until m2.rows) for (c in 0 until m2.cols) out.println("M2\t$r\t$c\t${m2[r, c].full()}")
             for (i in g.indices) out.println("g\t$i\t0\t${g[i].full()}")
             for (i in d.indices) out.println("d\t$i\t0\t${d[i].full()}")
             for (i in coeffs.indices) out.println("c_base\t$i\t0\t${coeffs[i].full()}")

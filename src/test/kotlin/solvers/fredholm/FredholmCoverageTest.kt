@@ -145,8 +145,8 @@ class FredholmCoverageTest {
         val s = build(FredholmProblem.F2, GeneratingSystem.B, 8)
         val dim = s.dim
         val m = s.matrixM(); val m2 = s.matrixM2(); val g = s.vectorG(); val d = s.vectorD()
-        assertTrue(m.size == dim && m2.size == dim && g.size == dim && d.size == dim)
-        for (r in 0 until dim) for (c in 0 until dim) assertTrue(finite(m[r][c]) && finite(m2[r][c]))
+        assertTrue(m.rows == dim && m.cols == dim && m2.rows == dim && g.size == dim && d.size == dim)
+        for (r in 0 until dim) for (c in 0 until dim) assertTrue(finite(m[r, c]) && finite(m2[r, c]))
         for (j in 0 until dim) assertTrue(finite(g[j]) && finite(d[j]))
     }
 

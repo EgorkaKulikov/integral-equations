@@ -34,11 +34,11 @@ import solvers.core.SecondKindSolverCore
  * функционалов её не использует: иначе система будет построена неверно без какой-либо
  * диагностики.
  */
-class KernelV(
-    val k: (Double, Double) -> Double,
-    val kT: (Double, Double) -> Double = { _, _ -> 0.0 },
-    val kS: (Double, Double) -> Double = { _, _ -> 0.0 },
-    val kTT: (Double, Double) -> Double = { _, _ -> 0.0 },
+public class KernelV(
+    public val k: (Double, Double) -> Double,
+    public val kT: (Double, Double) -> Double = { _, _ -> 0.0 },
+    public val kS: (Double, Double) -> Double = { _, _ -> 0.0 },
+    public val kTT: (Double, Double) -> Double = { _, _ -> 0.0 },
 )
 
 /**
@@ -53,9 +53,9 @@ class KernelV(
  *   d/dt (\mathcal V u)(t) = K(t,t) u(t) + \int_a^t dK/dt(t,s) u(s) ds.
  * ГРАНИЧНЫЙ член K(t,t) u(t) — специфика Вольтерра (у Фредгольма его нет).
  */
-class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegendre) {
+public class VolterraOperator(public val kernel: KernelV, public val grid: Grid, public val quad: GaussLegendre) {
     /** Левый конец отрезка — нижний предел интегрирования во всех формулах. */
-    val a = grid.a
+    public val a: Double = grid.a
 
     /**
      * Допуск включения узла: узел сетки считается строго внутри (a, t), если `x < t - eps`.
@@ -69,7 +69,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      * некэшированный пути обязаны отбирать ОДИНАКОВОЕ число полных ячеек, иначе
      * ломается инвариант [IntegrandCache].
      */
-    val breakpointInclusionEps: Double = grid.breakpointInclusionEps
+    public val breakpointInclusionEps: Double = grid.breakpointInclusionEps
 
     /** Составное разбиение [a, t]: внутренние узлы сетки < t, затем сам t. */
     private fun subBreakpoints(t: Double): DoubleArray {
@@ -82,7 +82,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
     }
 
     /** (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds для произвольной u(s). */
-    fun apply(t: Double, u: (Double) -> Double): Double {
+    public fun apply(t: Double, u: (Double) -> Double): Double {
         // numerical-core 1.0.0 отвергает нечисловые точки разбиения исключением; контракт
         // оператора — распространять NaN аргумента, как это делает кэшированный путь.
         if (t.isNaN()) return Double.NaN
@@ -163,7 +163,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      * вычислят побитово одинаковые числа, а победитель CAS определяет, чей массив увидят
      * остальные. Точки сериализации в горячем цикле нет — только volatile-чтение на ячейку.
      */
-    inner class IntegrandCache internal constructor(internal val u: (Double) -> Double) {
+    public inner class IntegrandCache internal constructor(internal val u: (Double) -> Double) {
         /**
          * Экземпляр оператора, создавший этот кэш — единственный, чьи узлы соответствуют
          * хранимым значениям.
@@ -189,7 +189,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
     }
 
     /** Создаёт кэш узловых значений для КОНКРЕТНОЙ подынтегральной функции. */
-    fun integrandCache(u: (Double) -> Double): IntegrandCache = IntegrandCache(u)
+    public fun integrandCache(u: (Double) -> Double): IntegrandCache = IntegrandCache(u)
 
     /**
      * То же, что [apply], но значения `u` в узлах полных ячеек берутся из [cache].
@@ -210,7 +210,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      *
      * @throws IllegalArgumentException если [cache] создан другим экземпляром оператора.
      */
-    fun apply(t: Double, cache: IntegrandCache): Double {
+    public fun apply(t: Double, cache: IntegrandCache): Double {
         require(cache.owner === this) {
             "Кэш узловых значений передан ДРУГОМУ экземпляру VolterraOperator, чем тот, " +
                 "который его создал. Кэш хранит значения u(s) в гауссовых узлах сетки СВОЕГО " +
@@ -263,7 +263,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      * Используется для весов Nyström с ограничением на компактный носитель omega_j
      * ([x_j,x_{j+3}]) -> не более трёх подынтервалов, что снимает O(n)-стоимость на точку.
      */
-    fun integrateRange(lo: Double, hi: Double, g: (Double) -> Double): Double {
+    public fun integrateRange(lo: Double, hi: Double, g: (Double) -> Double): Double {
         if (hi <= lo) return 0.0
         val list = ArrayList<Double>()
         list.add(lo)
@@ -277,7 +277,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      * ВАЖНО: граничный член K(t,t)u(t) остаётся и при t=a (интеграл по [a,a] нулевой).
      * Этот член критичен для сведения V1->V2 на левом конце (g(a)=f'(a)/K(a,a)=u*(a)).
      */
-    fun applyDeriv(t: Double, u: (Double) -> Double): Double {
+    public fun applyDeriv(t: Double, u: (Double) -> Double): Double {
         if (t < a) return 0.0
         val boundary = kernel.k(t, t) * u(t)
         val integral = if (t.isNaN()) Double.NaN else if (t <= a) 0.0 else quad.integrate(subBreakpoints(t)) { s -> kernel.kT(t, s) * u(s) }
@@ -302,7 +302,7 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
      * @param u сама функция.
      * @param uD её первая производная.
      */
-    fun applyDeriv2(t: Double, u: (Double) -> Double, uD: (Double) -> Double): Double {
+    public fun applyDeriv2(t: Double, u: (Double) -> Double, uD: (Double) -> Double): Double {
         if (t < a) return 0.0
         val kd = kernel.k(t, t)
         val diag = 2.0 * kernel.kT(t, t) + kernel.kS(t, t)
@@ -331,10 +331,10 @@ class VolterraOperator(val kernel: KernelV, val grid: Grid, val quad: GaussLegen
  *        `converged = false` и достигнутой невязкой в [solvers.core.SolutionFunc.residual].
  *        На прямые схемы не влияет.
  */
-class VolterraSecondKindSolver(
+public class VolterraSecondKindSolver(
     basis: MinimalSplineBasis,
     funcs: FunctionalFamily,
-    val op: VolterraOperator,
+    public val op: VolterraOperator,
     cL: Double,
     rhs: RhsWithDerivatives,
     throwOnDivergence: Boolean = true,
@@ -509,11 +509,11 @@ class VolterraSecondKindSolver(
     /** Решает (I - A^{N,V}) u_hat = f_hat: A^{N,V}_{rho,r}=cL b_r(eta_rho) K(eta_rho,eta_r) (2.3). */
     private fun nystromSolve(sup: NystromSupport): DoubleArray {
         val p = sup.pts.size
-        val a = LinearAlgebra.zeros(p, p)
+        val a = DenseMatrix.zeros(p, p)
         for (rho in 0 until p) {
             val b = nystromB(sup, sup.pts[rho]) // t-зависимые веса при t=eta_rho
-            for (r in 0 until p) a[rho][r] = -cL * b[r] * op.kernel.k(sup.pts[rho], sup.pts[r])
-            a[rho][rho] += 1.0
+            for (r in 0 until p) a[rho, r] = -cL * b[r] * op.kernel.k(sup.pts[rho], sup.pts[r])
+            a[rho, rho] += 1.0
         }
         return LinearAlgebra.solve(a, DoubleArray(p) { fEff(sup.pts[it]) }, ctx.backend)
     }
@@ -537,7 +537,7 @@ class VolterraSecondKindSolver(
      * даёт t-зависимые веса и усечение последней ячейки — требуется отдельный анализ).
      * Любые наблюдаемые порядки здесь — численное наблюдение, а не доказанный результат.
      */
-    fun nystrom(): SolutionFunc {
+    public fun nystrom(): SolutionFunc {
         val sup = nystromSupport()
         val uHat = nystromSolve(sup)
         return SolutionFunc(eval = { t -> nystromEval(sup, uHat, t) })
@@ -548,7 +548,7 @@ class VolterraSecondKindSolver(
      * Вольтерра L (замыкание applyL, как в sloan()). Одно интегрирование найденного
      * u^N_h, новой системы не требуется (аналог итерации Слоана).
      */
-    fun iteratedNystrom(): SolutionFunc {
+    public fun iteratedNystrom(): SolutionFunc {
         val sup = nystromSupport()
         val uHat = nystromSolve(sup)
         val uN = applyL { s -> nystromEval(sup, uHat, s) }
@@ -569,7 +569,7 @@ class VolterraSecondKindSolver(
      *
      * @throws IllegalStateException если итерация не сошлась и [throwOnDivergence] равно `true`.
      */
-    fun combinedNystrom(): SolutionFunc {
+    public fun combinedNystrom(): SolutionFunc {
         val sup = nystromSupport()
         var uFun: (Double) -> Double = { t -> fEff(t) }
         // Критерий останова мерится на ТОМ ЖЕ множестве [checkPoints], что и в `kulkarniQuasi`.
@@ -627,7 +627,7 @@ class VolterraSecondKindSolver(
      * Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с точным L.
      * Признак сходимости наследуется от [combinedNystrom].
      */
-    fun iteratedCombinedNystrom(): SolutionFunc {
+    public fun iteratedCombinedNystrom(): SolutionFunc {
         val combined = combinedNystrom()
         val image = applyL { s -> combined.eval(s) }
         return SolutionFunc(
@@ -692,15 +692,15 @@ class VolterraSecondKindSolver(
  * @throws IllegalStateException если `K(t,t)` обращается в ноль в точке деления,
  *         обнаруженной уже во время счёта (см. [safeDiagonal]).
  */
-class VolterraFirstKindSolver(
-    val basis: MinimalSplineBasis,
-    val funcs: FunctionalFamily,
+public class VolterraFirstKindSolver(
+    public val basis: MinimalSplineBasis,
+    public val funcs: FunctionalFamily,
     kernel: KernelV,
     rhsDeriv: (Double) -> Double,
     smoothPart: (Double) -> Double,
     smoothPartDeriv: (Double) -> Double,
-    val throwOnDivergence: Boolean = true,
-    val ctx: NumericsContext = NumericsContext.default(),
+    public val throwOnDivergence: Boolean = true,
+    public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     private companion object {
         /**
@@ -934,14 +934,14 @@ class VolterraFirstKindSolver(
     )
 
     /** Базовая коллокационная схема для редуцированного уравнения. */
-    fun base(): SolutionFunc = inner.base()
+    public fun base(): SolutionFunc = inner.base()
 
     /** Итерация Слоана, применённая к редуцированному уравнению. */
-    fun sloan(): SolutionFunc = inner.sloan()
+    public fun sloan(): SolutionFunc = inner.sloan()
 
     /** Схема Кулкарни для редуцированного уравнения. */
-    fun kulkarni(): SolutionFunc = inner.kulkarni()
+    public fun kulkarni(): SolutionFunc = inner.kulkarni()
 
     /** Итерированная схема Кулкарни для редуцированного уравнения. */
-    fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
+    public fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
 }

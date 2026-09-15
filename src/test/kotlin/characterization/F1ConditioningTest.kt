@@ -1,7 +1,6 @@
 package characterization
 
 import numerics.Conditioning
-import numerics.DenseMatrix
 import numerics.GaussLegendre
 import numerics.LinearAlgebra
 import numerics.NumericsContext
@@ -75,9 +74,8 @@ class F1ConditioningTest {
                     val a = inner.baseMatrix()
                     val b = inner.vectorG()
                     val x = LinearAlgebra.solve(a, b, ctx.backend)
-                    val dense = DenseMatrix.fromRows(a)
-                    val cond = Conditioning.conditionEstimate(dense, ctx).condInf
-                    val omega = Conditioning.relativeBackwardError(dense, b, x)
+                    val cond = Conditioning.conditionEstimate(a, ctx).condInf
+                    val omega = Conditioning.relativeBackwardError(a, b, x)
                     val uNorm = grid.breakpoints.maxOf { t -> abs(fp.exact(t)) }
                     rows.add(Row(system, family, n, cond, omega, cond * max(omega, 1e-16), x.maxOf { abs(it) }, uNorm))
                 }

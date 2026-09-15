@@ -1,5 +1,6 @@
 package demo.bench
 
+import numerics.DenseMatrix
 import numerics.GaussLegendre
 import splines.GeneratingSystem
 import splines.Grid
@@ -120,7 +121,7 @@ private fun timeFullSolve(n: Int): Long {
 private fun timeMatrixAssembly(solver: FredholmSecondKindSolver): Long {
     val start = System.nanoTime()
     val matrix = solver.matrixM()
-    blackHole += matrix[0][0]
+    blackHole += matrix[0, 0]
     return System.nanoTime() - start
 }
 
@@ -242,18 +243,18 @@ private fun runBackendComparison(config: BenchmarkConfig) {
     // восстановления в finally: каждый замер вызывает свой экземпляр [LinAlgBackend].
     for (size in listOf(16, 64, 256, 1024)) {
         val random = kotlin.random.Random(seed = 20240517 + size)
-        val a = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
-        val b = Array(size) { DoubleArray(size) { random.nextDouble(-1.0, 1.0) } }
+        val a = DenseMatrix.build(size, size) { _, _ -> random.nextDouble(-1.0, 1.0) }
+        val b = DenseMatrix.build(size, size) { _, _ -> random.nextDouble(-1.0, 1.0) }
         val x = DoubleArray(size) { random.nextDouble(-1.0, 1.0) }
         // Строго диагонально доминирующая матрица — гарантированно невырожденная.
-        val solvable = Array(size) { i ->
-            DoubleArray(size) { j -> if (i == j) size + 1.0 else a[i][j] / size }
+        val solvable = DenseMatrix.build(size, size) { i, j ->
+            if (i == j) size + 1.0 else a[i, j] / size
         }
 
         val operations = linkedMapOf<String, (LinAlgBackend) -> Double>(
             "matVec" to { backend -> LinearAlgebra.matVec(a, x, backend)[0] },
-            "matMat" to { backend -> LinearAlgebra.matMat(a, b, backend)[0][0] },
-            "addScaled" to { backend -> LinearAlgebra.addScaled(a, b, 1.5, backend)[0][0] },
+            "matMat" to { backend -> LinearAlgebra.matMat(a, b, backend)[0, 0] },
+            "addScaled" to { backend -> LinearAlgebra.addScaled(a, b, 1.5, backend)[0, 0] },
             "solve" to { backend -> LinearAlgebra.solve(solvable, x, backend)[0] },
         )
 
