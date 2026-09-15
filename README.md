@@ -463,7 +463,7 @@ reference) по отдельным операциям; эти числа в до
 |---|---|
 | [`docs/REFERENCES.md`](docs/REFERENCES.md) | источники схем решения, регуляризации и верификации; источники сплайнов и функционалов — в `minimal-splines/docs/REFERENCES.md` |
 | [`docs/TESTING.md`](docs/TESTING.md) | задачи Gradle, состав `check`, категории тестов, CI |
-| [`docs/HPC.md`](docs/HPC.md) | бенчмарк решателя и его условия; бэкенды и параллельная сборка описаны в `numerical-core/docs/HPC.md` |
+| [`docs/HPC.md`](docs/HPC.md) | бенчмарк решателя и его условия; бэкенды и параллельная сборка описаны в `numerical-core/docs/PERFORMANCE.md` |
 | [`docs/ACCURACY.md`](docs/ACCURACY.md) | **границы достижимой точности** уравнений первого рода: граница по `alpha` для F1; общая теория обратной/прямой ошибки — в `numerical-core/docs/ACCURACY.md` |
 | [`docs/baseline-changes.md`](docs/baseline-changes.md) | **протокол правки численных эталонов** и история их изменений |
 | [`docs/REPOSITORY_SPLIT_PLAN.md`](docs/REPOSITORY_SPLIT_PLAN.md) | план и обоснование разделения на три репозитория (канонический экземпляр) |
