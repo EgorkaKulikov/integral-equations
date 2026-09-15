@@ -1,13 +1,20 @@
+import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 import org.gradle.api.plugins.jvm.JvmTestSuite
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
 
+// Версии инструментов — в `gradle/libs.versions.toml`; версии numerical-core и
+// minimal-splines остаются в `gradle.properties` (их правит поток выпуска).
 plugins {
-    kotlin("jvm") version "2.0.0"
+    alias(libs.plugins.kotlin.jvm)
+    // `java-library` — ради конфигурации `api`: типы обеих библиотек
+    // (MinimalSplineBasis, Grid, GaussLegendre, NumericsContext, DenseMatrix)
+    // стоят в сигнатурах публичных классов этого проекта.
+    `java-library`
     application
     // Coverage measurement (JetBrains Kover, Kotlin-native).
-    id("org.jetbrains.kotlinx.kover") version "0.8.3"
+    alias(libs.plugins.kover)
 }
 
 repositories {
@@ -60,6 +67,13 @@ sourceSets {
         compileClasspath += main.output + problems.output
         runtimeClasspath += main.output + problems.output
     }
+    // benchmark — замеры производительности: не часть демонстраций (у тех нет
+    // прогрева, повторов и агрегации) и не часть тестов (нет критерия PASS/FAIL).
+    // Отдельный набор, как в minimal-splines, и исключён из покрытия.
+    val benchmark by creating {
+        compileClasspath += main.output + problems.output
+        runtimeClasspath += main.output + problems.output
+    }
     val test by getting {
         compileClasspath += main.output + problems.output
         runtimeClasspath += main.output + problems.output
@@ -70,6 +84,9 @@ val problemsImplementation: Configuration by configurations.getting {
     extendsFrom(configurations.implementation.get())
 }
 val demoImplementation: Configuration by configurations.getting {
+    extendsFrom(configurations.implementation.get())
+}
+val benchmarkImplementation: Configuration by configurations.getting {
     extendsFrom(configurations.implementation.get())
 }
 configurations {
@@ -83,12 +100,20 @@ dependencies {
     // Обе библиотеки — прямые зависимости: решатели используют и сплайны, и
     // квадратуру/линейную алгебру напрямую. minimal-splines тянет numerical-core
     // транзитивно (api), но явное объявление фиксирует версию и намерение.
-    implementation("io.github.egorkakulikov:numerical-core:$numericalCoreVersion")
-    implementation("io.github.egorkakulikov:minimal-splines:$minimalSplinesVersion")
+    //
+    // `api`, а не `implementation`: типы обеих библиотек стоят в СИГНАТУРАХ
+    // публичного кода этого проекта (Grid и MinimalSplineBasis — в конструкторах
+    // решателей, GaussLegendre/NumericsContext — в их полях, DenseMatrix — в
+    // возвращаемых значениях), то есть потребитель обязан видеть их транзитивно.
+    //
+    // Координаты — из каталога версий, версии — из gradle.properties: их правит
+    // поток выпуска библиотек, и каталог их бы от него спрятал.
+    api("${libs.numerical.core.get().module}:$numericalCoreVersion")
+    api("${libs.minimal.splines.get().module}:$minimalSplinesVersion")
 
     testImplementation(kotlin("test"))
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 kotlin {
@@ -199,8 +224,9 @@ val numericsBackend: String = System.getProperty("numerics.backend") ?: "auto"
 //    образа раннера.
 //
 // РЕШЕНИЕ: разделение ПО ПЕРЕНОСИМОСТИ. Измерено, что машинно-зависимая
-// поверхность УЗКАЯ: 298 тестов (job'ы `fast` и `scipy`) ЗЕЛЁНЫЕ на чужой
-// архитектуре, а при ПОЛНОЙ замене реализации LU (`-Dnumerics.backend=java`,
+// поверхность УЗКАЯ: из 171 теста полного набора `test` наборы `fastTest`
+// и `scipyVerify` (job'ы `fast` и `scipy` в CI) ЗЕЛЁНЫЕ на чужой
+// архитектуре целиком, а при ПОЛНОЙ замене реализации LU (`-Dnumerics.backend=java`,
 // возмущение грубее смены архитектуры) 644 из 655 опубликованных значений
 // остаются в допуске. Непереносимы только два характеризационных класса и ОДИН
 // метод `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (F1, 11 расхождений
@@ -226,6 +252,52 @@ fun Test.skipEntirelyIfMachineGatesDisabled() {
     onlyIf("машинно-зависимые гейты отключены -PmachineDependentGates=false") {
         machineDependentGates
     }
+}
+
+// --- Генераторы данных среди тестовых классов --------------------------------
+// Эти четыре класса живут в `src/test`, но проверок не содержат: они СНИМАЮТ
+// эталоны и ВЫГРУЖАЮТ артефакты (критериев PASS/FAIL нет). Их запускают только
+// адресные задачи `captureBaseline`, `captureExtraBaseline`,
+// `dumpVerificationArtifacts`, `sec4Tables`; из всех остальных наборов они
+// исключаются по имени. Список ОДИН на весь скрипт: раньше те же четыре строки
+// стояли в четырёх задачах, и добавление пятого генератора требовало не забыть
+// про все четыре места.
+val generatorTestClasses = listOf(
+    "characterization.BaselineSnapshotTool",
+    "characterization.ExtraBaselineSnapshotTool",
+    "verification.VerificationArtifactDumpTool",
+    "verification.Sec4VerificationTool",
+)
+
+/**
+ * Убирает генераторы данных из набора.
+ *
+ * ПОБОЧНЫЙ ЭФФЕКТ, НА КОТОРЫЙ ОПИРАЕТСЯ ВСЯ СБОРКА: любой вызов
+ * `excludeTestsMatching` включает флаг `patternFiltersSpecified`, и Gradle 8.9
+ * тогда падает с `No tests found for given includes`, если не отобралось ни
+ * одного теста. Это единственная защита от вырождения «ноль тестов — зелёная
+ * сборка» (опции `failOnNoDiscoveredTests` в Gradle 8.9 нет).
+ */
+fun Test.excludeGeneratorTools() {
+    filter { generatorTestClasses.forEach { excludeTestsMatching(it) } }
+}
+
+/**
+ * Общая настройка ЦЕЛЕВЫХ ЧИСЛЕННЫХ ГЕЙТОВ — задач, которые отбирают ОДИН класс,
+ * уже входящий в `slowTest`, и существуют ради быстрого адресного сигнала
+ * (`characterizationTest`, `extraCharacterizationTest`, `convergenceOrderTest`).
+ *
+ * Отличаются они ровно одним — именем класса, поэтому тело задачи сведено к
+ * одной строке. Бэкенд фиксируется во всех трёх: каждая сверяет числа с
+ * эталоном, снятым на конкретной реализации LU.
+ */
+fun Test.gateOverTestClass(testClass: String) {
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching(testClass) }
+    excludeGeneratorTools()
+    systemProperty("numerics.backend", numericsBackend)
 }
 
 /**
@@ -359,7 +431,7 @@ tasks.register<SetupScipyEnvironment>("setupScipyVerification") {
 // делало невозможной проверку после каждой правки. Поэтому тесты размечены
 // тегами на уровне класса, а на каждый тег есть своя задача:
 //
-//   fast   (289 тестов) — единицы секунд, набор для повседневной работы и каждого PR;
+//   fast   (141 тест)   — единицы секунд, набор для повседневной работы и каждого PR;
 //   slow   (23 теста)  — прогон по сеткам до n=64: замер 8 мин 39 с; входит в `check`
 //                         (через источники Kover) и в job `full` в CI;
 //   scipy  (9 тестов)   — быстрые сами по себе, но требуют venv с Python и
@@ -399,12 +471,7 @@ tasks.register<SetupScipyEnvironment>("setupScipyVerification") {
  */
 tasks.test {
     useJUnitPlatform()
-    filter {
-        excludeTestsMatching("characterization.BaselineSnapshotTool")
-        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
-        excludeTestsMatching("verification.VerificationArtifactDumpTool")
-        excludeTestsMatching("verification.Sec4VerificationTool")
-    }
+    excludeGeneratorTools()
     // Путь к интерпретатору передаётся тесту явно: искать его самостоятельно тест
     // не должен — иначе на разных машинах он находил бы разные интерпретаторы.
     // Зависимости от `setupScipyVerification` здесь НЕТ намеренно: обычный прогон
@@ -514,12 +581,7 @@ tasks.register<Test>("fastTest") {
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("fast") }
-    filter {
-        excludeTestsMatching("characterization.BaselineSnapshotTool")
-        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
-        excludeTestsMatching("verification.VerificationArtifactDumpTool")
-        excludeTestsMatching("verification.Sec4VerificationTool")
-    }
+    excludeGeneratorTools()
     systemProperty("numerics.backend", numericsBackend)
 }
 
@@ -536,12 +598,7 @@ tasks.register<Test>("slowTest") {
         includeTags("slow")
         if (!machineDependentGates) excludeTags("machine")
     }
-    filter {
-        excludeTestsMatching("characterization.BaselineSnapshotTool")
-        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
-        excludeTestsMatching("verification.VerificationArtifactDumpTool")
-        excludeTestsMatching("verification.Sec4VerificationTool")
-    }
+    excludeGeneratorTools()
     systemProperty("numerics.backend", numericsBackend)
 }
 
@@ -560,15 +617,8 @@ tasks.register<Test>("slowTest") {
 tasks.register<Test>("characterizationTest") {
     group = "verification"
     description = "Гейт численной нейтральности: 1366 значений E_h против эталона, допуск 1e-9"
-    testClassesDirs = sourceSets["test"].output.classesDirs
-    classpath = sourceSets["test"].runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching("characterization.EhCharacterizationTest")
-        excludeTestsMatching("characterization.BaselineSnapshotTool")
-    }
-    // Бэкенд здесь критичен: на `reference` гейт падает (см. выше).
-    systemProperty("numerics.backend", numericsBackend)
+    // Бэкенд здесь критичен: на `java` гейт падает (см. выше).
+    gateOverTestClass("characterization.EhCharacterizationTest")
     // Весь класс помечен тегом `machine`: эталон привязан к машине снятия.
     skipEntirelyIfMachineGatesDisabled()
 }
@@ -596,15 +646,8 @@ tasks.register<Test>("characterizationTest") {
 tasks.register<Test>("extraCharacterizationTest") {
     group = "verification"
     description = "Гейт combinedNystrom и неравномерных сеток против baseline-extra.tsv, допуск 1e-9"
-    testClassesDirs = sourceSets["test"].output.classesDirs
-    classpath = sourceSets["test"].runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching("characterization.ExtraCharacterizationTest")
-        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
-    }
     // Тот же довод, что и у `characterizationTest`: снимок привязан к бэкенду.
-    systemProperty("numerics.backend", numericsBackend)
+    gateOverTestClass("characterization.ExtraCharacterizationTest")
     // Весь класс помечен тегом `machine`: эталон привязан к машине снятия.
     skipEntirelyIfMachineGatesDisabled()
 }
@@ -648,15 +691,8 @@ tasks.register<Test>("extraCharacterizationTest") {
 tasks.register<Test>("convergenceOrderTest") {
     group = "verification"
     description = "Полная матрица порядков сходимости: 168 сочетаний на сетках 8/16/32/64"
-    testClassesDirs = sourceSets["test"].output.classesDirs
-    classpath = sourceSets["test"].runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching("convergence.ConvergenceOrderTest")
-        excludeTestsMatching("characterization.BaselineSnapshotTool")
-    }
     // Тот же довод, что и у остальных численных гейтов: таблица порядков снята на multik.
-    systemProperty("numerics.backend", numericsBackend)
+    gateOverTestClass("convergence.ConvergenceOrderTest")
 }
 
 tasks.register<Test>("scipyVerify") {
@@ -665,12 +701,7 @@ tasks.register<Test>("scipyVerify") {
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("scipy") }
-    filter {
-        excludeTestsMatching("characterization.BaselineSnapshotTool")
-        excludeTestsMatching("characterization.ExtraBaselineSnapshotTool")
-        excludeTestsMatching("verification.VerificationArtifactDumpTool")
-        excludeTestsMatching("verification.Sec4VerificationTool")
-    }
+    excludeGeneratorTools()
     // Окружение Python и артефакты сверки — обязательные предпосылки именно этой
     // задачи: тест читает выгрузку из build/verification/.
     dependsOn("setupScipyVerification", "dumpVerificationArtifacts")
@@ -813,6 +844,40 @@ kover {
                 "sec4Tables",
             )
         }
+        sources {
+            // Замеры производительности — не код решателей и в покрытии не участвуют.
+            excludedSourceSets.add("benchmark")
+        }
+    }
+    reports {
+        // ПЛАНКА ПОКРЫТИЯ, которую держит `koverVerify` (входит в `check`).
+        // До этого блока `koverVerify` в `check` проходил ВХОЛОСТУЮ: правил не было
+        // вовсе, то есть задача была зелёной при любом покрытии.
+        //
+        // Числа ИЗМЕРЕНЫ, а не назначены: источник покрытия — только `fastTest`
+        // (см. `disabledForTestTasks` выше), на нём строки 69.2 % (1379 из 1993),
+        // ветви 74.5 % (502 из 674). Порог — измеренное минус 2 пункта: запас на
+        // машинно-зависимые ветви (выбор бэкенда) и на округление.
+        //
+        // ПОЧЕМУ ПЛАНКА НИЖЕ, ЧЕМ В minimal-splines (94/89). Там источник покрытия
+        // — весь тестовый набор, здесь — только fast-набор: классы, покрытые
+        // ТОЛЬКО slow-тестами (сверка с публикацией, характеризация, полная матрица
+        // порядков), в отчёт не попадают, хотя сами тесты в `check` исполняются.
+        // Поднимать планку до уровня minimal-splines можно лишь вместе с включением
+        // инструментации для `slowTest`, а он под Kover падает по памяти (exit 137,
+        // см. выше). Планка — не цель, а ЗАЩЁЛКА: она ловит удаление тестов и обвал
+        // покрытия, поэтому честнее держать её на измеренном уровне, чем на желаемом.
+        verify {
+            rule("Line coverage") {
+                minBound(67)
+            }
+            rule("Branch coverage") {
+                bound {
+                    minValue = 72
+                    coverageUnits = CoverageUnit.BRANCH
+                }
+            }
+        }
     }
 }
 
@@ -838,9 +903,12 @@ tasks.register<JavaExec>("runUryson") {
     classpath = sourceSets["demo"].runtimeClasspath
 }
 
+// Бенчмарк живёт в СВОЁМ наборе `src/benchmark` (как в minimal-splines): это не
+// демонстрация (нет таблиц сходимости) и не тест (нет критерия PASS/FAIL), а замер,
+// который не должен ни попадать в покрытие, ни ломать `compileDemoKotlin`.
 tasks.register<JavaExec>("runBenchmark") {
     group = "application"
     description = "Бенчмарк производительности (время от N, масштабируемость по потокам)"
     mainClass.set("demo.bench.BenchmarkKt")
-    classpath = sourceSets["demo"].runtimeClasspath
+    classpath = sourceSets["benchmark"].runtimeClasspath
 }

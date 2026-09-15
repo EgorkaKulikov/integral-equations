@@ -1,0 +1,25 @@
+# Каталог версий (Gradle version catalog).
+#
+# Здесь собраны версии ИНСТРУМЕНТОВ и внешних библиотек, чтобы их не приходилось
+# искать по тексту build.gradle.kts. Версии numerical-core и minimal-splines сюда
+# НЕ ВЫНЕСЕНЫ намеренно: их правит процедура обновления зависимостей, и они живут
+# в gradle.properties (`numericalCoreVersion`, `minimalSplinesVersion`). Здесь
+# объявлены только их КООРДИНАТЫ (группа и артефакт), а версия подставляется в
+# build.gradle.kts из свойства проекта.
+
+[versions]
+kotlin = "2.0.0"
+kover = "0.8.3"
+junit = "5.11.4"
+
+[libraries]
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+# Версия задаётся в build.gradle.kts из gradle.properties (см. шапку файла).
+numerical-core = { module = "io.github.egorkakulikov:numerical-core" }
+minimal-splines = { module = "io.github.egorkakulikov:minimal-splines" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
