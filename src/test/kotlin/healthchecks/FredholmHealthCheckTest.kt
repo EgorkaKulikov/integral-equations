@@ -16,44 +16,44 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Health-checks, СПЕЦИФИЧНЫЕ для решателя уравнения Фредгольма.
+ * Health checks SPECIFIC to the Fredholm equation solver.
  *
- * Общие проверки вычислительного ядра (сплайны, функционалы, квадратура) вынесены
- * в [SplineCoreHealthCheckTest] и здесь не дублируются.
+ * The common checks of the numerical core (splines, functionals, quadrature) are moved
+ * into [SplineCoreHealthCheckTest] and are not duplicated here.
  *
- * Здесь остаются только те свойства, которые касаются самого интегрального
- * оператора и построенных на нём схем: согласованность правой части, сходимость
- * базовой схемы и точность квадратурной схемы Nyström.
+ * Only the properties concerning the integral operator itself and the schemes built on it
+ * are left here: the consistency of the right-hand side, the convergence
+ * of the base scheme and the accuracy of the Nyström quadrature scheme.
  */
 @Tag("fast")
 class FredholmHealthCheckTest {
 
     private companion object {
-        /** Порог для схем, точных на порождающем пространстве. */
+        /** The threshold for the schemes exact on the generating space. */
         const val EXACT_ON_SPAN_TOLERANCE = 1e-8
 
         /**
-         * Минимальный допустимый множитель убывания погрешности при удвоении числа
-         * узлов. Значение 4 соответствует наблюдаемому порядку не ниже второго
-         * (`2^2 = 4`) — заведомо слабее теоретического порядка 3, чтобы проверка
-         * реагировала на поломку схемы, а не на колебания константы.
+         * The minimal admissible factor of the decrease of the error when the number of nodes
+         * is doubled. The value 4 corresponds to an observed order not below the second
+         * (`2^2 = 4`) — certainly weaker than the theoretical order 3, so that the check
+         * reacts to a breakage of the scheme and not to fluctuations of a constant.
          */
         const val MIN_ERROR_REDUCTION_FACTOR = 4.0
 
-        /** Верхняя граница абсолютной погрешности на грубой сетке (защита от расходимости). */
+        /** The upper bound of the absolute error on a coarse grid (a protection against divergence). */
         const val MAX_COARSE_GRID_ERROR = 1e-1
     }
 
     private val quad = GaussLegendre(8)
 
     /**
-     * Согласованность правой части с оператором: на задаче, решение которой лежит
-     * в порождающем пространстве (`u* = t^2` при полиномиальном базисе), базовая
-     * схема обязана давать машинную точность.
+     * The consistency of the right-hand side with the operator: on a problem whose solution lies
+     * in the generating space (`u* = t^2` with a polynomial basis), the base
+     * scheme must give machine accuracy.
      *
-     * Проверка ловит рассогласование между способом построения правой части
-     * `f = u* - K u*` и способом её дискретизации в решателе: любая несогласованность
-     * немедленно нарушает точное воспроизведение.
+     * The check catches an inconsistency between the way the right-hand side
+     * `f = u* - K u*` is built and the way it is discretized in the solver: any inconsistency
+     * immediately breaks the exact reproduction.
      */
     @Test
     fun rightHandSideIsConsistentWithOperator() {
@@ -66,19 +66,19 @@ class FredholmHealthCheckTest {
         val error = errorEh({ t -> problem.exact(t) }, solver.base().eval, grid)
         assertTrue(
             error < EXACT_ON_SPAN_TOLERANCE,
-            "На задаче F2span (u* = t^2 лежит в span порождающей системы B) базовая схема " +
-                "должна быть точна, получено E_h = $error",
+            "On the problem F2span (u* = t^2 lies in the span of the generating system B) the base scheme " +
+                "must be exact, got E_h = $error",
         )
     }
 
     /**
-     * Сходимость базовой схемы: при удвоении числа узлов погрешность должна убывать
-     * не менее чем в [MIN_ERROR_REDUCTION_FACTOR] раз.
+     * The convergence of the base scheme: when the number of nodes is doubled the error must decrease
+     * by at least a factor of [MIN_ERROR_REDUCTION_FACTOR].
      *
-     * Ранее эта проверка возвращала инвертированную величину `ratioMin / ratio`
-     * и «штрафное» значение 1e9 при провале, что скрывало смысл измеряемого.
-     * Здесь проверяются напрямую три содержательных условия: погрешность конечна и
-     * мала, она убывает, и убывает достаточно быстро.
+     * Previously this check returned the inverted quantity `ratioMin / ratio`
+     * and a "penalty" value of 1e9 on a failure, which hid the meaning of what was measured.
+     * Here three substantial conditions are checked directly: the error is finite and
+     * small, it decreases, and it decreases fast enough.
      */
     @Test
     fun baseSchemeConvergesUnderRefinement() {
@@ -98,31 +98,31 @@ class FredholmHealthCheckTest {
 
         assertTrue(
             coarseError.isFinite() && coarseError < MAX_COARSE_GRID_ERROR,
-            "Погрешность на грубой сетке должна быть конечной и малой, получено E_8 = $coarseError",
+            "The error on the coarse grid must be finite and small, got E_8 = $coarseError",
         )
         assertTrue(
             fineError < coarseError,
-            "Погрешность обязана убывать при измельчении сетки: E_8 = $coarseError, E_16 = $fineError",
+            "The error must decrease under grid refinement: E_8 = $coarseError, E_16 = $fineError",
         )
 
         val reductionFactor = coarseError / fineError
         val observedOrder = ln(reductionFactor) / ln(2.0)
         assertTrue(
             reductionFactor >= MIN_ERROR_REDUCTION_FACTOR,
-            "Погрешность должна убывать не менее чем в $MIN_ERROR_REDUCTION_FACTOR раза " +
-                "(наблюдаемый порядок >= 2), получено: E_8 = $coarseError, E_16 = $fineError, " +
-                "отношение = $reductionFactor, наблюдаемый порядок = $observedOrder",
+            "The error must decrease by at least a factor of $MIN_ERROR_REDUCTION_FACTOR " +
+                "(an observed order >= 2), got: E_8 = $coarseError, E_16 = $fineError, " +
+                "ratio = $reductionFactor, observed order = $observedOrder",
         )
     }
 
     /**
-     * Точность схемы Nyström на согласованной задаче.
+     * The accuracy of the Nyström scheme on a matched problem.
      *
-     * Если ядро зависит только от `t` (здесь `K = 1 + t`), то подынтегральная функция
-     * `g_t(s) = K(t) * u*(s)` при `u* = s^2` целиком лежит в `span{1, s, s^2}`,
-     * совпадающем с полиномиальной порождающей системой. Значит, сплайновая квадратура
-     * Nyström воспроизводит интеграл точно, и приближение обязано совпасть с точным
-     * решением до машинной точности.
+     * If the kernel depends only on `t` (here `K = 1 + t`), then the integrand
+     * `g_t(s) = K(t) * u*(s)` at `u* = s^2` lies entirely in `span{1, s, s^2}`,
+     * which coincides with the polynomial generating system. Hence the spline Nyström
+     * quadrature reproduces the integral exactly, and the approximation must coincide with the exact
+     * solution up to machine accuracy.
      */
     @Test
     fun nystromIsExactWhenIntegrandLiesInSpan() {
@@ -143,8 +143,8 @@ class FredholmHealthCheckTest {
         val error = errorEh({ t -> problem.exact(t) }, solver.nystrom().eval, grid)
         assertTrue(
             error < EXACT_ON_SPAN_TOLERANCE,
-            "Схема Nyström должна быть точна, когда подынтегральная функция лежит в span " +
-                "порождающей системы, получено E_h = $error",
+            "The Nyström scheme must be exact when the integrand lies in the span " +
+                "of the generating system, got E_h = $error",
         )
     }
 }

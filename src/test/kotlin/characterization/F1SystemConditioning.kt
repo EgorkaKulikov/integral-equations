@@ -17,64 +17,64 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * ГРАНИЦА ПРЯМОЙ ОШИБКИ для систем задачи F1 — механика класса
- * [BaselineClass.SENSITIVE], общая для гейта [EhCharacterizationTest],
- * диагностики [F1ConditioningTest] и инструмента [BaselineClassifier].
+ * THE FORWARD ERROR BOUND for the systems of the problem F1 — the machinery of the class
+ * [BaselineClass.SENSITIVE], shared by the gate [EhCharacterizationTest],
+ * the diagnostics [F1ConditioningTest] and the tool [BaselineClassifier].
  *
- * Система строится ТЕМ ЖЕ кодом, что и в [FredholmFirstKindSolver]: внутренний
- * [FredholmSecondKindSolver] с `c_L = -1/alpha` и правой частью `f/alpha`.
- * Измеряются `cond_1(A)` (LAPACK `dgecon` из LU) и относительная обратная ошибка
- * `omega`, обе — В ТОМ ЖЕ ПРОГОНЕ и на ТОМ ЖЕ бэкенде, что и сверяемое значение.
- * Отсюда граница `2*cond*max(omega,eps)*||u||inf`: каждое из двух решений отстоит
- * от точного не более чем на `cond*omega*||u||`, отсюда множитель 2.
+ * The system is built by THE SAME code as in [FredholmFirstKindSolver]: an inner
+ * [FredholmSecondKindSolver] with `c_L = -1/alpha` and the right-hand side `f/alpha`.
+ * What is measured is `cond_1(A)` (the LAPACK `dgecon` from the LU) and the relative backward error
+ * `omega`, both IN THE SAME RUN and on THE SAME backend as the value being cross-checked.
+ * Hence the bound `2*cond*max(omega,eps)*||u||inf`: each of the two solutions is at most
+ * `cond*omega*||u||` away from the exact one, hence the factor 2.
  *
- * ЧТО ЗДЕСЬ ЭМПИРИКА, А ЧТО ТЕОРЕМА. Граница `cond*omega*||u||` описывает ошибку
- * КОЭФФИЦИЕНТОВ `c`. У схемы `sloan` значение `E_h` вычисляется ПОСЛЕ решения —
- * как `fEff(t) + c_L*applyNodes(t, .)` с сокращением в 5e9 раз, — и формально этой
- * границей не покрывается. ИЗМЕРЕНИЕ показало, что фактически покрывается:
- * по всем 54 ключам F1 худшее отношение `|dlt|/граница` = 0.673 (как раз `sloan`),
- * медиана ~0.14, ключей выше границы — 0. Это ЭМПИРИЧЕСКИЙ ФАКТ, а не теорема.
+ * WHAT IS EMPIRICAL HERE AND WHAT IS A THEOREM. The bound `cond*omega*||u||` describes the error
+ * OF THE COEFFICIENTS `c`. In the `sloan` scheme the value `E_h` is computed AFTER the solve —
+ * as `fEff(t) + c_L*applyNodes(t, .)` with a cancellation by 5e9 times — and is formally not
+ * covered by this bound. THE MEASUREMENT showed that in fact it is covered:
+ * over all 54 F1 keys the worst ratio `|dlt|/bound` = 0.673 (exactly `sloan`),
+ * the median ~0.14, keys above the bound: 0. This is an EMPIRICAL FACT and not a theorem.
  *
- * СМЕШЕНИЕ НОРМ, названное явно: `Conditioning.conditionEstimate(...).condInf`
- * возвращает оценку в 1-НОРМЕ (имя поля в numerical-core дезориентирует), а `omega`
- * нормирована по бесконечной норме. Для несимметричных матриц `cond_1 != cond_inf`;
- * множитель 2 и полуторакратный запас в худшем ключе это покрывают.
+ * A MIXING OF NORMS, named explicitly: `Conditioning.conditionEstimate(...).condInf`
+ * returns an estimate in the 1-NORM (the field name in numerical-core is misleading), while `omega`
+ * is normalized by the infinity norm. For non-symmetric matrices `cond_1 != cond_inf`;
+ * the factor 2 and the 1.5-fold margin in the worst key cover this.
  *
- * ПОЧЕМУ ТОЛЬКО F1 (`base`/`sloan`). Система `(I-M)c=g` доступна снаружи через
- * `SecondKindSolverCore.baseMatrix()`/`vectorG()` только у схем `base` и `sloan`
- * (вторая решает ту же систему). У `kulkarni`/`nystrom`/Урысона матрица приватна
- * либо СЛАУ нет вовсе — и не нужна: расходится между путями LU только F1.
- * Ключ другой схемы, вышедший за правило `portable`, — ДЕФЕКТ, и [BaselineClassifier]
- * на нём падает, а не расширяет класс.
+ * WHY ONLY F1 (`base`/`sloan`). The system `(I-M)c=g` is available from outside through
+ * `SecondKindSolverCore.baseMatrix()`/`vectorG()` only for the schemes `base` and `sloan`
+ * (the second solves the same system). For `kulkarni`/`nystrom`/Uryson the matrix is private
+ * or there is no linear system at all — and it is not needed: only F1 diverges between the LU paths.
+ * A key of another scheme that went beyond the `portable` rule is a DEFECT, and [BaselineClassifier]
+ * fails on it instead of widening the class.
  */
 object F1SystemConditioning {
 
-    /** Множитель «два решения, каждое в пределах cond*omega*||u|| от точного». */
+    /** The factor "two solutions, each within cond*omega*||u|| of the exact one". */
     const val SAFETY_FACTOR = 2.0
 
-    /** Машинное эпсилон: нижняя отсечка для `omega` (обратная ошибка не бывает точнее). */
+    /** The machine epsilon: the lower cut-off for `omega` (a backward error is never more accurate). */
     const val MACHINE_EPSILON = 2.220446049250313e-16
 
     /**
-     * Верхняя отсечка осмысленности границы. Граница выше 10 % от `||u||inf` означает,
-     * что система перестала быть разрешимой: это регрессия, а не «широкая граница».
+     * The upper cut-off of the meaningfulness of the bound. A bound above 10 % of `||u||inf` means
+     * that the system stopped being solvable: this is a regression and not a "wide bound".
      */
     const val MAX_BOUND_FRACTION = 0.1
 
-    /** Схемы, у которых сверяемое значение получено из системы `(I-M)c=g`. */
+    /** The schemes whose cross-checked value is obtained from the system `(I-M)c=g`. */
     val SUPPORTED_SCHEMES = setOf("base", "sloan")
 
-    /** Результат измерения системы одного сочетания (система, семейство, n). */
+    /** The result of measuring the system of one combination (system, family, n). */
     data class Measurement(
         val cond: Double,
         val omega: Double,
         val uNorm: Double,
         val coeffNormInf: Double,
     ) {
-        /** Граница прямой ошибки `2*cond*max(omega,eps)*||u||inf`. */
+        /** The forward error bound `2*cond*max(omega,eps)*||u||inf`. */
         val bound: Double get() = SAFETY_FACTOR * cond * max(omega, MACHINE_EPSILON) * uNorm
 
-        /** Достоверна ли граница: вырождение и «бесконечная» граница обязаны РОНЯТЬ гейт. */
+        /** Whether the bound is trustworthy: a degeneracy and an "infinite" bound must BREAK the gate. */
         val reliable: Boolean
             get() = cond.isFinite() && cond > 1.0 && omega.isFinite() &&
                 bound.isFinite() && bound < MAX_BOUND_FRACTION * uNorm
@@ -82,13 +82,13 @@ object F1SystemConditioning {
 
     private val cache = ConcurrentHashMap<String, Measurement>()
 
-    /** Разбирает ключ `F1.<система>.<семейство>.n<N>.<схема>`; `null` — ключ не из F1-систем. */
+    /** Parses the key `F1.<system>.<family>.n<N>.<scheme>`; `null` means the key is not from the F1 systems. */
     fun parseKey(key: String): Triple<GeneratingSystem, String, Int>? {
         val parts = key.split('.')
         if (parts.size != 5 || parts[0] != "F1") return null
         if (parts[4] !in SUPPORTED_SCHEMES) return null
-        // `GeneratingSystem` — не enum, перечисления его значений нет; отображение явное,
-        // как и в `verification.PublishedValuesTest.system(name)`.
+        // `GeneratingSystem` is not an enum, there is no enumeration of its values; the mapping is explicit,
+        // as in `verification.PublishedValuesTest.system(name)`.
         val system = when (parts[1]) {
             "B" -> GeneratingSystem.B
             "H" -> GeneratingSystem.H
@@ -99,16 +99,16 @@ object F1SystemConditioning {
         return Triple(system, parts[2], n)
     }
 
-    /** Поддерживается ли ключ механикой границы (то есть допустим ли для него класс `sensitive`). */
+    /** Whether the key is supported by the bound machinery (that is, whether the class `sensitive` is admissible for it). */
     fun supports(key: String): Boolean = parseKey(key) != null
 
-    /** Граница для ключа эталона; `null` — ключ не из F1-систем. */
+    /** The bound for a baseline key; `null` means the key is not from the F1 systems. */
     fun measureFor(key: String): Measurement? {
         val (system, family, n) = parseKey(key) ?: return null
         return measure(system, family, n)
     }
 
-    /** Измеряет систему сочетания; результат кэшируется — 27 сочетаний стоят ~4 с. */
+    /** Measures the system of a combination; the result is cached — 27 combinations cost ~4 s. */
     fun measure(system: GeneratingSystem, family: String, n: Int): Measurement =
         cache.getOrPut("${system.name}.$family.n$n") { compute(system, family, n) }
 

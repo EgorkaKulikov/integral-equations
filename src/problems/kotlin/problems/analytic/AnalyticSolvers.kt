@@ -9,14 +9,14 @@ import solvers.volterra.VolterraOperator
 import solvers.volterra.VolterraSecondKindSolver
 
 /**
- * Создаёт решатель уравнения Фредгольма II рода для аналитической задачи.
+ * Creates a solver of the Fredholm equation of the second kind for an analytic problem.
  *
- * В отличие от `problems.fredholm.secondKindSolver`, правая часть и её производные
- * берутся из АНАЛИТИЧЕСКИХ формул задачи и не проходят через квадратуру проекта.
+ * Unlike `problems.fredholm.secondKindSolver`, the right-hand side and its derivatives
+ * come from the ANALYTIC formulas of the problem and do not pass through the project quadrature.
  *
- * @param throwOnDivergence политика обработки расходимости итерационных схем;
- *        значение `false` нужно тестам, изучающим САМУ расходимость на задачах
- *        со спектральным радиусом больше единицы (см. [AnalyticFredholmProblem.supportsFixedPointSchemes]).
+ * @param throwOnDivergence policy for handling divergence of the iterative schemes;
+ *        the value `false` is needed by tests that study divergence ITSELF on problems
+ *        with spectral radius greater than one (see [AnalyticFredholmProblem.supportsFixedPointSchemes]).
  */
 fun analyticFredholmSolver(
     problem: AnalyticFredholmProblem,
@@ -35,9 +35,9 @@ fun analyticFredholmSolver(
 )
 
 /**
- * Создаёт решатель уравнения Вольтерры II рода для аналитической задачи.
+ * Creates a solver of the Volterra equation of the second kind for an analytic problem.
  *
- * Правая часть и её производные — аналитические, без обращения к квадратуре проекта.
+ * The right-hand side and its derivatives are analytic, with no recourse to the project quadrature.
  */
 fun analyticVolterraSolver(
     problem: AnalyticVolterraProblem,

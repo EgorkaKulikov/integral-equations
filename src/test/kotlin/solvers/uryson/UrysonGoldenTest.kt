@@ -14,23 +14,23 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Golden-тест базовой схемы для задачи A (второго рода) на полиномиальном базисе.
+ * A golden test of the base scheme for the problem A (of the second kind) on the polynomial basis.
  *
- * Эталонные значения взяты из опубликованной таблицы порядков сходимости, а не
- * зафиксированы с текущей реализации: совпадение подтверждает, что код воспроизводит
- * численный эксперимент источника (см. `docs/REFERENCES.md`).
+ * The baseline values are taken from a published table of convergence orders and are not
+ * recorded from the current implementation: a match confirms that the code reproduces
+ * the numerical experiment of the source (see `docs/REFERENCES.md`).
  */
 @Tag("fast")
 class UrysonGoldenTest {
 
     private companion object {
-        /** Допустимое относительное отклонение от опубликованного значения. */
+        /** The admissible relative deviation from the published value. */
         const val RELATIVE_TOLERANCE = 0.02
 
-        /** Опубликованное значение E_h при n = 8. */
+        /** The published value of E_h at n = 8. */
         const val PUBLISHED_ERROR_N8 = 1.006e-4
 
-        /** Опубликованное значение E_h при n = 16. */
+        /** The published value of E_h at n = 16. */
         const val PUBLISHED_ERROR_N16 = 1.243e-5
     }
 
@@ -50,13 +50,13 @@ class UrysonGoldenTest {
         val errorN16 = baseError(16)
         assertTrue(
             matches(errorN8, PUBLISHED_ERROR_N8),
-            "E_h(n=8) = $errorN8, опубликованное значение $PUBLISHED_ERROR_N8",
+            "E_h(n=8) = $errorN8, the published value is $PUBLISHED_ERROR_N8",
         )
         assertTrue(
             matches(errorN16, PUBLISHED_ERROR_N16),
-            "E_h(n=16) = $errorN16, опубликованное значение $PUBLISHED_ERROR_N16",
+            "E_h(n=16) = $errorN16, the published value is $PUBLISHED_ERROR_N16",
         )
-        assertTrue(errorN16 < errorN8, "Погрешность должна убывать при сгущении сетки")
+        assertTrue(errorN16 < errorN8, "The error must decrease under grid refinement")
     }
 
     private fun matches(value: Double, reference: Double) =

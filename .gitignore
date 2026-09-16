@@ -1,13 +1,13 @@
 .gradle/
 build/
-# Сторонние jar не хранятся; jar wrapper'а Gradle — исключение
+# Third-party jars are not stored; the Gradle wrapper jar is the exception
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
-# Кэш Kotlin-плагина
+# Kotlin plugin cache
 /.kotlin/
 /.idea/
 /.tasks/
 /*-out.txt
 /*-err.txt
-# Виртуальное окружение для внешней сверки со SciPy (см. tools/verify_with_scipy.py)
+# Virtual environment for the external SciPy cross-check (see tools/verify_with_scipy.py)
 /.venv-verify/

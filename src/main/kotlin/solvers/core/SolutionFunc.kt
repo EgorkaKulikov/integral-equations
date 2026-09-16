@@ -3,64 +3,64 @@ package solvers.core
 import java.util.logging.Logger
 
 // ============================================================================
-// 12. РЕЗУЛЬТАТ РЕШЕНИЯ И ЕДИНЫЙ КОНТРАКТ СХОДИМОСТИ
+// 12. SOLUTION RESULT AND THE SINGLE CONVERGENCE CONTRACT
 // ============================================================================
 
-/** Логгер диагностики сходимости итерационных схем всех решателей. */
+/** Logger for the convergence diagnostics of the iterative schemes of all solvers. */
 private val convergenceLogger: Logger = Logger.getLogger("numerics.Convergence")
 
 /**
- * Результат решения интегрального уравнения: вычислитель приближённого решения
- * `u_h(t)` вместе с признаком того, КАК этот результат получен.
+ * Result of solving an integral equation: an evaluator of the approximate solution
+ * `u_h(t)` together with the information on HOW that result was obtained.
  *
- * Тип единый для всех трёх решателей (Фредгольм, Вольтерра, Урысон). Ранее в каждом
- * из пакетов `solvers.*` существовал свой класс с тем же именем, и они разошлись:
- * у решателя Урысона было поле `iterations`, у остальных — нет. Само понятие
- * «решение плюс сведения о его получении» операторно-нейтрально (внутри нет ничего
- * от вида уравнения), поэтому его место — в `numerics`, рядом с [Grid] и
- * [LinearAlgebra]. Единый тип позволяет описать контракт сходимости ОДИН раз, а не
- * трижды, и исключает повторное расхождение реализаций.
+ * The type is shared by all three solvers (Fredholm, Volterra, Uryson). Previously each
+ * of the `solvers.*` packages had its own class with the same name, and they drifted apart:
+ * the Uryson solver had a field `iterations`, the others did not. The very notion of
+ * "a solution plus the information about how it was obtained" is operator-neutral (it contains nothing
+ * specific to the kind of equation), so its place is in `numerics`, next to [Grid] and
+ * [LinearAlgebra]. A single type lets the convergence contract be described ONCE instead of
+ * three times, and rules out a repeated divergence of the implementations.
  *
- * Причина остановки («не хватило итераций» против «распознана расходимость») в этом
- * типе НЕ хранится сознательно. Для вызывающего важен факт `converged == false`
- * и величина невязки; различение двух причин нужно исключительно для ДИАГНОСТИКИ
- * и полностью выражено текстом сообщения [reportConvergence]. Пятое поле было бы
- * мёртвым весом в публичном API: его пришлось бы заполнять во всех прямых схемах,
- * где оно бессмысленно, и ни один потребитель в проекте его не читает.
+ * The reason for stopping ("iterations ran out" versus "divergence detected") is deliberately NOT
+ * stored in this type. What matters for the caller is the fact `converged == false`
+ * and the magnitude of the residual; distinguishing the two reasons is needed exclusively for DIAGNOSTICS
+ * and is fully expressed by the message text of [reportConvergence]. A fifth field would be
+ * dead weight in the public API: it would have to be filled in by all the direct schemes,
+ * where it is meaningless, and no consumer in the project reads it.
  *
- * @param eval вычислитель `u_h(t)` в произвольной точке.
- * @param converged признак достижения сходимости. Для ПРЯМЫХ схем (базовая
- *        коллокация, итерация Слоана, Кулкарни на проекторе, классический Nyström)
- *        значение `true` тривиально: они решают СЛАУ и итераций не выполняют.
- *        Для итерационных схем значение отражает фактический результат.
- * @param iterations число ФАКТИЧЕСКИ ВЫПОЛНЕННЫХ шагов итерационного процесса,
- *        а НЕ число проверок критерия останова. Значение `0` возможно в двух
- *        случаях: у ПРЯМЫХ схем (итераций нет вовсе) и при МГНОВЕННОЙ сходимости,
- *        когда начальное приближение уже удовлетворяет критерию и вектор неизвестных
- *        не изменяется. Отличать их по этому полю НЕЛЬЗЯ и НЕ НУЖНО: в обоих
- *        случаях шагов действительно нуль. Раньше схемы Урысона считали проверки
- *        и сообщали `1` при нуле выполненных шагов.
- * @param residual достигнутая КОНЕЧНАЯ величина критерия останова. Нужна именно
- *        в режиме `throwOnDivergence = false`: без неё вызывающий получает несошедшийся
- *        результат и не может оценить, насколько он плох. Для прямых схем — `0.0`.
+ * @param eval evaluator of `u_h(t)` at an arbitrary point.
+ * @param converged convergence flag. For DIRECT schemes (base
+ *        collocation, the Sloan iteration, Kulkarni on a projector, the classical Nyström)
+ *        the value `true` is trivial: they solve a linear system and perform no iterations.
+ *        For the iterative schemes the value reflects the actual outcome.
+ * @param iterations number of steps of the iterative process ACTUALLY PERFORMED,
+ *        and NOT the number of stopping-criterion checks. The value `0` is possible in two
+ *        cases: for DIRECT schemes (there are no iterations at all) and on IMMEDIATE convergence,
+ *        when the initial guess already satisfies the criterion and the vector of unknowns
+ *        does not change. Telling them apart by this field is IMPOSSIBLE and UNNECESSARY: in both
+ *        cases the number of steps really is zero. Previously the Uryson schemes counted checks
+ *        and reported `1` for zero performed steps.
+ * @param residual the attained FINAL value of the stopping criterion. It is needed precisely
+ *        in the `throwOnDivergence = false` mode: without it the caller gets a non-converged
+ *        result and cannot judge how bad it is. For direct schemes it is `0.0`.
  *
- *        СМЫСЛ ВЕЛИЧИНЫ ЗАВИСИТ ОТ СХЕМЫ, и единой трактовки У НЕГО НЕТ —
- *        это цена единого типа результата для трёх решателей:
- *         - Ньютоновские схемы Урысона — норма НЕВЯЗКИ `F(x)`. При
- *           `converged == true` — всегда В ВОЗВРАЩАЕМОЙ точке. При исчерпании
- *           предела шагов — невязка ПЕРЕД ПОСЛЕДНИМ шагом, а не в возвращаемой
- *           точке (сознательно, см. `solvers.uryson.runNewtonIterations`).
- *         - Простые итерации Фредгольма и Вольтерры (`kulkarniQuasi`,
- *           `combinedNystrom`) — норма РАЗНОСТИ СОСЕДНИХ ИТЕРАНТОВ, а не невязка.
- *           При ДОСРОЧНО распознанной расходимости это может быть значение нескольких
- *           шагов назад: сохраняется последнее КОНЕЧНОЕ, а не буквально последнее
- *           (см. [solvers.core.IterationStopCriterion.residual]).
- *        Поэтому сравнивать `residual` МЕЖДУ СХЕМАМИ бессмысленно; оно осмыслено
- *        только против того `tol`, с которым схема запущена.
+ *        THE MEANING OF THE QUANTITY DEPENDS ON THE SCHEME, and IT HAS no single interpretation —
+ *        that is the price of a single result type shared by three solvers:
+ *         - The Newton schemes of Uryson — the norm of the RESIDUAL `F(x)`. When
+ *           `converged == true` it is always measured AT THE RETURNED point. When the
+ *           step limit is exhausted, it is the residual BEFORE THE LAST step, not at the returned
+ *           point (deliberately, see `solvers.uryson.runNewtonIterations`).
+ *         - The simple iterations of Fredholm and Volterra (`kulkarniQuasi`,
+ *           `combinedNystrom`) — the norm of the DIFFERENCE OF CONSECUTIVE ITERATES, not a residual.
+ *           When divergence is detected EARLY this may be a value from several
+ *           steps back: the last FINITE value is kept, not the literally last one
+ *           (see [solvers.core.IterationStopCriterion.residual]).
+ *        Comparing `residual` ACROSS SCHEMES is therefore meaningless; it is meaningful
+ *        only against the `tol` the scheme was run with.
  *
- *        Именно КОНЕЧНАЯ: при расходимости с переполнением буквально последнее
- *        значение есть `Inf` или `NaN`, а такое число не несёт сведений о том,
- *        насколько плох результат, и не годится для сравнений.
+ *        FINITE precisely: on divergence with overflow the literally last
+ *        value is `Inf` or `NaN`, and such a number carries no information about
+ *        how bad the result is and is unfit for comparisons.
  */
 public class SolutionFunc(
     public val eval: (Double) -> Double,
@@ -70,31 +70,31 @@ public class SolutionFunc(
 )
 
 /**
- * Единая диагностика недостижения сходимости для ВСЕХ итерационных схем проекта.
+ * Single diagnostics of a failure to converge for ALL iterative schemes of the project.
  *
- * Поведение по умолчанию — исключение: молчаливый возврат неверного результата
- * недопустим, поскольку пользователь библиотеки не может отличить сошедшийся
- * результат от расходящегося. Предупреждение в лог пишется ВСЕГДА (и при
- * последующем исключении тоже) — журнал остаётся дополнительным каналом, а не
- * единственным сигналом, как это было ранее в решателе Урысона.
+ * The default behaviour is an exception: silently returning a wrong result
+ * is inadmissible, since a user of the library cannot tell a converged
+ * result from a diverging one. A warning is ALWAYS written to the log (including when an
+ * exception follows) — the log remains an additional channel rather than the
+ * only signal, as it used to be in the Uryson solver.
  *
- * Режим `throwOnDivergence = false` предусмотрен для исследовательских сценариев и
- * тестов: он позволяет ОСОЗНАННО получить несошедшийся результат, который в этом
- * случае помечен `converged = false` и снабжён достигнутой невязкой.
+ * The mode `throwOnDivergence = false` is provided for research scenarios and
+ * tests: it allows one DELIBERATELY to obtain a non-converged result, which in that
+ * case is marked `converged = false` and carries the attained residual.
  *
- * @param converged фактический признак сходимости.
- * @param throwOnDivergence бросать исключение при `converged == false`.
- * @param methodName имя схемы для сообщения (например, `"kulkarniQuasi (Фредгольм)"`).
- * @param iterations число выполненных итераций.
- * @param maxIterations предел числа итераций.
- * @param residual достигнутая величина критерия останова.
- * @param tolerance требуемая величина критерия останова.
- * @param hint необязательное пояснение причины (например, условие на норму оператора).
- * @param diverged счёт прерван ДОСРОЧНО по распознанной расходимости, а не по
- *        исчерпанию предела итераций. Параметр со значением по умолчанию: схемы,
- *        которые расходимость не распознают (итерации Ньютона в решателе Урысона),
- *        вызывают функцию без изменений.
- * @throws IllegalStateException если сходимость не достигнута и `throwOnDivergence`.
+ * @param converged the actual convergence flag.
+ * @param throwOnDivergence throw an exception when `converged == false`.
+ * @param methodName name of the scheme for the message (for example, `"kulkarniQuasi (Fredholm)"`).
+ * @param iterations number of iterations performed.
+ * @param maxIterations limit on the number of iterations.
+ * @param residual the attained value of the stopping criterion.
+ * @param tolerance the required value of the stopping criterion.
+ * @param hint optional explanation of the cause (for example, a condition on the operator norm).
+ * @param diverged the computation was stopped EARLY because divergence was detected, and not
+ *        because the iteration limit was exhausted. A parameter with a default value: the schemes
+ *        that do not detect divergence (the Newton iterations in the Uryson solver)
+ *        call the function unchanged.
+ * @throws IllegalStateException if convergence was not reached and `throwOnDivergence`.
  */
 internal fun reportConvergence(
     converged: Boolean,
@@ -108,32 +108,32 @@ internal fun reportConvergence(
     diverged: Boolean = false,
 ) {
     if (converged) return
-    // Два РАЗНЫХ события, которые раньше описывались одним текстом.
-    //  * Не хватило итераций: процесс мог бы сойтись, повышение предела осмысленно.
-    //  * Распознана расходимость: счёт прерван ДОСРОЧНО, повышать предел
-    //    бессмысленно — нужно менять задачу или схему.
-    // Старый текст во втором случае ВВОДИЛ БЫ В ЗАБЛУЖДЕНИЕ: из него следовало бы,
-    // что перебраны все допустимые шаги. Общая часть формулировки («сходимость не
-    // достигнута», число итераций, достигнутое и требуемое) сохранена в ОБОИХ
-    // вариантах: это содержательное ядро диагностики, а не украшение.
+    // Two DIFFERENT events that used to be described by a single text.
+    //  * Iterations ran out: the process might still converge, raising the limit makes sense.
+    //  * Divergence detected: the computation was stopped EARLY, raising the limit is
+    //    pointless — the problem or the scheme has to change.
+    // In the second case the old text WOULD BE MISLEADING: it implied
+    // that all admissible steps had been tried. The common part of the wording ("convergence not
+    // reached", the iteration count, the attained and the required values) is kept in BOTH
+    // variants: it is the substantive core of the diagnostics, not decoration.
     val message = buildString {
         if (diverged) {
-            append("$methodName: сходимость не достигнута — распознана РАСХОДИМОСТЬ ")
-            append("на шаге $iterations (предел $maxIterations не исчерпан): критерий останова ")
-            append("растёт вместо того, чтобы убывать; последнее конечное значение $residual, ")
-            append("требуется $tolerance. Дальнейший счёт бессмыслен: повышение предела итераций ")
-            append("не поможет")
+            append("$methodName: convergence not reached — DIVERGENCE detected ")
+            append("at step $iterations (the limit $maxIterations is not exhausted): the stopping criterion ")
+            append("grows instead of decreasing; last finite value $residual, ")
+            append("required $tolerance. Continuing is pointless: raising the iteration limit ")
+            append("will not help")
         } else {
-            append("$methodName: сходимость не достигнута за $iterations итераций ")
-            append("(предел $maxIterations): достигнуто $residual, требуется $tolerance")
+            append("$methodName: convergence not reached in $iterations iterations ")
+            append("(limit $maxIterations): attained $residual, required $tolerance")
         }
         if (hint != null) append(". $hint")
     }
     convergenceLogger.warning(message)
     if (throwOnDivergence) {
         throw IllegalStateException(
-            "$message. Чтобы получить несошедшийся результат осознанно, " +
-                "постройте решатель с throwOnDivergence = false и проверяйте поле " +
+            "$message. To obtain a non-converged result deliberately, " +
+                "build the solver with throwOnDivergence = false and check the field " +
                 "SolutionFunc.converged.",
         )
     }

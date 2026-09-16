@@ -1,60 +1,60 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ПОРОЖДЕНИЕ ЭТАЛОНА published-values.tsv ИЗ .tex-ТАБЛИЦ СТАТЬИ.
+"""GENERATION OF THE BASELINE published-values.tsv FROM THE .tex TABLES OF THE ARTICLE.
 
-Назначение
+Purpose
 ----------
-Файл `src/test/resources/verification/published-values.tsv` содержит 708
-опубликованных чисел, с которыми `verification.PublishedValuesTest` сверяет
-результаты текущего кода. Это единственный внешний источник истины в
-репозитории: в отличие от характеризационных эталонов, он снят не этой
-реализацией, а напечатан в статье.
+The file `src/test/resources/verification/published-values.tsv` contains 708
+published numbers against which `verification.PublishedValuesTest` checks the
+results of the current code. This is the only external source of truth in the
+repository: unlike the characterization baselines, it was not captured by this
+implementation but printed in the article.
 
-Числа извлекаются МЕХАНИЧЕСКИ из 18 файлов `table-*.tex` статьи. Ручной перенос
-запрещён: он и есть источник «ошибки переноса», ради обнаружения которой сверка
-и существует. Соответственно, значения в эталоне правке руками не подлежат —
-изменение таблиц статьи отражается повторным запуском настоящего скрипта.
+The numbers are extracted MECHANICALLY from the 18 files `table-*.tex` of the article. A manual
+transfer is forbidden: it is itself the source of the "transfer error" for the detection of which
+the cross-check exists. Accordingly, the values in the baseline are not to be edited by hand —
+a change in the tables of the article is reflected by re-running the present script.
 
-Скрипт порождает файл ЦЕЛИКОМ, включая шапку комментариев: вывод побайтово
-совпадает с закоммиченным эталоном.
+The script generates the file IN FULL, including the comment header: the output coincides
+byte for byte with the committed baseline.
 
-Порядок запуска
+Order of the steps
 ---------------
-Пересоздание эталона (`--out` по умолчанию указывает на закоммиченный файл):
+Regeneration of the baseline (`--out` points by default at the committed file):
 
-    python3 tools/parse_published_values.py --tables-dir <каталог таблиц статьи>
+    python3 tools/parse_published_values.py --tables-dir <directory of the article tables>
 
-Проверка без записи — порождает эталон во временный файл и сверяет с
-закоммиченным:
+A check without writing — it generates the baseline into a temporary file and compares it with
+the committed one:
 
-    python3 tools/parse_published_values.py --tables-dir <каталог> --check
+    python3 tools/parse_published_values.py --tables-dir <directory> --check
 
-Аргументы
+Arguments
 ---------
-    --tables-dir <каталог>  каталог с 18 файлами table-*.tex статьи
-                            (обязателен: исходники статьи лежат ВНЕ
-                            репозитория и на разных машинах по разным путям)
-    --out <файл>            куда писать (по умолчанию — закоммиченный эталон)
-    --check                 не писать, а сверить с существующим --out
-    --stamp                 дописать в шапку строку о происхождении файла;
-                            по умолчанию выключено, поскольку строка содержит
-                            путь конкретной машины и нарушила бы побайтовое
-                            совпадение с закоммиченным эталоном
+    --tables-dir <dir>      the directory with the 18 files table-*.tex of the article
+                            (mandatory: the sources of the article lie OUTSIDE the
+                            repository and at different paths on different machines)
+    --out <file>            where to write (by default the committed baseline)
+    --check                 do not write but compare with the existing --out
+    --stamp                 append to the header a line about the origin of the file;
+                            disabled by default, since the line contains the
+                            path of a particular machine and would break the byte-for-byte
+                            coincidence with the committed baseline
 
-Коды возврата
+Return codes
 -------------
-    0   успех либо `--check` без расхождений
-    1   `--check` обнаружил расхождение с закоммиченным эталоном
-    2   ошибка входных данных: каталог недоступен, таблиц меньше 18,
-        таблица не читается или не дала ни одной записи
-    3   ошибка записи результата
+    0   success, or `--check` with no discrepancies
+    1   `--check` found a discrepancy with the committed baseline
+    2   an input error: the directory is unavailable, there are fewer than 18 tables,
+        a table cannot be read or yielded no records at all
+    3   an error writing the result
 
-Расхождения МЕЖДУ САМИМИ таблицами статьи кодом возврата не являются: три
-известных случая лежат на уровне машинной точности (порядка 1e-15), скрипт
-оставляет значение из первой таблицы и помечает расхождение в колонке
-расположения — ровно так, как записано в эталоне. Печатается предупреждение.
+Discrepancies BETWEEN THE TABLES of the article themselves are not return codes: the three
+known cases lie at the level of the machine precision (of the order 1e-15), and the script
+keeps the value from the first table and marks the discrepancy in the location
+column — exactly as recorded in the baseline. A warning is printed.
 
-Зависимостей нет: только стандартная библиотека, Python >= 3.8.
+There are no dependencies: only the standard library, Python >= 3.8.
 """
 import argparse
 import os
@@ -62,14 +62,14 @@ import re
 import sys
 import tempfile
 
-# Допуск согласования значения, продублированного в нескольких таблицах.
-# Относительный: числа напечатаны с 4 значащими цифрами, поэтому совпадение
-# требуется лишь в пределах напечатанной точности.
+# The agreement tolerance for a value duplicated in several tables.
+# Relative: the numbers are printed with 4 significant digits, so a coincidence
+# is required only within the printed precision.
 DUPLICATE_TOLERANCE = 5e-3
 
-# Ровно эти 18 таблиц образуют опубликованный набор. Список — часть схемы
-# статьи, а не настройка: появление или пропажа файла означает, что статья
-# изменилась и разбор надо пересматривать, а не молча продолжать.
+# Exactly these 18 tables form the published set. The list is part of the structure
+# of the article rather than a setting: the appearance or disappearance of a file means that the article
+# has changed and the parsing must be reconsidered rather than silently continued.
 TABLE_FILES = (
     "table-f1.tex",
     "table-families.tex",
@@ -101,9 +101,9 @@ EXIT_CHECK_FAILED = 1
 EXIT_INPUT_ERROR = 2
 EXIT_OUTPUT_ERROR = 3
 
-# Шапка эталона утверждает два числа, выводимых из самих таблиц. Если разбор
-# перестанет их давать, прозаическое описание в шапке разойдётся с данными под
-# ним; проверка ниже делает такое расхождение видимым.
+# The header of the baseline asserts two numbers derived from the tables themselves. If the parsing
+# stops producing them, the prose description in the header will diverge from the data below
+# it; the check further down makes such a divergence visible.
 HEADER_DUPS_OK = 220
 HEADER_CONFLICT_KEYS = frozenset((
     "F.F2exp.B.theta.n16.kulkarni.ph",
@@ -111,81 +111,81 @@ HEADER_CONFLICT_KEYS = frozenset((
     "F.F2exp.B.theta.n64.kulkarni.Eh",
 ))
 
-# Шапка эталона. Воспроизводится дословно, чтобы порождённый файл побайтово
-# совпадал с закоммиченным. Прозаическая часть про пути LU (раздел «НА КАКОМ
-# ПУТИ ЛИНЕЙНОЙ АЛГЕБРЫ СНЯТЫ ТАБЛИЦЫ») из таблиц не выводится — это результат
-# отдельного измерения, и правится она здесь, в шаблоне.
+# The header of the baseline. It is reproduced literally so that the generated file coincides
+# byte for byte with the committed one. The prose part about the LU routes (the section "ON WHICH
+# LINEAR-ALGEBRA ROUTE THE TABLES WERE CAPTURED") is not derived from the tables — it is the result
+# of a separate measurement, and it is edited here, in the template.
 HEADER = """\
-# ЭТАЛОННЫЕ ЗНАЧЕНИЯ ИЗ ПУБЛИКАЦИИ (внешний источник истины).
+# REFERENCE VALUES FROM THE PUBLICATION (an external source of truth).
 #
-# Извлечены МЕХАНИЧЕСКИ (скриптом-парсером) из .tex-таблиц статьи, помеченных
-# «Auto-prepared from verified runs. Do not alter numbers»:
-#   Scientific Agents/papers/new-01/experiments/tables/  (18 файлов)
-# Ручной перенос сознательно не применялся: он и есть источник «ошибки переноса».
+# Extracted MECHANICALLY (by a parser script) from the .tex tables of the article marked
+# "Auto-prepared from verified runs. Do not alter numbers":
+#   Scientific Agents/papers/new-01/experiments/tables/  (18 files)
+# A manual transfer was deliberately not used: it is itself the source of the "transfer error".
 #
-# Назначение: сверка результатов текущего кода с ОПУБЛИКОВАННЫМИ числами. В отличие
-# от characterization/baseline-eh.tsv (снят этой же реализацией и фиксирует лишь
-# неизменность поведения), настоящий файл от кода проекта не зависит.
+# Purpose: a cross-check of the results of the current code against the PUBLISHED numbers. Unlike
+# characterization/baseline-eh.tsv (captured by this same implementation and recording only
+# the invariance of the behaviour), the present file does not depend on the project code.
 #
-# Формат:  ключ <TAB> значение <TAB> файл-источник <TAB> расположение в файле
+# Format:  key <TAB> value <TAB> source file <TAB> location in the file
 #
-# Ключ:  <уравнение>.<задача>.<базис>.<семейство>.n<N>.<схема>.<величина>
-#   уравнение — F (Фредгольм) либо V (Вольтерра);
-#   задача    — F2, F2exp, F1, V2, V2exp, V2win, V1;
-#   величина  — Eh (погрешность max|u*-u_h|) либо ph (порядок log2(E_h/E_{h/2})).
-# Схема именования согласована с characterization/baseline-eh.tsv.
+# Key:  <equation>.<problem>.<basis>.<family>.n<N>.<scheme>.<quantity>
+#   equation — F (Fredholm) or V (Volterra);
+#   problem  — F2, F2exp, F1, V2, V2exp, V2win, V1;
+#   quantity — Eh (the error max|u*-u_h|) or ph (the order log2(E_h/E_{h/2})).
+# The naming scheme agrees with characterization/baseline-eh.tsv.
 #
-# Значения приведены с 4 значащими цифрами — ровно столько напечатано в статье.
-# Отсюда допуск сверки 2 %: см. PublishedValuesTest.RELATIVE_TOLERANCE.
+# The values are given with 4 significant digits — exactly as many as are printed in the article.
+# Hence the cross-check tolerance of 2 %: see PublishedValuesTest.RELATIVE_TOLERANCE.
 #
-# ИЗВЕСТНЫЕ РАСХОЖДЕНИЯ МЕЖДУ САМИМИ ТАБЛИЦАМИ. Обнаружены при извлечении: одна и та
-# же величина напечатана в двух таблицах по-разному. Это не ошибка переноса, а разные
-# прогоны (table-t2-* — «Phase-8 runs», table-t3-* — прогон commit 403fa1d). Все три
-# случая лежат НА УРОВНЕ МАШИННОЙ ТОЧНОСТИ и потому из сверки исключены (NOISE_FLOOR);
-# в поле расположения они помечены словом РАСХОЖДЕНИЕ:
-#   F.F2exp.B.theta.n32.kulkarni.Eh : 7.327e-15 (t2) против 7.994e-15 (t3), 9 %;
-#   F.F2exp.B.theta.n64.kulkarni.Eh : 5.995e-15 (t2) против 6.439e-15 (t3), 7 %;
-#   F.F2exp.B.theta.n16.kulkarni.ph : 6.45 (t2) против 6.32 (t3) — порядок вычислен
-#     по E_h(n=32) из шумовой зоны, поэтому недостоверен сам по себе.
-# Оставлено значение из table-t2-*; альтернативное указано в примечании.
-# Прочие 220 значений, продублированных в нескольких таблицах, совпали полностью.
+# KNOWN DISCREPANCIES BETWEEN THE TABLES THEMSELVES. Found during the extraction: one and the
+# same quantity is printed differently in two tables. This is not a transfer error but different
+# runs (table-t2-* are the "Phase-8 runs", table-t3-* the run of commit 403fa1d). All three
+# cases lie AT THE LEVEL OF THE MACHINE PRECISION and are therefore excluded from the cross-check (NOISE_FLOOR);
+# in the location field they are marked with a divergence marker:
+#   F.F2exp.B.theta.n32.kulkarni.Eh : 7.327e-15 (t2) against 7.994e-15 (t3), 9 %;
+#   F.F2exp.B.theta.n64.kulkarni.Eh : 5.995e-15 (t2) against 6.439e-15 (t3), 7 %;
+#   F.F2exp.B.theta.n16.kulkarni.ph : 6.45 (t2) against 6.32 (t3) — the order is computed
+#     from E_h(n=32) taken from the noise zone and is therefore unreliable in itself.
+# The value from table-t2-* is kept; the alternative is given in the note.
+# The other 220 values duplicated in several tables coincided completely.
 #
 # ============================================================================
-# НА КАКОМ ПУТИ ЛИНЕЙНОЙ АЛГЕБРЫ СНЯТЫ ТАБЛИЦЫ (измерено, этап 8.6)
+# ON WHICH LINEAR-ALGEBRA ROUTE THE TABLES WERE CAPTURED (measured, stage 8.6)
 # ============================================================================
-# В самой статье бэкенд не указан. Он восстановлен ПО ФАКТУ — прогоном всех
-# 42 ключей F1 на обоих бэкендах (`-Dnumerics.backend=multik|reference`, JDK 21,
-# macOS aarch64) и сравнением с опубликованными числами. Результат:
+# The article itself does not state the backend. It has been recovered BY FACT — by running all
+# 42 F1 keys on both backends (`-Dnumerics.backend=multik|reference`, JDK 21,
+# macOS aarch64) and comparing with the published numbers. The result:
 #
-#   table-xi-f1.tex  (36 ключей F1) — снята на MULTIK/OpenBLAS.
-#       multik    против публикации: макс. 0.033 %, медиана 0.0032 %;
-#       reference против публикации: макс. 11.485 %, медиана 1.162 %.
-#       Воспроизводится практически бит-в-бит, допуск — общие 2 %.
+#   table-xi-f1.tex  (36 F1 keys) — captured on MULTIK/OpenBLAS.
+#       multik    against the publication: max. 0.033 %, median 0.0032 %;
+#       reference against the publication: max. 11.485 %, median 1.162 %.
+#       It is reproduced practically bit for bit; the tolerance is the common 2 %.
 #
-#   table-f1.tex     (6 ключей F.F1.H.theta.*) — снята на JVM-пУТИ LU (ReferenceBackend
-#       либо арифметически близкая реализация), А НЕ на multik.
-#       reference против публикации: макс. 4.234 %, медиана 0.010 %
-#                   (4 ключа из 6 совпадают до 4-й значащей цифры);
-#       multik    против публикации: макс. 6.780 %, медиана 3.471 %.
-#       Допуск — 8 %, см. PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE. Общий
-#       допуск 2 % НЕ ОСЛАБЛЕН: послабление касается только этих 6 ключей.
+#   table-f1.tex     (6 keys F.F1.H.theta.*) — captured on a JVM LU ROUTE (ReferenceBackend
+#       or an arithmetically close implementation) AND NOT on multik.
+#       reference against the publication: max. 4.234 %, median 0.010 %
+#                   (4 keys out of 6 coincide to the 4th significant digit);
+#       multik    against the publication: max. 6.780 %, median 3.471 %.
+#       The tolerance is 8 %, see PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE. The common
+#       tolerance of 2 % is NOT RELAXED: the relaxation concerns only these 6 keys.
 #
-# ПРИЧИНА, почему разные пути LU вообще дают разные числа именно в F1: это
-# уравнение ПЕРВОГО рода с регуляризацией Вазваза (alpha = 1e-10, c_L = -1e10).
-# Измерено: cond_inf(I-M) = 1.18e10..2.70e10, ‖g‖_inf = 1.59e10, а в схеме Слоана два
-# слагаемых порядка 1.38e10 сокращаются до 2.7 (потеря ~9.7 из 16 цифр).
-# Измеренный разброс multik против reference ВНУТРИ САМОЙ table-f1.tex (6 ключей):
-# макс. 7.267 % (ключ F.F1.H.theta.n8.sloan) — именно из этого числа выведен допуск
-# 8 % (= 0.05 % точности публикации + 7.267 %, округлено вверх).
-# Для сравнения, ПО ВСЕЙ группе F1 (42 ключа) тот же разброс был бы шире:
-# макс. 11.483 % (ключ F.F1.B.xi1.n32.sloan из ДРУГОЙ таблицы), медиана 0.98 %.
-# Взят УЗКИЙ вариант: разброс чужой таблицы не должен послаблять эту.
-# Подробный замер: .tasks/code-review-remediation/stage8/MEASURE-8.6-f1-tolerance.md.
+# THE REASON why different LU routes give different numbers precisely in F1: this is an
+# equation of the FIRST kind with the Wazwaz regularization (alpha = 1e-10, c_L = -1e10).
+# Measured: cond_inf(I-M) = 1.18e10..2.70e10, ||g||_inf = 1.59e10, and in the Sloan scheme two
+# terms of the order 1.38e10 cancel down to 2.7 (a loss of ~9.7 of the 16 digits).
+# The measured spread of multik against reference INSIDE table-f1.tex itself (6 keys):
+# max. 7.267 % (the key F.F1.H.theta.n8.sloan) — it is from this number that the tolerance of
+# 8 % is derived (= 0.05 % of the precision of the publication + 7.267 %, rounded up).
+# For comparison, OVER THE WHOLE F1 group (42 keys) the same spread would be wider:
+# max. 11.483 % (the key F.F1.B.xi1.n32.sloan from ANOTHER table), median 0.98 %.
+# The NARROW variant was taken: the spread of a foreign table must not relax this one.
+# The detailed measurement: .tasks/code-review-remediation/stage8/MEASURE-8.6-f1-tolerance.md.
 #
-# ОСТАЛЬНЫЕ ТАБЛИЦЫ (F2/F2exp/V1/V2/V2exp/V2win, 700 ключей) от пути LU НЕ ЗАВИСЯТ:
-# там нет масштабирования на 1/alpha, cond(I-M) порядка единиц, и все они проходят
-# под общим допуском 2 % на ОБОИХ бэкендах. Поэтому единого «бэкенда статьи» не
-# существует и быть записано одной строкой не может — только по-таблично.
+# THE OTHER TABLES (F2/F2exp/V1/V2/V2exp/V2win, 700 keys) DO NOT DEPEND on the LU route:
+# there is no scaling by 1/alpha there, cond(I-M) is of the order of units, and all of them pass
+# under the common tolerance of 2 % on BOTH backends. Hence a single "backend of the article" does not
+# exist and cannot be recorded in a single line — only table by table.
 """
 
 NUM = re.compile(r'\$?(-?\d+\.\d+)\{?\\+times\}?10\^\{(-?\d+)\}\$?')
@@ -198,18 +198,18 @@ T3SCHEMES = ['base', 'sloan', 'kulkarni', 'nystrom', 'iterNystrom']
 
 
 class TableError(Exception):
-    """Таблица статьи недоступна либо не поддаётся разбору."""
+    """A table of the article is unavailable or cannot be parsed."""
 
 
 def cells(line):
-    """Разбивает строку таблицы на ячейки."""
+    """Splits a row of a table into cells."""
     line = line.strip()
-    line = re.sub(r'\\+\\\s*$', '', line)          # хвостовой \\
+    line = re.sub(r'\\+\\\s*$', '', line)          # the trailing \\
     return [c.strip() for c in line.split('&')]
 
 
 def num(tok):
-    """Значение из ячейки вида $1.014{\\times}10^{-4}$ (или None)."""
+    """The value from a cell of the form $1.014{\\times}10^{-4}$ (or None)."""
     m = NUM.search(tok)
     if m:
         return float(m.group(1)) * (10.0 ** int(m.group(2)))
@@ -217,30 +217,30 @@ def num(tok):
 
 
 def order(tok):
-    """p_h из хвоста ячейки: '(3.02)' либо '($-3.31$)'; '---' -> None."""
+    """p_h from the tail of a cell: '(3.02)' or '($-3.31$)'; '---' -> None."""
     m = re.search(r'\(\s*\$?(-?\d+\.\d+)\$?\s*\)', tok)
     return float(m.group(1)) if m else None
 
 
 def fmt(v):
-    """4 значащие цифры - ровно столько, сколько напечатано в публикации."""
+    """4 significant digits - exactly as many as are printed in the publication."""
     return f"{v:.4g}"
 
 
 def lines_of(tables_dir, name):
-    """Строки файла таблицы; недоступность файла — ошибка входных данных."""
+    """The lines of a table file; an unavailable file is an input error."""
     path = os.path.join(tables_dir, name)
     try:
         with open(path, encoding='utf-8') as handle:
             return handle.readlines()
     except OSError as exc:
-        raise TableError(f"не читается таблица {name}: {exc}") from exc
+        raise TableError(f"table {name} cannot be read: {exc}") from exc
     except UnicodeDecodeError as exc:
-        raise TableError(f"таблица {name} не в кодировке UTF-8: {exc}") from exc
+        raise TableError(f"table {name} is not in the UTF-8 encoding: {exc}") from exc
 
 
 def rows(tables_dir, path):
-    """Строки данных: начинаются с числа n."""
+    """Data rows: they start with the number n."""
     out = []
     for raw in lines_of(tables_dir, path):
         s = raw.strip()
@@ -252,7 +252,7 @@ def rows(tables_dir, path):
 
 
 def block_of(raw):
-    """Опознаёт заголовок подраздела таблицы."""
+    """Recognizes the heading of a subsection of a table."""
     if 'mathcal{B}' in raw:
         return 'B'
     if 'mathcal{H}' in raw:
@@ -263,7 +263,7 @@ def block_of(raw):
 
 
 def extract(tables_dir):
-    """Разбор 18 таблиц статьи. Возвращает список (ключ, значение, файл, пометка)."""
+    """Parsing of the 18 tables of the article. Returns a list of (key, value, file, note)."""
     records = []
 
     def rec(key, val, src, note):
@@ -271,7 +271,7 @@ def extract(tables_dir):
             return
         records.append((key, val, src, note))
 
-    # ---- table-t1-*: базовая схема, theta, блоки по базисам, колонки n,h,E,p,C
+    # ---- table-t1-*: the base scheme, theta, blocks by basis, columns n,h,E,p,C
     for fname, eq, prob in [('table-t1-f2.tex', 'F', 'F2'), ('table-t1-f2exp.tex', 'F', 'F2exp'),
                             ('table-t1-v2.tex', 'V', 'V2'), ('table-t1-v2exp.tex', 'V', 'V2exp'),
                             ('table-t1-v2win.tex', 'V', 'V2win')]:
@@ -283,12 +283,12 @@ def extract(tables_dir):
                     sysname = b
                 continue
             # n & h & E_h & p_h & C_h
-            rec(f"{eq}.{prob}.{sysname}.theta.n{n}.base.Eh", num(c[2]), fname, f"базис {sysname}")
+            rec(f"{eq}.{prob}.{sysname}.theta.n{n}.base.Eh", num(c[2]), fname, f"basis {sysname}")
             p = PLAIN.match(c[3].replace('$', ''))
             if p:
-                rec(f"{eq}.{prob}.{sysname}.theta.n{n}.base.ph", float(p.group(1)), fname, f"базис {sysname}")
+                rec(f"{eq}.{prob}.{sysname}.theta.n{n}.base.ph", float(p.group(1)), fname, f"basis {sysname}")
 
-    # ---- table-t2-*: базис B, theta, колонки база/Слоан/Кулкарни/итер.Кулкарни, блоки по задачам
+    # ---- table-t2-*: basis B, theta, columns base/Sloan/Kulkarni/iter.Kulkarni, blocks by problem
     for fname, eq, probs in [('table-t2-fredholm.tex', 'F', ['F2', 'F2exp']),
                              ('table-t2-volterra.tex', 'V', ['V2', 'V2exp', 'V2win'])]:
         pi, prob = -1, None
@@ -302,7 +302,7 @@ def extract(tables_dir):
                 rec(f"{eq}.{prob}.B.theta.n{n}.{sch}.Eh", num(c[k + 1]), fname, prob)
                 rec(f"{eq}.{prob}.B.theta.n{n}.{sch}.ph", order(c[k + 1]), fname, prob)
 
-    # ---- table-t3-*: базис B, theta, + Nyström
+    # ---- table-t3-*: basis B, theta, + Nyström
     for fname, eq, probs in [('table-t3-fredholm.tex', 'F', ['F2', 'F2exp']),
                              ('table-t3-volterra.tex', 'V', ['V2', 'V2exp'])]:
         pi, prob = -1, None
@@ -316,7 +316,7 @@ def extract(tables_dir):
                 rec(f"{eq}.{prob}.B.theta.n{n}.{sch}.Eh", num(c[k + 1]), fname, prob)
                 rec(f"{eq}.{prob}.B.theta.n{n}.{sch}.ph", order(c[k + 1]), fname, prob)
 
-    # ---- table-xi-t1-*: базовая схема, блоки по xi<r>, колонки B/H/T
+    # ---- table-xi-t1-*: the base scheme, blocks by xi<r>, columns B/H/T
     for fname, eq, prob in [('table-xi-t1-f2.tex', 'F', 'F2'), ('table-xi-t1-v2.tex', 'V', 'V2')]:
         fam = None
         for n, c, raw in rows(tables_dir, fname):
@@ -329,7 +329,7 @@ def extract(tables_dir):
                 rec(f"{eq}.{prob}.{s}.{fam}.n{n}.base.Eh", num(c[k + 1]), fname, fam)
                 rec(f"{eq}.{prob}.{s}.{fam}.n{n}.base.ph", order(c[k + 1]), fname, fam)
 
-    # ---- table-xi-t2-*: базис B, блоки по xi<r>, колонки схем
+    # ---- table-xi-t2-*: basis B, blocks by xi<r>, columns of the schemes
     for fname, eq, prob in [('table-xi-t2-fredholm.tex', 'F', 'F2'), ('table-xi-t2-volterra.tex', 'V', 'V2')]:
         fam = None
         for n, c, raw in rows(tables_dir, fname):
@@ -342,7 +342,7 @@ def extract(tables_dir):
                 rec(f"{eq}.{prob}.B.{fam}.n{n}.{sch}.Eh", num(c[k + 1]), fname, fam)
                 rec(f"{eq}.{prob}.B.{fam}.n{n}.{sch}.ph", order(c[k + 1]), fname, fam)
 
-    # ---- table-families: базис B, базовая схема, блоки по задачам, строки по семействам
+    # ---- table-families: basis B, the base scheme, blocks by problem, rows by family
     prob = None
     for raw in lines_of(tables_dir, 'table-families.tex'):
         s = raw.strip()
@@ -360,7 +360,7 @@ def extract(tables_dir):
                 rec(f"{eq}.{prob}.B.{fam}.n{n}.base.Eh", num(c[k + 1]), 'table-families.tex', prob)
                 rec(f"{eq}.{prob}.B.{fam}.n{n}.base.ph", order(c[k + 1]), 'table-families.tex', prob)
 
-    # ---- table-xi-special: xi1, базовая схема, блоки по задачам, колонки B/H/T
+    # ---- table-xi-special: xi1, the base scheme, blocks by problem, columns B/H/T
     prob = None
     for n, c, raw in rows(tables_dir, 'table-xi-special.tex'):
         if n is None:
@@ -373,21 +373,21 @@ def extract(tables_dir):
             rec(f"{eq}.{prob}.{s}.xi1.n{n}.base.Eh", num(c[k + 1]), 'table-xi-special.tex', prob)
             rec(f"{eq}.{prob}.{s}.xi1.n{n}.base.ph", order(c[k + 1]), 'table-xi-special.tex', prob)
 
-    # ---- table-f1: F1, базис H, theta, колонки n,h,база,Слоан
+    # ---- table-f1: F1, basis H, theta, columns n,h,base,Sloan
     for n, c, raw in rows(tables_dir, 'table-f1.tex'):
         if n is None:
             continue
         rec(f"F.F1.H.theta.n{n}.base.Eh", num(c[2]), 'table-f1.tex', 'alpha=1e-10')
         rec(f"F.F1.H.theta.n{n}.sloan.Eh", num(c[3]), 'table-f1.tex', 'alpha=1e-10')
 
-    # ---- table-v1: V1, базис B, theta, колонки n,база,Слоан,Кулкарни
+    # ---- table-v1: V1, basis B, theta, columns n,base,Sloan,Kulkarni
     for n, c, raw in rows(tables_dir, 'table-v1.tex'):
         if n is None:
             continue
         for k, sch in enumerate(['base', 'sloan', 'kulkarni']):
-            rec(f"V.V1.B.theta.n{n}.{sch}.Eh", num(c[k + 1]), 'table-v1.tex', 'сведение к V2')
+            rec(f"V.V1.B.theta.n{n}.{sch}.Eh", num(c[k + 1]), 'table-v1.tex', 'reduction to V2')
 
-    # ---- table-xi-f1: F1, xi1/xi2, базисы B/H/T, схемы база/Слоан
+    # ---- table-xi-f1: F1, xi1/xi2, bases B/H/T, schemes base/Sloan
     fam, sysname = None, None
     for n, c, raw in rows(tables_dir, 'table-xi-f1.tex'):
         if n is None:
@@ -405,18 +405,18 @@ def extract(tables_dir):
     silent = [name for name in TABLE_FILES if not any(r[2] == name for r in records)]
     if silent:
         raise TableError(
-            "разбор не дал ни одной записи по таблицам: " + ", ".join(silent) +
-            " — вероятно, изменилась вёрстка таблицы в статье"
+            "the parsing yielded no records for the tables: " + ", ".join(silent) +
+            " — the layout of a table in the article has probably changed"
         )
     return records
 
 
 def reconcile(records):
-    """Свёртка дубликатов в словарь ключ -> (значение, файл, пометка).
+    """Folding of the duplicates into a dictionary key -> (value, file, note).
 
-    Одно и то же число встречается в нескольких таблицах. Совпадающие в пределах
-    DUPLICATE_TOLERANCE считаются согласованными; расходящиеся оставляют значение
-    из первой таблицы, а альтернатива дописывается в пометку.
+    One and the same number occurs in several tables. Those coinciding within
+    DUPLICATE_TOLERANCE are considered consistent; diverging ones keep the value
+    from the first table, while the alternative is appended to the note.
     """
     seen = {}
     dups_ok, dups_bad = 0, []
@@ -430,16 +430,16 @@ def reconcile(records):
         else:
             seen[key] = (val, src, note)
     for k, o, nv in dups_bad:
-        seen[k] = (o[0], o[1], seen[k][2] + f"; РАСХОЖДЕНИЕ С {nv[1]}: {fmt(nv[0])}")
+        seen[k] = (o[0], o[1], seen[k][2] + f"; DISCREPANCY WITH {nv[1]}: {fmt(nv[0])}")
     return seen, dups_ok, dups_bad
 
 
 def render(seen, tables_dir, stamp):
-    """Текст эталона целиком: шапка плюс отсортированные по ключу строки данных."""
+    """The text of the baseline in full: the header plus the data rows sorted by key."""
     parts = [HEADER]
     if stamp:
         parts.append(
-            f"# Порождено: tools/parse_published_values.py --tables-dir {tables_dir}\n"
+            f"# Generated by: tools/parse_published_values.py --tables-dir {tables_dir}\n"
         )
     for key in sorted(seen):
         v, src, note = seen[key]
@@ -448,31 +448,31 @@ def render(seen, tables_dir, stamp):
 
 
 def report(seen, records, dups_ok, dups_bad):
-    """Сводка разбора. Расхождения между таблицами — предупреждение, не отказ."""
-    print(f"извлечено записей: {len(records)}, уникальных ключей: {len(seen)}")
-    print(f"согласованных дубликатов между таблицами: {dups_ok}")
+    """A summary of the parsing. Discrepancies between the tables are a warning, not a failure."""
+    print(f"records extracted: {len(records)}, unique keys: {len(seen)}")
+    print(f"consistent duplicates between the tables: {dups_ok}")
     if dups_bad:
-        print("ПРЕДУПРЕЖДЕНИЕ: расхождения между таблицами статьи "
-              "(оставлено значение из первой таблицы):")
+        print("WARNING: discrepancies between the tables of the article "
+              "(the value from the first table is kept):")
         for k, o, nv in dups_bad:
             print("   ", k, o, nv)
     else:
-        print("противоречий между таблицами нет")
+        print("there are no contradictions between the tables")
     eh = sum(1 for k in seen if k.endswith('.Eh'))
     print(f"E_h: {eh}, p_h: {len(seen) - eh}")
 
-    # Шапка описывает разбор словами; при расхождении описание устарело.
+    # The header describes the parsing in words; on a divergence the description is out of date.
     if dups_ok != HEADER_DUPS_OK:
-        print(f"ПРЕДУПРЕЖДЕНИЕ: шапка эталона называет {HEADER_DUPS_OK} согласованных "
-              f"дубликатов, разбор дал {dups_ok} — текст шапки в скрипте пора обновить")
+        print(f"WARNING: the header of the baseline names {HEADER_DUPS_OK} consistent "
+              f"duplicates, the parsing gave {dups_ok} — the header text in the script needs updating")
     actual_conflicts = frozenset(k for k, _o, _nv in dups_bad)
     if actual_conflicts != HEADER_CONFLICT_KEYS:
-        print("ПРЕДУПРЕЖДЕНИЕ: набор расхождений между таблицами отличается от "
-              "перечисленного в шапке эталона — текст шапки в скрипте пора обновить")
+        print("WARNING: the set of discrepancies between the tables differs from "
+              "the one listed in the header of the baseline — the header text in the script needs updating")
 
 
 def data_map(text):
-    """Строки данных текста эталона в виде ключ -> остаток строки."""
+    """The data rows of the baseline text as key -> the rest of the row."""
     result = {}
     for line in text.splitlines():
         if not line.strip() or line.startswith('#'):
@@ -483,9 +483,9 @@ def data_map(text):
 
 
 def compare(expected_text, actual_text, out_path):
-    """Сверка порождённого текста с закоммиченным. 0 — совпало, 1 — нет."""
+    """Comparison of the generated text with the committed one. 0 — it matched, 1 — it did not."""
     if expected_text == actual_text:
-        print(f"сверка с {out_path}: совпадает побайтово")
+        print(f"comparison with {out_path}: coincides byte for byte")
         return EXIT_OK
 
     expected = data_map(expected_text)
@@ -494,52 +494,52 @@ def compare(expected_text, actual_text, out_path):
         set(expected) ^ set(actual) |
         {k for k in set(expected) & set(actual) if expected[k] != actual[k]}
     )
-    print(f"РАСХОЖДЕНИЕ: {out_path} не совпадает с порождённым из таблиц статьи.")
+    print(f"DISCREPANCY: {out_path} does not coincide with the text generated from the tables of the article.")
     if differing:
-        print(f"различающихся ключей: {len(differing)} (показаны первые 20)")
+        print(f"differing keys: {len(differing)} (the first 20 are shown)")
         for key in differing[:20]:
-            print(f"    {key}: в файле {expected.get(key, '<нет>')} | "
-                  f"порождено {actual.get(key, '<нет>')}")
+            print(f"    {key}: in the file {expected.get(key, '<none>')} | "
+                  f"generated {actual.get(key, '<none>')}")
     else:
-        print("значения совпадают, различается шапка комментариев")
-    print("Эталон правится только повторным запуском этого скрипта, не руками.")
+        print("the values coincide, the comment header differs")
+    print("The baseline is edited only by re-running this script, never by hand.")
     return EXIT_CHECK_FAILED
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Порождение эталона published-values.tsv из .tex-таблиц статьи",
+        description="Generation of the baseline published-values.tsv from the .tex tables of the article",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Исходники статьи лежат вне репозитория, поэтому --tables-dir обязателен\n"
-               "и в сборку Gradle этот скрипт не встроен.",
+        epilog="The sources of the article lie outside the repository, so --tables-dir is mandatory\n"
+               "and this script is not built into the Gradle build.",
     )
     parser.add_argument("--tables-dir", required=True,
-                        help=f"каталог с {len(TABLE_FILES)} файлами table-*.tex статьи")
+                        help=f"the directory with the {len(TABLE_FILES)} files table-*.tex of the article")
     parser.add_argument("--out", default=DEFAULT_OUT,
-                        help="файл результата (по умолчанию закоммиченный эталон)")
+                        help="the result file (by default the committed baseline)")
     parser.add_argument("--check", action="store_true",
-                        help="не писать, а сверить с существующим --out; "
-                             "код возврата 1 при расхождении")
+                        help="do not write but compare with the existing --out; "
+                             "return code 1 on a discrepancy")
     parser.add_argument("--stamp", action="store_true",
-                        help="дописать в шапку строку о происхождении файла; "
-                             "нарушает побайтовое совпадение с закоммиченным эталоном")
+                        help="append to the header a line about the origin of the file; "
+                             "it breaks the byte-for-byte coincidence with the committed baseline")
     args = parser.parse_args()
 
     tables_dir = args.tables_dir
     if not os.path.isdir(tables_dir):
-        print(f"ОШИБКА: каталог таблиц не найден: {tables_dir}")
+        print(f"ERROR: the directory of tables was not found: {tables_dir}")
         return EXIT_INPUT_ERROR
     missing = [name for name in TABLE_FILES
                if not os.path.isfile(os.path.join(tables_dir, name))]
     if missing:
-        print(f"ОШИБКА: в {tables_dir} не хватает {len(missing)} из "
-              f"{len(TABLE_FILES)} таблиц: {', '.join(missing)}")
+        print(f"ERROR: {len(missing)} of the {len(TABLE_FILES)} tables are missing "
+              f"in {tables_dir}: {', '.join(missing)}")
         return EXIT_INPUT_ERROR
 
     try:
         records = extract(tables_dir)
     except TableError as exc:
-        print(f"ОШИБКА: {exc}")
+        print(f"ERROR: {exc}")
         return EXIT_INPUT_ERROR
 
     seen, dups_ok, dups_bad = reconcile(records)
@@ -548,10 +548,10 @@ def main() -> int:
 
     if args.check:
         if not os.path.isfile(args.out):
-            print(f"ОШИБКА: нечего сверять, файл не найден: {args.out}")
+            print(f"ERROR: there is nothing to compare with, the file was not found: {args.out}")
             return EXIT_INPUT_ERROR
-        # Порождаем во временный файл: сверка обязана быть без побочного эффекта,
-        # иначе она молча чинила бы то, что должна обнаруживать.
+        # Generation into a temporary file: the comparison must be free of side effects,
+        # otherwise it would silently repair what it is supposed to detect.
         with tempfile.TemporaryDirectory() as tmp:
             probe = os.path.join(tmp, "published-values.tsv")
             with open(probe, "w", encoding="utf-8") as handle:
@@ -568,9 +568,9 @@ def main() -> int:
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(text)
     except OSError as exc:
-        print(f"ОШИБКА: не удалось записать {args.out}: {exc}")
+        print(f"ERROR: failed to write {args.out}: {exc}")
         return EXIT_OUTPUT_ERROR
-    print(f"записано: {os.path.abspath(args.out)}")
+    print(f"written: {os.path.abspath(args.out)}")
     return EXIT_OK
 
 

@@ -19,48 +19,48 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * ХАРАКТЕРИЗАЦИОННЫЙ ТЕСТ (сеть безопасности от регрессий).
+ * A CHARACTERIZATION TEST (a safety net against regressions).
  *
- * Не проверяет математическую правильность — он фиксирует ТЕКУЩЕЕ поведение всех
- * сочетаний «задача x порождающая система x семейство функционалов x схема», чтобы
- * последующий рефакторинг (перенос файлов, переименования, вынос общего кода) не
- * изменил численные результаты незаметно.
+ * It does not check mathematical correctness — it records the CURRENT behaviour of all the
+ * combinations "problem x generating system x functional family x scheme", so that
+ * a subsequent refactoring (moving files, renamings, extracting common code) does not
+ * change the numerical results unnoticed.
  *
- * Эталон хранится в `src/test/resources/characterization/baseline-eh.tsv` и снят
- * инструментом [BaselineSnapshotTool] на исходном состоянии репозитория.
+ * The baseline is stored in `src/test/resources/characterization/baseline-eh.tsv` and was shot
+ * by the tool [BaselineSnapshotTool] on the original state of the repository.
  *
- * РЕЖИМ СРАВНЕНИЯ БЕРЁТСЯ ИЗ ДАННЫХ — третья колонка эталона (`класс`), а не из
- * констант этого класса. Классы и их измеренное обоснование — [BaselineClass];
- * разбор и сравнение — [BaselineFormat]; вычисление колонки — `./gradlew classifyBaseline`.
- * Коротко: `portable` — отн. 1e-9 при поле 6e-13 (ловит любое изменение алгоритма,
- * прощает последние биты при ином порядке суммирования), `sensitive` — граница
- * `2*cond*max(omega,eps)*||u||inf`, ВЫЧИСЛЯЕМАЯ в прогоне ([F1SystemConditioning]).
+ * THE COMPARISON MODE IS TAKEN FROM THE DATA — the third column of the baseline (`class`), and not from
+ * constants of this class. The classes and their measured justification are in [BaselineClass];
+ * the parsing and the comparison in [BaselineFormat]; the computation of the column is `./gradlew classifyBaseline`.
+ * Briefly: `portable` is rel. 1e-9 at the floor 6e-13 (it catches any change of the algorithm,
+ * forgives the last bits at a different summation order), `sensitive` is the bound
+ * `2*cond*max(omega,eps)*||u||inf`, COMPUTED in the run ([F1SystemConditioning]).
  *
- * ВАЖНО: если изменение алгоритма ОБОСНОВАНО (исправление ошибки), эталон следует
- * пересматривать осознанно, зафиксировав старое и новое значения в отчёте, а не
- * «подгонять» допуск.
+ * IMPORTANT: if a change of the algorithm is JUSTIFIED (a bug fix), the baseline should
+ * be revised deliberately, recording the old and the new values in a report, and not by
+ * "fitting" the tolerance.
  *
- * ТЕГА `machine` БОЛЬШЕ НЕТ — и это результат ИЗМЕРЕНИЯ, а не смягчения требований.
- * Снятие обеих матриц на `-Dnumerics.backend=java` (netlib F2J) и на `native`
- * (netlib + Apple Accelerate) показало: из 1366 ключей текущий гейт валили ровно 52,
- * ВСЕ `F1.*`; у остальных 1312 расхождение путей LU не превышает 1.0e-14 при поле
- * 6e-13 — запас 60x. Ключи F1 выделены в класс `sensitive` и сверяются с границей,
- * вычисляемой на том же бэкенде, поэтому гейт зелёный на ОБОИХ путях LU и гоняется
- * в CI (ubuntu/OpenBLAS — третий независимый путь). Подробности — `docs/TESTING.md`
- * и `docs/baseline-changes.md`.
+ * THE `machine` TAG IS GONE — and this is the result of a MEASUREMENT, not of a softening of the requirements.
+ * Shooting both matrices on `-Dnumerics.backend=java` (netlib F2J) and on `native`
+ * (netlib + Apple Accelerate) showed: of the 1366 keys exactly 52 broke the current gate,
+ * ALL of them `F1.*`; for the other 1312 the discrepancy of the LU paths does not exceed 1.0e-14 at the floor
+ * 6e-13 — a 60x margin. The F1 keys are separated into the class `sensitive` and are cross-checked against a bound
+ * computed on the same backend, so the gate is green on BOTH LU paths and runs
+ * in CI (ubuntu/OpenBLAS — a third independent path). The details are in `docs/TESTING.md`
+ * and `docs/baseline-changes.md`.
  */
 @Tag("slow")
 class EhCharacterizationTest {
 
     private companion object {
-        /** Путь ресурса эталона; общий с инструментом снятия и сторожевым тестом. */
+        /** The resource path of the baseline; shared with the snapshot tool and the guard test. */
         const val RESOURCE_PATH = "/characterization/baseline-eh.tsv"
     }
 
-    /** Пара «ключ эталона -> зафиксированное значение и класс сравнения». */
+    /** The pair "baseline key -> the recorded value and the comparison class". */
     private val baseline: Map<String, BaselineEntry> by lazy {
         val resource = javaClass.getResourceAsStream(RESOURCE_PATH)
-            ?: fail("Не найден файл эталона $RESOURCE_PATH")
+            ?: fail("The baseline file $RESOURCE_PATH is not found")
         resource.bufferedReader().useLines { BaselineFormat.parse(it, RESOURCE_PATH) }
     }
 
@@ -73,14 +73,14 @@ class EhCharacterizationTest {
         else -> ThreePointFunctionals(basis)
     }
 
-    /** Сверяет вычисленное значение с эталоном по правилу КЛАССА этого ключа. */
+    /** Cross-checks the computed value against the baseline by the rule of the CLASS of this key. */
     private fun check(key: String, actual: Double, mismatches: MutableList<String>) {
         val expected = baseline[key] ?: run {
-            mismatches += "$key: отсутствует в эталоне (вычислено $actual)"
+            mismatches += "$key: absent from the baseline (computed $actual)"
             return
         }
-        // Значение приводится к тому же представлению, в котором оно хранится (17 цифр,
-        // round-trip для double): иначе сравнение зависело бы от способа печати.
+        // The value is brought to the same representation in which it is stored (17 digits,
+        // a round-trip for a double): otherwise the comparison would depend on the way of printing.
         val formatted = String.format(Locale.ROOT, "%.17g", actual)
         BaselineFormat.compare(key, expected, formatted)?.let { mismatches += it }
     }
@@ -88,12 +88,12 @@ class EhCharacterizationTest {
     private fun reportIfAny(mismatches: List<String>) {
         assertTrue(
             mismatches.isEmpty(),
-            "Обнаружено изменение численного поведения (${mismatches.size} шт.):\n" +
+            "A change of the numerical behaviour was detected (${mismatches.size} cases):\n" +
                 mismatches.joinToString("\n").take(4000),
         )
     }
 
-    /** Все схемы Фредгольма на всех базисах и семействах функционалов. */
+    /** All the Fredholm schemes on all the bases and functional families. */
     @Test
     fun fredholmMatchesBaseline() {
         val mismatches = mutableListOf<String>()
@@ -143,7 +143,7 @@ class EhCharacterizationTest {
         reportIfAny(mismatches)
     }
 
-    /** Все схемы Вольтерры на всех базисах и семействах функционалов. */
+    /** All the Volterra schemes on all the bases and functional families. */
     @Test
     fun volterraMatchesBaseline() {
         val mismatches = mutableListOf<String>()
@@ -194,7 +194,7 @@ class EhCharacterizationTest {
         reportIfAny(mismatches)
     }
 
-    /** Нелинейные схемы Урысона (II род) на всех базисах. */
+    /** The nonlinear Uryson schemes (second kind) on all the bases. */
     @Test
     fun urysonMatchesBaseline() {
         val mismatches = mutableListOf<String>()
@@ -219,7 +219,7 @@ class EhCharacterizationTest {
         reportIfAny(mismatches)
     }
 
-    /** Решатели уравнений I рода (Фредгольм — Wazwaz, Вольтерра — дифференцирование). */
+    /** The first-kind solvers (Fredholm — Wazwaz, Volterra — differentiation). */
     @Test
     fun firstKindMatchesBaseline() {
         val mismatches = mutableListOf<String>()
@@ -244,41 +244,41 @@ class EhCharacterizationTest {
     }
 
     /**
-     * РАСШИРЕННОЕ ПОКРЫТИЕ F1 — КОМПЕНСАЦИЯ широкого допуска сверки (этап 8.6).
+     * THE EXTENDED F1 COVERAGE — a COMPENSATION for the wide tolerance of the cross-check (stage 8.6).
      *
-     * Зачем он есть. `verification.PublishedValuesTest` сверяет 42 величины F1 с
-     * публикацией с допуском 2 %, а шесть ключей из `table-f1.tex` — с 12 %
-     * (таблица снята на другом пути LU, см. KDoc там). ЗАМЕРЕНО (этап 8.6):
-     * при таких допусках огрубление квадратуры `GaussLegendre(8) → 6` и `→ 4`
-     * проходит сверку НЕЗАМЕЧЕННЫМ на всех 42 ключах. Причина не в допуске:
-     * у F1 `E_h ≈ 8e-5` определяется регуляризацией (`alpha = 1e-10`), а не
-     * дискретизацией — порядок сходимости ≈ 0, и сама величина к качеству
-     * квадратуры малочувствительна.
+     * Why it exists. `verification.PublishedValuesTest` cross-checks 42 F1 quantities against the
+     * publication with a tolerance of 2 %, and six keys from `table-f1.tex` with 12 %
+     * (the table was shot on a different LU path, see the KDoc there). MEASURED (stage 8.6):
+     * at such tolerances a coarsening of the quadrature `GaussLegendre(8) → 6` and `→ 4`
+     * passes the cross-check UNNOTICED on all 42 keys. The reason is not the tolerance:
+     * for F1 the `E_h ≈ 8e-5` is determined by the regularization (`alpha = 1e-10`) and not by the
+     * discretization — the convergence order is ≈ 0, and the quantity itself is little sensitive
+     * to the quality of the quadrature.
      *
-     * Здесь же правило класса `sensitive` — граница `2*cond*max(omega,eps)*||u||inf`
-     * порядка 3.8e-5 при значениях `E_h ~ 8e-5`, и та же мутация ловится
-     * немедленно. Состав покрытия — НАДМНОЖЕСТВО того, что сверяется с
-     * публикацией, поэтому ни одна ослабленная там величина не остаётся без
-     * строгого гейта. Перечисление сочетаний взято из [BaselineSnapshotTool.F1_COVERAGE]
-     * — одно и то же для гейта и для инструмента снятия, так что состав
-     * эталона и состав проверки разойтись не могут.
+     * Here, on the contrary, the rule of the class `sensitive` — the bound `2*cond*max(omega,eps)*||u||inf`
+     * of order 3.8e-5 at values `E_h ~ 8e-5` — catches the same mutation
+     * immediately. The composition of the coverage is a SUPERSET of what is cross-checked against the
+     * publication, so no quantity relaxed there is left without
+     * a strict gate. The enumeration of the combinations is taken from [BaselineSnapshotTool.F1_COVERAGE]
+     * — one and the same for the gate and for the snapshot tool, so the composition
+     * of the baseline and the composition of the check cannot diverge.
      *
-     * О СХЕМЕ `sloan` ДЛЯ F1 — важное свойство, а НЕ дефект. Ключи `F1.*.sloan`
-     * ПРИВЯЗАНЫ К ПОРЯДКУ ОБХОДА УЗЛОВ в `FredholmOperator.applyNodes`. Причина:
-     * решение Слоана есть `fEff(t) + c_L·applyNodes(t, ·)`, где `c_L = -1/alpha = -1e10`,
-     * и ОБА слагаемых имеют порядок 1.38e10, а их сумма — порядок 2.7
-     * (измерено, этап 8.6). То есть происходит сокращение в 5·10^9 раз, и теряется
-     * около 9.7 из 16 значащих цифр. ЗАМЕР: три МАТЕМАТИЧЕСКИ ЭКВИВАЛЕНТНЫХ
-     * порядка суммирования той же формулы (прямой, обратный, компенсированный
-     * Кэхэна—Неймана) дают `E_h`, различающиеся на 4.3–39.9 % (медиана 28 %) —
-     * больше, чем расхождение с публикацией и больше, чем расхождение бэкендов.
+     * ON THE `sloan` SCHEME FOR F1 — an important property and NOT a defect. The `F1.*.sloan` keys
+     * ARE BOUND TO THE TRAVERSAL ORDER OF THE NODES in `FredholmOperator.applyNodes`. The reason:
+     * the Sloan solution is `fEff(t) + c_L·applyNodes(t, ·)`, where `c_L = -1/alpha = -1e10`,
+     * and BOTH terms are of order 1.38e10, while their sum is of order 2.7
+     * (measured, stage 8.6). That is, a cancellation by 5·10^9 times takes place, and about
+     * 9.7 of the 16 significant digits are lost. MEASUREMENT: three MATHEMATICALLY EQUIVALENT
+     * summation orders of the same formula (forward, backward, compensated
+     * Kahan-Neumaier) give `E_h` differing by 4.3-39.9 % (median 28 %) —
+     * more than the discrepancy with the publication and more than the discrepancy of the backends.
      *
-     * Практическое следствие для будущего рефакторинга: ЛЮБАЯ перестановка
-     * цикла суммирования в `applyNodes` (обратный обход, блочное или параллельное
-     * суммирование, компенсированное сложение) сломает этот гейт НА КЛЮЧАХ
-     * `F1.*.sloan`, НЕ ИЗМЕНИВ МАТЕМАТИКИ. Такое падение НЕ свидетельствует о
-     * ошибке в новом коде — но и не может быть просто заглушено: требуется
-     * осознанный пересъём этих ключей с записью в `docs/baseline-changes.md`.
+     * The practical consequence for a future refactoring: ANY permutation
+     * of the summation loop in `applyNodes` (a backward traversal, block or parallel
+     * summation, compensated addition) will break this gate ON THE KEYS
+     * `F1.*.sloan` WITHOUT CHANGING THE MATHEMATICS. Such a failure does NOT indicate
+     * an error in the new code — but neither can it simply be silenced: a
+     * deliberate re-shooting of these keys with an entry in `docs/baseline-changes.md` is required.
      */
     @Test
     fun firstKindExtendedFredholmMatchesBaseline() {

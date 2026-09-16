@@ -3,17 +3,17 @@ package problems.analytic
 import solvers.volterra.KernelV
 
 /**
- * Задача Вольтерры II рода `u(t) - \int_a^t K(t,s) u(s) ds = f(t)` с АНАЛИТИЧЕСКИ
- * известными точным решением и правой частью.
+ * Volterra problem of the second kind `u(t) - \int_a^t K(t,s) u(s) ds = f(t)` with ANALYTICALLY
+ * known exact solution and right-hand side.
  *
- * Смысл полей совпадает с [AnalyticFredholmProblem]; отличается только оператор
- * (переменный верхний предел интегрирования).
+ * The meaning of the fields is the same as in [AnalyticFredholmProblem]; only the operator
+ * differs (variable upper limit of integration).
  *
- * ПОЧЕМУ ЗДЕСЬ НЕТ ПОЛЯ `spectralRadius` (в отличие от [AnalyticFredholmProblem]).
- * Оператор Вольтерры с ограниченным ядром КВАЗИНИЛЬПОТЕНТЕН: его спектральный
- * радиус равен нулю при ЛЮБОМ ядре (оценка `|V^m u| <= (M(b-a))^m/m! * |u|`).
- * Поэтому простая итерация сходится всегда, и ограничение, существенное для
- * задач Фредгольма, здесь отсутствует по построению.
+ * WHY THERE IS NO `spectralRadius` FIELD HERE (unlike [AnalyticFredholmProblem]).
+ * A Volterra operator with a bounded kernel is QUASINILPOTENT: its spectral
+ * radius is zero for ANY kernel (the estimate `|V^m u| <= (M(b-a))^m/m! * |u|`).
+ * Hence simple iteration always converges, and the restriction essential for
+ * Fredholm problems is absent here by construction.
  */
 class AnalyticVolterraProblem(
     val name: String,
@@ -28,21 +28,21 @@ class AnalyticVolterraProblem(
 ) {
     companion object {
         /**
-         * ЯДРО СВЁРТКИ, пример из постановки задания: `K(t,s) = 1`, `f(t) = 1`.
+         * CONVOLUTION KERNEL, the example from the assignment statement: `K(t,s) = 1`, `f(t) = 1`.
          *
-         * Вывод преобразованием Лапласа. Ядро зависит только от разности,
-         * `k(tau) = 1`, поэтому уравнение `u - k * u = f` (звёздочка — свёртка)
-         * переходит в алгебраическое:
+         * Derivation by the Laplace transform. The kernel depends only on the difference,
+         * `k(tau) = 1`, so the equation `u - k * u = f` (the asterisk is convolution)
+         * turns into an algebraic one:
          *
          *     U(p) - \hat k(p) U(p) = F(p),   U(p) = F(p) / (1 - \hat k(p)).
          *
-         * Здесь `\hat k(p) = 1/p` и `F(p) = 1/p`, значит
+         * Here `\hat k(p) = 1/p` and `F(p) = 1/p`, hence
          *
          *     U(p) = (1/p) / (1 - 1/p) = (1/p) * p/(p-1) = 1/(p-1),
          *
-         * и обратное преобразование даёт `u*(t) = e^t`.
+         * and the inverse transform gives `u*(t) = e^t`.
          *
-         * Прямая проверка: `\int_0^t e^s ds = e^t - 1`, поэтому
+         * Direct check: `\int_0^t e^s ds = e^t - 1`, hence
          * `u* - V u* = e^t - (e^t - 1) = 1 = f`.
          */
         val CONVOLUTION_CONST = AnalyticVolterraProblem(
@@ -63,22 +63,22 @@ class AnalyticVolterraProblem(
         )
 
         /**
-         * ЯДРО СВЁРТКИ `K(t,s) = t - s`, `f(t) = 1`.
+         * CONVOLUTION KERNEL `K(t,s) = t - s`, `f(t) = 1`.
          *
-         * Вывод преобразованием Лапласа. Здесь `k(tau) = tau`, поэтому
-         * `\hat k(p) = 1/p^2`, а `F(p) = 1/p`. Тогда
+         * Derivation by the Laplace transform. Here `k(tau) = tau`, so
+         * `\hat k(p) = 1/p^2` and `F(p) = 1/p`. Then
          *
          *     U(p) = (1/p) / (1 - 1/p^2) = (1/p) * p^2/(p^2 - 1) = p/(p^2 - 1),
          *
-         * что является образом гиперболического косинуса: `u*(t) = cosh t`.
+         * which is the transform of the hyperbolic cosine: `u*(t) = cosh t`.
          *
-         * Прямая проверка (интегрирование по частям):
+         * Direct check (integration by parts):
          *
          *     \int_0^t (t-s) cosh s ds = t sinh t - [s sinh s - cosh s]_0^t
          *                              = t sinh t - t sinh t + cosh t - 1
          *                              = cosh t - 1,
          *
-         * поэтому `u* - V u* = cosh t - (cosh t - 1) = 1 = f`.
+         * hence `u* - V u* = cosh t - (cosh t - 1) = 1 = f`.
          */
         val CONVOLUTION_LINEAR = AnalyticVolterraProblem(
             name = "A-conv-lin",
@@ -98,25 +98,25 @@ class AnalyticVolterraProblem(
         )
 
         /**
-         * ЯДРО СВЁРТКИ `K(t,s) = e^{t-s}`, `f(t) = 1`.
+         * CONVOLUTION KERNEL `K(t,s) = e^{t-s}`, `f(t) = 1`.
          *
-         * Вывод преобразованием Лапласа. Здесь `k(tau) = e^{tau}`, поэтому
-         * `\hat k(p) = 1/(p-1)`, а `F(p) = 1/p`. Тогда
+         * Derivation by the Laplace transform. Here `k(tau) = e^{tau}`, so
+         * `\hat k(p) = 1/(p-1)` and `F(p) = 1/p`. Then
          *
          *     U(p) = (1/p) / (1 - 1/(p-1)) = (1/p) * (p-1)/(p-2) = (p-1)/(p(p-2)).
          *
-         * Разложение на простейшие дроби: `(p-1)/(p(p-2)) = A/p + B/(p-2)` с
-         * `A(p-2) + Bp = p - 1`. При `p = 0` получаем `-2A = -1`, то есть `A = 1/2`;
-         * при `p = 2` получаем `2B = 1`, то есть `B = 1/2`. Значит
+         * Partial fraction decomposition: `(p-1)/(p(p-2)) = A/p + B/(p-2)` with
+         * `A(p-2) + Bp = p - 1`. At `p = 0` we get `-2A = -1`, i.e. `A = 1/2`;
+         * at `p = 2` we get `2B = 1`, i.e. `B = 1/2`. Hence
          *
          *     U(p) = (1/2)/p + (1/2)/(p-2)   =>   u*(t) = (1 + e^{2t}) / 2.
          *
-         * Прямая проверка:
+         * Direct check:
          *
          *     \int_0^t e^{t-s} (1+e^{2s})/2 ds = (e^t/2) \int_0^t (e^{-s} + e^{s}) ds
          *                                      = (e^t/2)(e^t - e^{-t}) = (e^{2t} - 1)/2,
          *
-         * поэтому `u* - V u* = (1 + e^{2t})/2 - (e^{2t} - 1)/2 = 1 = f`.
+         * hence `u* - V u* = (1 + e^{2t})/2 - (e^{2t} - 1)/2 = 1 = f`.
          */
         val CONVOLUTION_EXP = AnalyticVolterraProblem(
             name = "A-conv-exp",
@@ -136,29 +136,29 @@ class AnalyticVolterraProblem(
         )
 
         /**
-         * МЕТОД ПРОИЗВОДНЫХ РЕШЕНИЙ (MMS) для уравнения Вольтерры:
-         * ядро `K(t,s) = t*s`, ЗАДАННОЕ решение `u*(t) = cos t`.
+         * METHOD OF MANUFACTURED SOLUTIONS (MMS) for the Volterra equation:
+         * kernel `K(t,s) = t*s`, PRESCRIBED solution `u*(t) = cos t`.
          *
-         * Ядро НЕ является ядром свёртки, поэтому путь вывода полностью независим
-         * от лапласовых задач выше.
+         * The kernel is NOT a convolution kernel, so the derivation path is fully independent
+         * of the Laplace problems above.
          *
-         * Вычисление образа (интеграл взят по частям):
+         * Computation of the image (the integral is taken by parts):
          *
          *     (V u*)(t) = t \int_0^t s cos s ds = t [s sin s + cos s]_0^t
          *               = t (t sin t + cos t - 1)
          *               = t^2 sin t + t cos t - t.
          *
-         * Отсюда правая часть
+         * Hence the right-hand side
          *
          *     f(t) = cos t - t^2 sin t - t cos t + t.
          *
-         * Производные (прямое дифференцирование):
+         * Derivatives (direct differentiation):
          *
          *     f'(t)  = -sin t - t sin t - t^2 cos t - cos t + 1,
          *     f''(t) = -cos t - 3 t cos t + t^2 sin t.
          *
-         * Решение `cos t` не лежит в `span{1, t, t^2}`, поэтому задача пригодна
-         * для измерения порядка сходимости.
+         * The solution `cos t` does not lie in `span{1, t, t^2}`, so the problem is suitable
+         * for measuring the convergence order.
          */
         val MANUFACTURED = AnalyticVolterraProblem(
             name = "A-mms-V",
@@ -179,7 +179,7 @@ class AnalyticVolterraProblem(
             derivation = "MMS: K=t*s, u*=cos t; f=cos t - t^2 sin t - t cos t + t",
         )
 
-        /** Все аналитические задачи Вольтерры. */
+        /** All analytic Volterra problems. */
         val ALL = listOf(CONVOLUTION_CONST, CONVOLUTION_LINEAR, CONVOLUTION_EXP, MANUFACTURED)
     }
 }

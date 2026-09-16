@@ -8,61 +8,61 @@ import splines.metrics.*
 import solvers.core.RhsWithDerivatives
 
 /**
- * Решатель некорректного уравнения Фредгольма ПЕРВОГО рода `K u = f` методом
- * регуляризации.
+ * Solver for the ill-posed FIRST-kind Fredholm equation `K u = f` by the method of
+ * regularization.
  *
- * Математическая идея: уравнение заменяется возмущённым `(alpha I + K) u_alpha = f`,
- * которое алгебраически эквивалентно уравнению ВТОРОГО рода
+ * The mathematical idea: the equation is replaced by the perturbed one `(alpha I + K) u_alpha = f`,
+ * which is algebraically equivalent to the SECOND-kind equation
  *
  *     u_alpha - K_eff u_alpha = f / alpha,   K_eff = -(1/alpha) K,
  *
- * после чего применяется обычная схема второго рода с `c_L = -1/alpha`.
- * Источник метода указан в `docs/REFERENCES.md` (раздел «Уравнения первого рода»).
+ * after which the usual second-kind scheme with `c_L = -1/alpha` is applied.
+ * The source of the method is given in `docs/REFERENCES.md` (section "First-kind equations").
  *
- * ОГРАНИЧЕНИЕ ПО ОБУСЛОВЛЕННОСТИ: элементы матрицы `M` растут как `alpha^{-1}`,
- * а `M2` — как `alpha^{-2}`, поэтому при малых `alpha` задача становится плохо
- * обусловленной. По этой причине публикуются только базовая схема и итерация Слоана:
- * схема Кулкарни, использующая `M2`, для уравнения первого рода признана неприменимой.
+ * CONDITIONING LIMITATION: the entries of the matrix `M` grow as `alpha^{-1}`,
+ * and those of `M2` as `alpha^{-2}`, so for small `alpha` the problem becomes ill-
+ * conditioned. For this reason only the base scheme and the Sloan iteration are published:
+ * the Kulkarni scheme, which uses `M2`, is deemed inapplicable to a first-kind equation.
  *
- * ГРАНИЦА ПРИМЕНИМОСТИ ПО `alpha` — ИЗМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО. Формулировка
- * выше качественная; вот числа, установленные независимой численной верификацией
- * (вторым, независимо написанным кодом):
+ * THE LIMIT OF APPLICABILITY IN `alpha` — MEASURED, NOT ASSUMED. The statement
+ * above is qualitative; here are the numbers established by an independent numerical verification
+ * (by a second, independently written code):
  *
- *  - ПРИ `alpha = 1e-10` ЗНАЧАЩИХ ЦИФР ОСТАЁТСЯ МАЛО. Обусловленность собранной
- *    системы составила `cond_inf ≈ 2.636149e+10`. Восемь ЗАКОННЫХ вариантов
- *    реализации (разные порядки вычисления ядра и правой части, разные решатели
- *    плотной СЛАУ) дали ЧЕТЫРЕ различных значения ОДНОЙ и той же величины:
- *    `3.822e-05 / 4.108e-05 / 4.176e-05 / 4.402e-05`, разброс `15.19 %`.
- *  - ЭТО НЕ БАГ, А ОГРАНИЧЕНИЕ ТОЧНОСТИ. Априорная оценка
- *    `eps · cond / значение ≈ 14.6 %` совпадает с наблюдаемым разбросом, то есть
- *    эффект полностью объясняется обусловленностью, а не ошибкой в коде.
- *  - ГРАНИЦА — ПРИМЕРНО `alpha = 1e-8`. При `alpha = 1e-6` и `alpha = 1e-8` те же
- *    восемь вариантов расхождения НЕ дают: `0.00 %` и `0.01 %` соответственно.
- *    Ниже примерно `1e-8` значащих цифр в результате остаётся мало, и `alpha`
- *    обязан выбираться осознанно.
- *  - НАСКОЛЬКО МАЛО НУЖНО, ЧТОБЫ СДВИНУТЬ ОТВЕТ. Запись точного решения
- *    делением `cos(wt)/(1+t)` против умножения `cos(wt) · p`, где `p = 1/(1+t)`,
- *    различается РОВНО на ОДНО округление — и меняет результат на `7.49 %`.
+ *  - AT `alpha = 1e-10` FEW SIGNIFICANT DIGITS REMAIN. The conditioning of the assembled
+ *    system was `cond_inf ≈ 2.636149e+10`. Eight LEGITIMATE implementation
+ *    variants (different evaluation orders of the kernel and the right-hand side, different dense
+ *    linear solvers) produced FOUR distinct values of ONE and the same quantity:
+ *    `3.822e-05 / 4.108e-05 / 4.176e-05 / 4.402e-05`, a spread of `15.19 %`.
+ *  - THIS IS NOT A BUG BUT AN ACCURACY LIMIT. The a priori estimate
+ *    `eps · cond / value ≈ 14.6 %` matches the observed spread, i.e. the
+ *    effect is fully explained by the conditioning and not by an error in the code.
+ *  - THE LIMIT IS ROUGHLY `alpha = 1e-8`. At `alpha = 1e-6` and `alpha = 1e-8` the same
+ *    eight variants show NO discrepancy: `0.00 %` and `0.01 %` respectively.
+ *    Below roughly `1e-8` few significant digits remain in the result, and `alpha`
+ *    must be chosen deliberately.
+ *  - HOW LITTLE IT TAKES TO SHIFT THE ANSWER. Writing the exact solution as the
+ *    division `cos(wt)/(1+t)` versus the multiplication `cos(wt) · p`, where `p = 1/(1+t)`,
+ *    differs by EXACTLY ONE rounding — and changes the result by `7.49 %`.
  *
- * КАК ПРОВЕРИТЬ СЕБЯ (самопроверка, не требующая внешнего эталона). Посчитайте
- * интересующую величину ДВУМЯ алгебраически ЭКВИВАЛЕНТНЫМИ способами записи
- * (например, деление против умножения на обратную величину) и сравните.
- * Расхождение НЕ есть ошибка одного из вариантов — это ОЦЕНКА СНИЗУ для реально
- * доступной точности: цифры, различающиеся между двумя законными записями,
- * не несут информации ни в одной из них. Сверху же точность ограничивает
- * `cond_inf · ε`; измерить оба множителя позволяют [baseCondition] и
- * [numerics.LinearAlgebra.solveDiagnosed]. Подробный разбор — `docs/ACCURACY.md`.
+ * HOW TO CHECK YOURSELF (a self-check that needs no external baseline). Compute
+ * the quantity of interest in TWO algebraically EQUIVALENT ways
+ * (for example, a division versus a multiplication by the reciprocal) and compare.
+ * The discrepancy is NOT an error of one of the variants — it is a LOWER BOUND on the actually
+ * available accuracy: the digits that differ between two legitimate ways of writing the formula
+ * carry no information in either of them. From above the accuracy is bounded by
+ * `cond_inf · ε`; both factors can be measured with [baseCondition] and
+ * [numerics.LinearAlgebra.solveDiagnosed]. A detailed discussion is in `docs/ACCURACY.md`.
  *
- * @param basis базис минимальных сплайнов.
- * @param funcs семейство аппроксимационных функционалов.
- * @param op оператор Фредгольма с исходным ядром.
- * @param rhs правая часть `f(t)` исходного уравнения первого рода.
- * @param rhsDeriv первая производная `f'(t)`.
- * @param rhsDeriv2 вторая производная `f''(t)`; нужна семейству `xi^<0>`.
- * @param alpha параметр регуляризации; должен быть строго положителен.
- * @param throwOnDivergence политика обработки недостижения сходимости итерационными
- *        схемами внутреннего решателя; см. [FredholmSecondKindSolver.throwOnDivergence].
- * @throws IllegalArgumentException если `alpha <= 0`.
+ * @param basis minimal spline basis.
+ * @param funcs family of approximation functionals.
+ * @param op Fredholm operator with the original kernel.
+ * @param rhs right-hand side `f(t)` of the original first-kind equation.
+ * @param rhsDeriv first derivative `f'(t)`.
+ * @param rhsDeriv2 second derivative `f''(t)`; needed by the family `xi^<0>`.
+ * @param alpha regularization parameter; must be strictly positive.
+ * @param throwOnDivergence policy for handling a failure to converge by the iterative
+ *        schemes of the inner solver; see [FredholmSecondKindSolver.throwOnDivergence].
+ * @throws IllegalArgumentException if `alpha <= 0`.
  */
 public class FredholmFirstKindSolver(
     public val basis: MinimalSplineBasis,
@@ -77,37 +77,37 @@ public class FredholmFirstKindSolver(
 ) {
     public companion object {
         /**
-         * Значение параметра регуляризации по умолчанию.
+         * Default value of the regularization parameter.
          *
-         * Это ЭКСПЕРИМЕНТАЛЬНЫЙ выбор авторов цитируемой работы, а не рекомендация
-         * из теории метода регуляризации: оптимальное `alpha` зависит от уровня шума
-         * в данных и в общем случае должно подбираться (например, по принципу невязки).
+         * This is an EXPERIMENTAL choice of the authors of the cited work, not a recommendation
+         * from the theory of the regularization method: the optimal `alpha` depends on the noise level
+         * in the data and in general should be tuned (for example, by the discrepancy principle).
          *
-         * ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ ПОПАДАЕТ В ПРОБЛЕМНЫЙ ДИАПАЗОН. Именно при
-         * `alpha = 1e-10` измерен разброс `15.19 %` между восемью алгебраически
-         * эквивалентными вариантами записи одной величины, тогда как при `1e-6`
-         * и `1e-8` расхождения нет (`0.00 %` и `0.01 %`); числа и их происхождение —
-         * в KDoc [FredholmFirstKindSolver] и в `docs/ACCURACY.md`. Значение СОХРАНЕНО
-         * (его менять нельзя — оно воспроизводит публикацию), но принимать его
-         * молча не следует: если задача терпит большее `alpha`, точность выше.
+         * THE DEFAULT VALUE FALLS INTO THE PROBLEMATIC RANGE. It is exactly at
+         * `alpha = 1e-10` that a spread of `15.19 %` was measured between eight algebraically
+         * equivalent ways of writing one quantity, whereas at `1e-6`
+         * and `1e-8` there is no discrepancy (`0.00 %` and `0.01 %`); the numbers and their provenance are
+         * in the KDoc of [FredholmFirstKindSolver] and in `docs/ACCURACY.md`. The value is KEPT
+         * (it must not be changed — it reproduces the publication), but it should not be accepted
+         * silently: if the problem tolerates a larger `alpha`, the accuracy is higher.
          */
         public const val DEFAULT_REGULARIZATION: Double = 1e-10
     }
 
     init {
         require(alpha > 0.0) {
-            "FredholmFirstKindSolver: параметр регуляризации alpha должен быть положительным, получено alpha=$alpha"
+            "FredholmFirstKindSolver: the regularization parameter alpha must be positive, got alpha=$alpha"
         }
     }
 
     private val cL = -1.0 / alpha
     private val fEff = { t: Double -> rhs(t) / alpha }
     private val fEffDeriv = { t: Double -> rhsDeriv(t) / alpha }
-    // Порядок построения лямбд сохранён дословно; объединение в один объект
-    // происходит ниже, на границе вызова внутреннего решателя.
-    // Вторая производная правой части ОБЯЗАТЕЛЬНО пробрасывается во внутренний
-    // решатель: без неё семейство xi^<0>, читающее f'', молча получало ноль вместо
-    // истинного значения и строило неверную систему без какой-либо диагностики.
+    // The order in which the lambdas are built is preserved literally; they are merged into a single
+    // object below, at the call boundary of the inner solver.
+    // The second derivative of the right-hand side is passed to the inner solver WITHOUT FAIL:
+    // without it the family xi^<0>, which reads f'', silently received zero instead of
+    // the true value and built a wrong system without any diagnostics.
     private val fEffDeriv2 = { t: Double -> rhsDeriv2(t) / alpha }
     private val inner = FredholmSecondKindSolver(
         basis, funcs, op, cL,
@@ -115,44 +115,44 @@ public class FredholmFirstKindSolver(
         throwOnDivergence, ctx,
     )
 
-    /** Базовая коллокационная схема для регуляризованного уравнения. */
+    /** Base collocation scheme for the regularized equation. */
     public fun base(): SolutionFunc = inner.base()
 
     /**
-     * Число обусловленности `cond_inf` СОБРАННОЙ матрицы базовой схемы `I - M`
-     * — вместе с признаком достоверности самой оценки.
+     * Condition number `cond_inf` of the ASSEMBLED matrix `I - M` of the base scheme
+     * — together with a reliability flag for the estimate itself.
      *
-     * ЗАЧЕМ. Граница применимости по `alpha` (см. KDoc класса) сформулирована через
-     * `cond_inf`, но без этого метода пользователь не мог бы увидеть её для СВОЕЙ
-     * задачи и СВОЕГО `alpha`: число из KDoc относится к конкретному прогону, а не к
-     * методу вообще. Метод добавлен ИМЕННО для протокола воспроизводимости.
+     * WHY. The limit of applicability in `alpha` (see the class KDoc) is stated in terms of
+     * `cond_inf`, but without this method a user could not see it for THEIR OWN
+     * problem and THEIR OWN `alpha`: the number in the KDoc refers to a specific run, not to the
+     * method in general. The method was added PRECISELY for the reproducibility protocol.
      *
-     * НЕ ВЫЗЫВАЕТСЯ НИ ОДНОЙ СХЕМОЙ и ничего в них не меняет: цена O(n⁴)
-     * (сборка `M` плюс обращение) платится только тем, кто явно спросил.
+     * IT IS CALLED BY NO SCHEME and changes nothing in them: the O(n⁴) cost
+     * (assembly of `M` plus an inversion) is paid only by those who explicitly ask.
      *
-     * ОЦЕНКА МОЖЕТ ОКАЗАТЬСЯ НЕДОСТОВЕРНОЙ, и это штатный исход, а не ошибка:
-     * при малом `alpha` матрица почти вырождена, а оценка через обращение в этом
-     * режиме теряет смысл (измерено: при `alpha <= 1e-12` невязка обращения
-     * достигала 0.08…760). Именно поэтому возвращается [ConditionEstimate],
-     * а не `Double`: печатать его можно только после проверки
-     * [ConditionEstimate.isReliable] (либо через [ConditionEstimate.valueOrNull]).
+     * THE ESTIMATE MAY TURN OUT UNRELIABLE, and this is a regular outcome, not an error:
+     * for small `alpha` the matrix is nearly singular, and an estimate via inversion in this
+     * regime loses its meaning (measured: at `alpha <= 1e-12` the inversion residual
+     * reached 0.08…760). That is exactly why a [ConditionEstimate] is returned
+     * rather than a `Double`: it may be printed only after checking
+     * [ConditionEstimate.isReliable] (or through [ConditionEstimate.valueOrNull]).
      */
     public fun baseCondition(
         tolerance: Double = Conditioning.INVERSION_RESIDUAL_TOLERANCE,
     ): ConditionEstimate = Conditioning.conditionInf(inner.baseMatrix(), tolerance)
 
-    /** Итерация Слоана, применённая к регуляризованному уравнению. */
+    /** Sloan iteration applied to the regularized equation. */
     public fun sloan(): SolutionFunc = inner.sloan()
 
     /**
-     * Схема Кулкарни для регуляризованного уравнения.
+     * Kulkarni scheme for the regularized equation.
      *
-     * НЕ РЕКОМЕНДУЕТСЯ к применению: схема использует матрицу `M2`, элементы которой
-     * растут как `alpha^{-2}`, что при типичных `alpha ~ 1e-10` делает систему
-     * численно неразрешимой. Метод сохранён для полноты API и экспериментов.
+     * NOT RECOMMENDED for use: the scheme uses the matrix `M2`, whose entries
+     * grow as `alpha^{-2}`, which for the typical `alpha ~ 1e-10` makes the system
+     * numerically unsolvable. The method is kept for API completeness and experiments.
      */
     public fun kulkarni(): SolutionFunc = inner.kulkarni()
 
-    /** Итерированная схема Кулкарни; те же ограничения, что и у [kulkarni]. */
+    /** Iterated Kulkarni scheme; the same limitations as for [kulkarni]. */
     public fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
 }

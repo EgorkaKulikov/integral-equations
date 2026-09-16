@@ -1,103 +1,103 @@
 package solvers.core
 
 /**
- * ОБЩИЕ ЧИСЛОВЫЕ ПАРАМЕТРЫ ИТЕРАЦИОННЫХ СХЕМ УРАВНЕНИЙ II РОДА.
+ * SHARED NUMERICAL PARAMETERS OF THE ITERATIVE SCHEMES FOR SECOND-KIND EQUATIONS.
  *
- * Единственный источник истины для констант, которые ранее были продублированы
- * в `private companion object` решателей Фредгольма и Вольтерры с ОДИНАКОВЫМИ
- * значениями. Дублирование опасно тем, что при подборе нового значения его легко
- * поправить в одном файле и забыть в другом; тогда две схемы, которые сравниваются
- * между собой в характеризационных тестах, молча разъедутся.
+ * The single source of truth for the constants that used to be duplicated
+ * in the `private companion object` of the Fredholm and Volterra solvers with IDENTICAL
+ * values. Duplication is dangerous because, when a new value is tuned, it is easy
+ * to fix it in one file and forget the other; then two schemes that are compared
+ * against each other in the characterization tests silently drift apart.
  *
- * Значения при выносе НЕ менялись — этап поведенчески нейтрален.
+ * The values were NOT changed when they were extracted — the stage is behaviourally neutral.
  *
- * Область видимости `internal`: это деталь реализации решателей, а не часть
- * публичного API библиотеки. Пределы итераций и допуски НЕ параметризуются
- * пользователем сознательно: они подобраны под конкретные схемы и не имеют
- * смысла в отрыве от них.
+ * The visibility is `internal`: this is an implementation detail of the solvers, not part of the
+ * library's public API. The iteration limits and the tolerances are deliberately NOT
+ * parameterized by the user: they are tuned for specific schemes and carry no
+ * meaning apart from them.
  */
 internal object SecondKindDefaults {
     /**
-     * Предел числа итераций в схеме Кулкарни для КВАЗИинтерполянтов (`mu`, `lambda`).
+     * Limit on the number of iterations in the Kulkarni scheme for QUASI-interpolants (`mu`, `lambda`).
      *
-     * Выбор реализации: теоретической гарантии сходимости нет (у квазиинтерполяционного
-     * оператора нет свойства проектора `P^2 = P`), поэтому жёсткий предел обязателен.
-     * На модельных задачах сходимость наступает за единицы итераций; запас нужен
-     * для задач с нормой оператора, близкой к единице.
+     * Implementation choice: there is no theoretical convergence guarantee (the quasi-interpolation
+     * operator lacks the projector property `P^2 = P`), so a hard limit is mandatory.
+     * On the model problems convergence occurs within a few iterations; the margin is needed
+     * for problems whose operator norm is close to one.
      */
     const val KULKARNI_QUASI_MAX_ITERATIONS = 200
 
     /**
-     * Критерий останова итерации Кулкарни для квазиинтерполянтов: равномерная норма
-     * разности соседних итерантов на контрольных точках. Значение вблизи машинной
-     * точности: дальнейшее уточнение не имеет смысла из-за шума квадратуры.
+     * Stopping criterion of the Kulkarni iteration for quasi-interpolants: the uniform norm of the
+     * difference of consecutive iterates at the check points. The value is close to machine
+     * precision: refining further makes no sense because of the quadrature noise.
      */
     const val KULKARNI_QUASI_TOLERANCE = 1e-13
 
     /**
-     * Предел числа итераций для комбинированного оператора Nyström.
+     * Limit on the number of iterations for the combined Nyström operator.
      *
-     * Выбор реализации: на модельных задачах сходимость достигается за единицы шагов;
-     * запас нужен для задач с нормой оператора, близкой к единице.
+     * Implementation choice: on the model problems convergence is reached within a few steps;
+     * the margin is needed for problems whose operator norm is close to one.
      */
     const val COMBINED_NYSTROM_MAX_ITERATIONS = 200
 
     /**
-     * Критерий останова итерации комбинированного Nyström: равномерная норма разности
-     * соседних итерантов в контрольных точках (у Фредгольма — гауссовы узлы,
-     * у Вольтерры — равноотстоящая проверочная сетка).
+     * Stopping criterion of the combined Nyström iteration: the uniform norm of the difference of
+     * consecutive iterates at the check points (Gauss nodes for Fredholm,
+     * an equidistant check grid for Volterra).
      */
     const val COMBINED_NYSTROM_TOLERANCE = 1e-13
 
     /**
-     * Порог РАСПОЗНАВАНИЯ РАСХОДИМОСТИ: во сколько раз критерий останова должен
-     * превысить наименьшее достигнутое за прогон значение, чтобы дальнейшие итерации
-     * были признаны бессмысленными.
+     * Threshold for DIVERGENCE DETECTION: by what factor the stopping criterion must
+     * exceed the smallest value attained during the run for further iterations
+     * to be declared pointless.
      *
-     * Зачем нужен. Единственным условием выхода раньше было `diff < TOLERANCE`. На
-     * задаче с нормой оператора больше единицы простая итерация расходится
-     * геометрически, и схема честно докручивала до предела в 200 шагов, попутно
-     * раздувая итерант до `1e120` и рискуя переполнением (`Inf`, затем `NaN`) при
-     * чуть большей норме или чуть большем пределе. Все эти шаги — чистая трата
-     * времени: судьба итерации решена задолго до последнего шага.
+     * Why it is needed. The only exit condition used to be `diff < TOLERANCE`. On
+     * a problem whose operator norm exceeds one, the simple iteration diverges
+     * geometrically, and the scheme honestly ground on to the limit of 200 steps, inflating
+     * the iterate to `1e120` along the way and risking overflow (`Inf`, then `NaN`) with
+     * a slightly larger norm or a slightly larger limit. All those steps are a pure waste
+     * of time: the fate of the iteration is decided long before the last step.
      *
-     * Почему сравнение с НАИМЕНЬШИМ достигнутым значением, а не с предыдущим.
-     * При геометрической расходимости со знаменателем `q` отношение соседних значений
-     * равно `q` и остаётся ограниченным (на модельной задаче с `||L|| = 4` это ровно 4),
-     * поэтому пошаговое сравнение `diff > FACTOR * prevDiff` не сработало бы НИКОГДА —
-     * критерий оказался бы мёртвым кодом. Накопленный рост относительно минимума,
-     * наоборот, ведёт себя как `q^m` и порог заведомо пробивает. При этом сравнение
-     * с минимумом СТРОЖЕ пошагового: `min <= prev`, поэтому любое срабатывание
-     * пошагового условия происходит не раньше срабатывания накопленного.
+     * Why the comparison is with the SMALLEST attained value rather than with the previous one.
+     * Under geometric divergence with ratio `q` the ratio of consecutive values
+     * equals `q` and stays bounded (on the model problem with `||L|| = 4` it is exactly 4),
+     * so the step-wise comparison `diff > FACTOR * prevDiff` would NEVER fire —
+     * the criterion would be dead code. Accumulated growth relative to the minimum,
+     * on the contrary, behaves like `q^m` and is certain to break the threshold. At the same time the comparison
+     * with the minimum is STRICTER than the step-wise one: `min <= prev`, so any firing of the
+     * step-wise condition happens no earlier than the firing of the accumulated one.
      *
-     * Почему ложное срабатывание отсечено СТРУКТУРНО. Минимум обновляется ПОСЛЕ
-     * проверки сходимости (см. [IterationStopCriterion.accept]), поэтому любое значение
-     * ниже допуска выводит из цикла раньше, чем попадёт в минимум. Следовательно,
-     * `minDiff >= 1e-13` всегда, а порог ложного срабатывания не опускается ниже
-     * `1e6 * 1e-13 = 1e-7`. Чтобы порог сработал на СХОДЯЩЕЙСЯ итерации, её
-     * критерий обязан сначала упасть к `1e-13`...`1e-7`, а затем подскочить на шесть
-     * порядков над собственным шумовым плато — чего убывающая геометрическая
-     * мажоранта при `||L|| < 1` не допускает.
+     * Why a false firing is excluded STRUCTURALLY. The minimum is updated AFTER
+     * the convergence check (see [IterationStopCriterion.accept]), so any value
+     * below the tolerance leaves the loop before it can enter the minimum. Consequently,
+     * `minDiff >= 1e-13` always holds, and the false-firing threshold never drops below
+     * `1e6 * 1e-13 = 1e-7`. For the threshold to fire on a CONVERGING iteration, its
+     * criterion would first have to fall to `1e-13`...`1e-7` and then jump six
+     * orders of magnitude above its own noise plateau — which a decreasing geometric
+     * majorant with `||L|| < 1` does not allow.
      *
-     * Почему именно `1e6` (числа измерены, а не прикинуты). Запас до ложного
-     * срабатывания снят инструментированными прогонами с отключённым порогом:
-     * замерялся пик отношения `diff / min(diff)` за весь прогон.
-     *  * На штатных задачах проекта пик составляет `1.5e-1`...`1.3e1` (запас до
-     *    порога не менее `7.7e4` раз).
-     *  * Худший всплеск на СХОДЯЩЕМСЯ прогоне вообще — `1.79e+02` (запас ≈ `5.6e3`).
-     *    Он достигается на СПЕЦИАЛЬНО подобранной стресс-задаче: ядро `K = 1`,
-     *    оператор Вольтерры (квазинильпотентный — ряд Неймана сходится при ЛЮБОМ
-     *    `cL`, то есть переходный рост `cL^m/m!` максимален), `cL = 11.5`, 182 итерации.
-     *  * Первое фактическое срабатывание порога — при `cL = 16` (схема Кулкарни) и
-     *    `cL = 18` (комбинированный Nyström), причём обе эти конфигурации и БЕЗ порога
-     *    не сходятся за 200 шагов и раздуваются до `1e10`...`1e16`: то есть порог
-     *    прерывает только те прогоны, которые и так обречены.
-     * Полные замеры — `.tasks/code-review-remediation/stage8/REVIEW-8.1.md`.
+     * Why exactly `1e6` (the numbers are measured, not guessed). The margin before a false
+     * firing was taken from instrumented runs with the threshold disabled:
+     * the peak of the ratio `diff / min(diff)` over the whole run was measured.
+     *  * On the regular problems of the project the peak is `1.5e-1`...`1.3e1` (a margin of
+     *    at least `7.7e4` up to the threshold).
+     *  * The worst spike on a CONVERGING run at all is `1.79e+02` (a margin of ≈ `5.6e3`).
+     *    It is attained on a SPECIALLY crafted stress problem: kernel `K = 1`,
+     *    Volterra operator (quasi-nilpotent — the Neumann series converges for ANY
+     *    `cL`, i.e. the transient growth `cL^m/m!` is maximal), `cL = 11.5`, 182 iterations.
+     *  * The first actual firing of the threshold happens at `cL = 16` (the Kulkarni scheme) and
+     *    `cL = 18` (the combined Nyström), and both of these configurations fail to converge
+     *    within 200 steps even WITHOUT the threshold and blow up to `1e10`...`1e16`: that is, the threshold
+     *    interrupts only those runs that are doomed anyway.
+     * The full measurements are in `.tasks/code-review-remediation/stage8/REVIEW-8.1.md`.
      *
-     * Одновременно `1e6` — ничтожная доля запаса до переполнения `Double` (`~1e308`),
-     * поэтому распознавание срабатывает задолго до потери значащих разрядов.
-     * Порог намеренно НЕ параметризуется: как и допуски, он привязан к конкретным
-     * схемам и вне их смысла не имеет.
+     * At the same time `1e6` is a negligible fraction of the margin up to `Double` overflow (`~1e308`),
+     * so the detection fires long before significant digits are lost.
+     * The threshold is deliberately NOT parameterized: like the tolerances, it is tied to specific
+     * schemes and has no meaning outside them.
      */
     const val DIVERGENCE_GROWTH_FACTOR = 1e6
 }

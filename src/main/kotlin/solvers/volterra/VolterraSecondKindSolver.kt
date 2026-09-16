@@ -16,23 +16,23 @@ import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
 import solvers.core.SecondKindSolverCore
 
 /**
- * Линейный решатель уравнения Вольтерры II рода u - L u = f, L = c_L * \mathcal V,
- * где (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds (ПЕРЕМЕННЫЙ верхний предел).
+ * Linear solver for the second-kind Volterra equation u - L u = f, L = c_L * \mathcal V,
+ * where (\mathcal V u)(t) = \int_a^t K(t,s) u(s) ds (a VARIABLE upper limit).
  *
- * c_L = 1 для уравнения II рода; при редукции I->II рода (см. [VolterraFirstKindSolver])
- * тоже c_L = 1, но с другим (редуцированным) ядром и правой частью.
- * Правая часть f и её производные задаются явно ([RhsWithDerivatives]),
- * чтобы решатель переиспользовался и для задач I рода.
+ * c_L = 1 for a second-kind equation; for the I->II kind reduction (see [VolterraFirstKindSolver])
+ * c_L = 1 as well, but with a different (reduced) kernel and right-hand side.
+ * The right-hand side f and its derivatives are supplied explicitly ([RhsWithDerivatives])
+ * so that the solver is reused for first-kind problems too.
  *
- * Матрицы дискретной задачи:
+ * Matrices of the discrete problem:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
  *   g_j      = chi_j(f),          d_j      = chi_j(L f).
  *
- * @param throwOnDivergence поведение ИТЕРАЦИОННЫХ схем ([kulkarni] для
- *        квазиинтерполянтов, [combinedNystrom]) при недостижении сходимости:
- *        `true` (по умолчанию) — исключение, `false` — результат с
- *        `converged = false` и достигнутой невязкой в [solvers.core.SolutionFunc.residual].
- *        На прямые схемы не влияет.
+ * @param throwOnDivergence behaviour of the ITERATIVE schemes ([kulkarni] for
+ *        quasi-interpolants, [combinedNystrom]) when convergence is not reached:
+ *        `true` (default) — an exception, `false` — a result with
+ *        `converged = false` and the attained residual in [solvers.core.SolutionFunc.residual].
+ *        Direct schemes are unaffected.
  */
 public class VolterraSecondKindSolver(
     basis: MinimalSplineBasis,
@@ -45,28 +45,28 @@ public class VolterraSecondKindSolver(
 ) : SecondKindSolverCore<(Double) -> Double>(
     basis, funcs, cL, rhs, throwOnDivergence, ctx,
 ) {
-    // Числовые параметры итерационных схем (KULKARNI_QUASI_*, COMBINED_NYSTROM_*)
-    // живут в [solvers.core.SecondKindDefaults]: у Фредгольма и Вольтерры они
-    // совпадают, и расхождение при подборе нового значения было бы молчаливым.
-    // Общая часть схем (`base`, `sloan`, `kulkarni`, сборка M/M2/g/d) — в
-    // [SecondKindSolverCore]; здесь остаётся специфика Вольтерры.
+    // The numerical parameters of the iterative schemes (KULKARNI_QUASI_*, COMBINED_NYSTROM_*)
+    // live in [solvers.core.SecondKindDefaults]: they coincide for Fredholm and Volterra,
+    // and a divergence while tuning a new value would be silent.
+    // The shared part of the schemes (`base`, `sloan`, `kulkarni`, assembly of M/M2/g/d) is in
+    // [SecondKindSolverCore]; what stays here is the Volterra specifics.
     //
-    // ВНИМАНИЕ (отличие от Фредгольма): у оператора Вольтерра область интегрирования
-    // [a,t] зависит от t, поэтому предвычисление на фиксированных узлах невозможно.
-    // Все применения L = c_L \mathcal V выражаются через замыкания op.apply / op.applyDeriv,
-    // а «подготовленный операнд» — это сама функция, а не таблица её значений.
+    // NOTE (the difference from Fredholm): for the Volterra operator the integration domain
+    // [a,t] depends on t, so precomputation on fixed nodes is impossible.
+    // All applications of L = c_L \mathcal V are expressed through the closures op.apply / op.applyDeriv,
+    // and the "prepared operand" is the function itself rather than a table of its values.
 
     /**
-     * L g(t) = c_L (\mathcal V g)(t) и её производная (Лейбниц).
+     * L g(t) = c_L (\mathcal V g)(t) and its derivative (Leibniz).
      *
-     * Возвращаемое замыкание владеет СВОИМ кэшем узловых значений `g` на полных ячейках
-     * (см. [VolterraOperator.IntegrandCache]): время жизни кэша совпадает со временем
-     * жизни замыкания, а привязка к `g` фиксируется при создании, поэтому отдать значения
-     * одной функции другой невозможно. Арифметика не меняется (см. [VolterraOperator.apply]).
+     * The returned closure owns ITS OWN cache of the nodal values of `g` on the full cells
+     * (see [VolterraOperator.IntegrandCache]): the lifetime of the cache coincides with the lifetime
+     * of the closure, and the binding to `g` is fixed at creation time, so handing the values
+     * of one function to another is impossible. The arithmetic does not change (see [VolterraOperator.apply]).
      *
-     * Метод СОЗНАТЕЛЬНО не переехал в общее ядро: кэш привязан к конкретному
-     * [VolterraOperator] проверкой `require(cache.owner === this)`, и обобщённый тип
-     * кэша ослабил бы эту проверку до runtime-каста.
+     * The method DELIBERATELY did not move into the shared core: the cache is bound to a specific
+     * [VolterraOperator] by the check `require(cache.owner === this)`, and a generic cache
+     * type would weaken that check to a runtime cast.
      */
     private fun applyL(g: (Double) -> Double): (Double) -> Double {
         val cache = op.integrandCache(g)
@@ -75,47 +75,47 @@ public class VolterraSecondKindSolver(
     private fun applyLDeriv(g: (Double) -> Double): (Double) -> Double = { t -> cL * op.applyDeriv(t, g) }
 
     /**
-     * (L g)''(t) = c_L (\mathcal V g)''(t) по (V2''): требует g И g' (член K(t,t) g'(t)).
-     * gD — первая производная самого операнда g.
+     * (L g)''(t) = c_L (\mathcal V g)''(t) by (V2''): it requires g AND g' (the term K(t,t) g'(t)).
+     * gD is the first derivative of the operand g itself.
      */
     private fun applyLDeriv2(g: (Double) -> Double, gD: (Double) -> Double): (Double) -> Double =
         { t -> cL * op.applyDeriv2(t, g, gD) }
 
-    // --- Реализация точек расширения [SecondKindSolverCore] --------------------
+    // --- Implementation of the [SecondKindSolverCore] extension points ---------
 
-    override val equationName: String get() = "Вольтерра"
+    override val equationName: String get() = "Volterra"
 
     override val kulkarniQuasiHint: String
-        get() = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
-            "редукция Кулкарни неприменима и используется простая итерация"
+        get() = "For quasi-interpolants (mu, lambda) the property P^2 = P does not hold, so the " +
+            "Kulkarni reduction is inapplicable and a simple iteration is used"
 
     /**
-     * Контрольные точки критерия останова: `4n+1` равноотстоящих точек отрезка.
+     * Check points of the stopping criterion: `4n+1` equidistant points of the interval.
      *
-     * Глобальных узлов у оператора Вольтерра нет (они зависят от `t`), поэтому
-     * нужна отдельная выборка. Она участвует ТОЛЬКО в критерии останова,
-     * в самой итерации не используется.
+     * The Volterra operator has no global nodes (they depend on `t`), so
+     * a separate sample is needed. It takes part ONLY in the stopping criterion,
+     * it is not used in the iteration itself.
      *
-     * Поле ленивое, а не эагерное, по двум причинам. Во-первых, выборка нужна
-     * только двум итерационным схемам из восьми. Во-вторых и главное: она читает
-     * `n` и `grid` из базового класса через переопределённое свойство, а такое свойство
-     * в принципе может быть прочитано до завершения конструктора наследника;
-     * `by lazy` гарантирует, что вычисление произойдёт при ПЕРВОМ ОБРАЩЕНИИ из
-     * метода, то есть гарантированно после того, как `n` уже инициализирован.
-     * Эагерное поле здесь было бы корректным только случайно.
+     * The field is lazy rather than eager for two reasons. First, the sample is needed
+     * by only two of the eight schemes. Second and more importantly: it reads
+     * `n` and `grid` from the base class through an overridden property, and such a property
+     * can in principle be read before the subclass constructor has finished;
+     * `by lazy` guarantees that the computation happens at the FIRST ACCESS from
+     * a method, i.e. guaranteed after `n` has already been initialized.
+     * An eager field here would be correct only by accident.
      */
     override val checkPoints: DoubleArray by lazy {
         DoubleArray(4 * n + 1) { grid.a + (grid.b - grid.a) * it / (4 * n) }
     }
 
-    /** Предвычисление невозможно: операнд — сама функция. */
+    /** Precomputation is impossible: the operand is the function itself. */
     override fun prepare(u: (Double) -> Double): (Double) -> Double = u
 
     override fun image(o: (Double) -> Double): (Double) -> Double = applyL(o)
 
     override fun imageDeriv(o: (Double) -> Double): (Double) -> Double = applyLDeriv(o)
 
-    /** Член Лейбница `K(t,t) u'(t)` делает `uD` ОБЯЗАТЕЛЬНЫМ аргументом. */
+    /** The Leibniz term `K(t,t) u'(t)` makes `uD` a MANDATORY argument. */
     override fun imageDeriv2(o: (Double) -> Double, uD: (Double) -> Double): (Double) -> Double =
         applyLDeriv2(o, uD)
 
@@ -130,39 +130,39 @@ public class VolterraSecondKindSolver(
         val idx = i - 2
         val omega = { s: Double -> basis.omega(idx, s) }
         val omegaD = { s: Double -> basis.omegaDeriv(idx, s) }
-        // Вторая производная образа требует и omega_i, и omega_i' (член K(t,t) omega_i').
+        // The second derivative of the image requires both omega_i and omega_i' (the term K(t,t) omega_i').
         return ImageTriple(applyL(omega), applyLDeriv(omega), applyLDeriv2(omega, omegaD))
     }
 
     /**
-     * Образ `L omega_i` строится ЗАНОВО, без переиспользования столбца из [matrixM].
+     * The image `L omega_i` is built ANEW, without reusing the column from [matrixM].
      *
-     * Это не избыточность, а сознательное решение: каждое замыкание [applyL] несёт
-     * СВОЙ кэш подынтегральной функции, и передача готового образа извне изменила бы
-     * число обращений к ядру и, возможно, младшие биты результата.
+     * This is not redundancy but a deliberate decision: every closure [applyL] carries
+     * ITS OWN integrand cache, and passing a ready image from outside would change
+     * the number of kernel evaluations and possibly the last bits of the result.
      */
     override fun doubleOmegaImages(i: Int): ImageTriple {
         val idx = i - 2
         val omega = { s: Double -> basis.omega(idx, s) }
         val image = applyL(omega)
         val imageDeriv = applyLDeriv(omega)
-        // Вторая производная требует сам образ L omega_i и его производную.
+        // The second derivative requires the image L omega_i itself and its derivative.
         return ImageTriple(applyL(image), applyLDeriv(image), applyLDeriv2(image, imageDeriv))
     }
 
-    // --- Nyström: сплайн-квадратура с зависящими от t весами --------------------
+    // --- Nyström: spline quadrature with t-dependent weights --------------------
 
     /**
-     * Опорные данные Nyström для Вольтерра: точки {eta_r} (по возрастанию t),
-     * ValueFunctional-ы семейства и индексация точек. В отличие от Фредгольма
-     * веса W_j(t)=int_a^t omega_j зависят от t, поэтому агрегированные веса b_r(t)
-     * вычисляются на лету (nystromB). Семейство xi (де Бура--Фикса) НЕ поддерживается:
-     * его функционалы используют производную и не сводятся к линейной комбинации значений.
+     * Nyström support data for Volterra: the points {eta_r} (ascending in t),
+     * the ValueFunctionals of the family and the indexing of the points. Unlike Fredholm,
+     * the weights W_j(t)=int_a^t omega_j depend on t, so the aggregated weights b_r(t)
+     * are computed on the fly (nystromB). The family xi (de Boor–Fix) is NOT supported:
+     * its functionals use a derivative and do not reduce to a linear combination of values.
      *
-     * ИНДЕКСАЦИЯ ТОЧЕК — по паре (номер функционала, номер узла), см. [SupportPoints].
-     * Раньше здесь жила `HashMap<Double, Int>` с поиском по ЗНАЧЕНИЮ точки, то есть
-     * требовавшая побитового совпадения Double и работавшая лишь потому, что и карта,
-     * и запрос читали один и тот же массив `vf.nodes`.
+     * THE POINTS ARE INDEXED by the pair (functional number, node number), see [SupportPoints].
+     * Previously a `HashMap<Double, Int>` lived here with a lookup by the VALUE of the point, i.e. one
+     * requiring a bit-exact match of Doubles and working only because both the map
+     * and the query read the same array `vf.nodes`.
      */
     private class NystromSupport(
         val pts: DoubleArray,
@@ -172,28 +172,28 @@ public class VolterraSecondKindSolver(
 
     private fun nystromSupport(): NystromSupport {
         require(!funcs.usesDerivative) {
-            "Nyström для семейства '${funcs.name}' не реализован: функционалы " +
-                "де Бура--Фикса (xi) используют производную и не сводятся к значениям."
+            "Nyström is not implemented for the family '${funcs.name}': the de Boor–Fix " +
+                "functionals (xi) use a derivative and do not reduce to values."
         }
         val vfs = Array(dim) { k ->
             funcs.chi(k - 2) as? ValueFunctional
-                ?: error("Nyström: функционал '${funcs.name}' (j=${k - 2}) не является ValueFunctional.")
+                ?: error("Nyström: the functional '${funcs.name}' (j=${k - 2}) is not a ValueFunctional.")
         }
         val support = SupportPoints.byAscendingValue(vfs, grid.breakpointInclusionEps)
         return NystromSupport(support.points, vfs, support)
     }
 
     /**
-     * Агрегированные веса b_r(t):
+     * Aggregated weights b_r(t):
      * b_r(t) = sum_j sum_{q: s_{j,q}=eta_r} c_{j,q} W_j(t), W_j(t)=int_a^t omega_j.
      */
     private fun nystromB(sup: NystromSupport, t: Double): DoubleArray {
         val b = DoubleArray(sup.pts.size)
         for (k in 0 until dim) {
             val j = k - 2
-            val lo = grid.x(j)                 // левый конец носителя omega_j (>= a)
-            val hi = minOf(grid.x(j + 3), t)   // правый конец, усечённый верхним пределом t
-            if (hi <= lo) continue             // носитель правее t -> W_j(t)=0 (причинность)
+            val lo = grid.x(j)                 // left end of the support of omega_j (>= a)
+            val hi = minOf(grid.x(j + 3), t)   // right end, truncated by the upper limit t
+            if (hi <= lo) continue             // the support lies to the right of t -> W_j(t)=0 (causality)
             val w = op.integrateRange(lo, hi) { s -> basis.omega(j, s) }
             val vf = sup.vfs[k]
             for (q in vf.nodes.indices) b[sup.support.indexOf(k, q)] += vf.coeffs[q] * w
@@ -209,12 +209,12 @@ public class VolterraSecondKindSolver(
         return fEff(t) + cL * acc
     }
 
-    /** Решает (I - A^{N,V}) u_hat = f_hat: A^{N,V}_{rho,r}=cL b_r(eta_rho) K(eta_rho,eta_r) (2.3). */
+    /** Solves (I - A^{N,V}) u_hat = f_hat: A^{N,V}_{rho,r}=cL b_r(eta_rho) K(eta_rho,eta_r) (2.3). */
     private fun nystromSolve(sup: NystromSupport): DoubleArray {
         val p = sup.pts.size
         val a = DenseMatrix.zeros(p, p)
         for (rho in 0 until p) {
-            val b = nystromB(sup, sup.pts[rho]) // t-зависимые веса при t=eta_rho
+            val b = nystromB(sup, sup.pts[rho]) // the t-dependent weights at t=eta_rho
             for (r in 0 until p) a[rho, r] = -cL * b[r] * op.kernel.k(sup.pts[rho], sup.pts[r])
             a[rho, rho] += 1.0
         }
@@ -222,23 +222,23 @@ public class VolterraSecondKindSolver(
     }
 
     /**
-     * КЛАССИЧЕСКИЙ сплайн-Nyström для уравнения Вольтерры: квадратура с
-     * t-зависимыми весами W_j(t)=int_a^t omega_j. Приводит к линейной системе
-     * (I - A^{N,V}) u_hat = f_hat по значениям решения в опорных точках {eta_r}.
-     * Приближение вне сплайнового пространства. Не поддерживает семейство xi.
+     * The CLASSICAL spline Nyström for the Volterra equation: a quadrature with
+     * t-dependent weights W_j(t)=int_a^t omega_j. It leads to the linear system
+     * (I - A^{N,V}) u_hat = f_hat in the values of the solution at the support points {eta_r}.
+     * The approximation lies outside the spline space. The family xi is not supported.
      *
-     * О СТРУКТУРЕ МАТРИЦЫ: ранее здесь утверждалось, что при упорядочении точек по
-     * возрастанию матрица (блочно-)нижнетреугольна «по причинности». Это утверждение
-     * УДАЛЕНО как НЕПОДТВЕРЖДЁННОЕ: b_r(eta_rho) агрегирует коэффициенты функционалов,
-     * чьи опорные точки могут лежать правее eta_rho (носители omega_j перекрываются),
-     * поэтому в общем случае верхние элементы не нулевые. Код всё равно решает систему
-     * общим LU-разложением и на треугольность не полагается.
+     * ON THE STRUCTURE OF THE MATRIX: it used to be claimed here that, with the points ordered
+     * ascending, the matrix is (block-)lower-triangular "by causality". That claim has been
+     * REMOVED as UNSUBSTANTIATED: b_r(eta_rho) aggregates the coefficients of functionals
+     * whose support points may lie to the right of eta_rho (the supports of omega_j overlap),
+     * so in general the upper entries are non-zero. The code solves the system
+     * with a general LU decomposition anyway and does not rely on triangularity.
      *
-     * ВАЖНО о порядке: это «голая» квадратура, сама по себе НЕ повышающая порядок;
-     * см. [combinedNystrom]. Для уравнения Вольтерры теоретических оценок суперсходимости
-     * в известной литературе нет ни для одного из вариантов (переменный верхний предел
-     * даёт t-зависимые веса и усечение последней ячейки — требуется отдельный анализ).
-     * Любые наблюдаемые порядки здесь — численное наблюдение, а не доказанный результат.
+     * IMPORTANT on the order: this is a "bare" quadrature which by itself does NOT raise the order;
+     * see [combinedNystrom]. For the Volterra equation there are no theoretical superconvergence estimates
+     * in the known literature for any of the variants (the variable upper limit
+     * gives t-dependent weights and a truncation of the last cell — a separate analysis is required).
+     * Any orders observed here are a numerical observation, not a proven result.
      */
     public fun nystrom(): SolutionFunc {
         val sup = nystromSupport()
@@ -247,9 +247,9 @@ public class VolterraSecondKindSolver(
     }
 
     /**
-     * Итерированный Nyström: u_hat^N_h(t)=f(t)+(L u^N_h)(t) с ТОЧНЫМ оператором
-     * Вольтерра L (замыкание applyL, как в sloan()). Одно интегрирование найденного
-     * u^N_h, новой системы не требуется (аналог итерации Слоана).
+     * Iterated Nyström: u_hat^N_h(t)=f(t)+(L u^N_h)(t) with the EXACT Volterra
+     * operator L (the closure applyL, as in sloan()). A single integration of the computed
+     * u^N_h, no new system is required (the analogue of the Sloan iteration).
      */
     public fun iteratedNystrom(): SolutionFunc {
         val sup = nystromSupport()
@@ -259,35 +259,35 @@ public class VolterraSecondKindSolver(
     }
 
     /**
-     * КОМБИНИРОВАННЫЙ оператор Nyström для уравнения Вольтерры:
-     * u^N_h = f + L_n u^N_h, где L_n = P_chi L + (I - P_chi) L^N_h.
+     * The COMBINED Nyström operator for the Volterra equation:
+     * u^N_h = f + L_n u^N_h, where L_n = P_chi L + (I - P_chi) L^N_h.
      *
-     * На образе проектора действует ТОЧНЫЙ оператор, на дополнении — квадратура с
-     * t-зависимыми весами. Отличие от [nystrom]: там решается u = f + L^N_h u.
+     * On the range of the projector the EXACT operator acts, on the complement — the quadrature with
+     * t-dependent weights. The difference from [nystrom]: there u = f + L^N_h u is solved.
      *
-     * СТАТУС ИСТОЧНИКА: конструкция L_n взята из теории для уравнения Фредгольма
-     * (см. [solvers.fredholm.FredholmSecondKindSolver.combinedNystrom]); для уравнения Вольтерры это
-     * АДАПТАЦИЯ: доказательства суперсходимости в известной литературе НЕТ. Поведение
-     * следует трактовать как численное наблюдение.
+     * SOURCE STATUS: the construction L_n is taken from the theory for the Fredholm equation
+     * (see [solvers.fredholm.FredholmSecondKindSolver.combinedNystrom]); for the Volterra equation this is
+     * an ADAPTATION: there is NO proof of superconvergence in the known literature. The behaviour
+     * should be treated as a numerical observation.
      *
-     * @throws IllegalStateException если итерация не сошлась и [throwOnDivergence] равно `true`.
+     * @throws IllegalStateException if the iteration did not converge and [throwOnDivergence] is `true`.
      */
     public fun combinedNystrom(): SolutionFunc {
         val sup = nystromSupport()
         var uFun: (Double) -> Double = { t -> fEff(t) }
-        // Критерий останова мерится на ТОМ ЖЕ множестве [checkPoints], что и в `kulkarniQuasi`.
-        // Локальный пересчёт той же формулой был бы вторым критерием в одном классе:
-        // при правке одного из них две схемы молча разъехались бы.
+        // The stopping criterion is measured on THE SAME set [checkPoints] as in `kulkarniQuasi`.
+        // A local recomputation by the same formula would be a second criterion in one class:
+        // a fix to one of them would let the two schemes silently drift apart.
         val checkPoints = this.checkPoints
         var uAtCheck = DoubleArray(checkPoints.size) { uFun(checkPoints[it]) }
         val stop = IterationStopCriterion(COMBINED_NYSTROM_TOLERANCE)
         while (stop.performedIterations < COMBINED_NYSTROM_MAX_ITERATIONS) {
             val currentFun = uFun
             val currentAtPoints = DoubleArray(sup.pts.size) { currentFun(sup.pts[it]) }
-            // Точный оператор L и его проекция P_chi(L u).
+            // The exact operator L and its projection P_chi(L u).
             val exactImage = applyL(currentFun)
             val projectedExact = funcs.projectorCoeffs(exactImage)
-            // Квадратурный оператор L^N_h с t-зависимыми весами и его проекция.
+            // The quadrature operator L^N_h with t-dependent weights and its projection.
             val quadratureImage = { t: Double ->
                 val b = nystromB(sup, t)
                 var acc = 0.0
@@ -309,12 +309,12 @@ public class VolterraSecondKindSolver(
         reportConvergence(
             converged = stop.converged,
             throwOnDivergence = throwOnDivergence,
-            methodName = "Комбинированный Nyström (Вольтерра)",
+            methodName = "Combined Nyström (Volterra)",
             iterations = stop.performedIterations,
             maxIterations = COMBINED_NYSTROM_MAX_ITERATIONS,
             residual = stop.residual,
             tolerance = COMBINED_NYSTROM_TOLERANCE,
-            hint = "Для сходимости простой итерации требуется ||L_n|| < 1",
+            hint = "Convergence of the simple iteration requires ||L_n|| < 1",
             diverged = stop.diverged,
         )
         val resultFun = uFun
@@ -327,8 +327,8 @@ public class VolterraSecondKindSolver(
     }
 
     /**
-     * Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с точным L.
-     * Признак сходимости наследуется от [combinedNystrom].
+     * Iterated combined Nyström: \hat u^N_h = f + L u^N_h with the exact L.
+     * The convergence flag is inherited from [combinedNystrom].
      */
     public fun iteratedCombinedNystrom(): SolutionFunc {
         val combined = combinedNystrom()

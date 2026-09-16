@@ -1,307 +1,314 @@
-# Источники численных методов
+# Sources of the numerical methods
 
-Документ связывает каждый реализованный численный метод с первичной публикацией и
-фиксирует статус соответствия: подтверждено сверкой формул, адаптация или
-собственная конструкция без опубликованного аналога.
+The document links every implemented numerical method to its primary publication and records
+the status of the correspondence: confirmed by a comparison of the formulas, an adaptation, or
+an original construction with no published counterpart.
 
-Проверка проводилась сопоставлением формул кода с формулами источников. Для методов,
-у которых опубликованного первоисточника нет, это указано явно — такие места **не
-следует** сопровождать ссылками на литературу.
+The verification was carried out by matching the formulas of the code against the formulas of
+the sources. For the methods that have no published primary source this is stated explicitly —
+such places are **not to be** accompanied by references to the literature.
 
-## Условные обозначения статуса
+## Notation for the status
 
-| Статус | Значение |
+| Status | Meaning |
 |---|---|
-| **Подтверждено** | формула кода дословно совпадает с формулой публикации |
-| **Адаптация** | метод перенесён на класс задач, для которого он в источнике не доказан |
-| **Без источника** | опубликованного аналога не найдено; конструкция собственная |
+| **Confirmed** | the formula of the code coincides literally with the formula of the publication |
+| **Adaptation** | the method is carried over to a class of problems for which it is not proved in the source |
+| **No source** | no published counterpart has been found; the construction is original |
 
 ---
 
-## 1–2. Минимальные сплайны и аппроксимационные функционалы
+## 1–2. Minimal splines and approximation functionals
 
-Реализация базиса минимальных сплайнов, порождающих систем (`B`, `H`, `T`), сетки с
-кратными узлами и всех семейств аппроксимационных функционалов (`theta`, `xi`, `xitilde`,
-`mu`, `lambda`) живёт в репозитории `minimal-splines`; там же — таблицы
-«элемент → реализация → источник → статус» для этих объектов:
+The implementation of the basis of minimal splines, of the generating systems (`B`, `H`, `T`),
+of the grid with multiple nodes and of all the families of approximation functionals (`theta`,
+`xi`, `xitilde`, `mu`, `lambda`) lives in the repository `minimal-splines`; the tables
+"element → implementation → source → status" for those objects are there as well:
 [`minimal-splines/docs/REFERENCES.md`](https://github.com/EgorkaKulikov/minimal-splines/blob/main/docs/REFERENCES.md).
-Источники, на которые опираются эти таблицы:
-[Демьянович 1994], [Makarov 2012], [Kosogorov, Makarov 2017], [Kulikov, Makarov 2019a],
+The sources on which those tables rely are:
+[Demyanovich 1994], [Makarov 2012], [Kosogorov, Makarov 2017], [Kulikov, Makarov 2019a],
 [Kulikov, Makarov 2019b], [Kulikov, Makarov 2020], [Kulikov, Makarov 2022],
-[Kulikov, Makarov 2025]. Библиографические записи сохранены и в списке литературы ниже,
-поскольку на часть из них ссылаются разделы 3–6.
+[Kulikov, Makarov 2025]. The bibliographic records are kept in the list of references below as
+well, since some of them are cited by sections 3–6.
 
-## 3. Схемы решения уравнений второго рода
+## 3. Schemes for equations of the second kind
 
-| Элемент | Реализация | Источник | Статус |
+| Element | Implementation | Source | Status |
 |---|---|---|---|
-| Базовая коллокация `(I - M)c = g` | `SecondKindSolverCore.base` (Фредгольм, Вольтерра) | [Dagnino, Remogna, Sablonnière 2014] | Подтверждено |
-| Итерация Слоана | `SecondKindSolverCore.sloan` | [Sloan 1976] | Подтверждено |
-| Схема Кулкарни (проекторы) `(I - M - M2 + M^2)c = (I - M)g + d` | `kulkarniProjector` | [Kulkarni 2003] | Подтверждено |
-| Восстановление `u^K = y_h + (I - P)[f + L y_h]` | `kulkarniProjector` | [Kulkarni 2003] | Подтверждено |
-| Итерированный Кулкарни | `iteratedKulkarni` | [Kulkarni 2003] | Подтверждено |
-| Схема Кулкарни для квазиинтерполянтов (`mu`, `lambda`) | `kulkarniQuasi` | — | **Без источника**: теория Кулкарни существенно требует `P^2 = P`; статус — численное наблюдение. Реализована простой итерацией и требует сжатия (спектральный радиус меньше единицы) — выявлено на задачах `A-sep2`, `A-sep3` |
-| Классический Nyström (голая квадратура) | `nystrom`, `iteratedNystrom` | [Atkinson 1997] | Подтверждено; **порядок не повышает** |
-| Комбинированный Nyström `L_n = P_chi L + (I - P_chi)L^N_h` (Фредгольм) | `combinedNystrom` | [Allouch и др. 2021], [Remogna, Sbibih, Tahrichi 2023] | Подтверждено |
-| Комбинированный Nyström (Вольтерра) | `combinedNystrom` | — | **Адаптация**: доказательств для переменного верхнего предела нет |
+| Plain collocation `(I - M)c = g` | `SecondKindSolverCore.base` (Fredholm, Volterra) | [Dagnino, Remogna, Sablonnière 2014] | Confirmed |
+| Sloan iteration | `SecondKindSolverCore.sloan` | [Sloan 1976] | Confirmed |
+| Kulkarni scheme (projectors) `(I - M - M2 + M^2)c = (I - M)g + d` | `kulkarniProjector` | [Kulkarni 2003] | Confirmed |
+| Reconstruction `u^K = y_h + (I - P)[f + L y_h]` | `kulkarniProjector` | [Kulkarni 2003] | Confirmed |
+| Iterated Kulkarni | `iteratedKulkarni` | [Kulkarni 2003] | Confirmed |
+| Kulkarni scheme for quasi-interpolants (`mu`, `lambda`) | `kulkarniQuasi` | — | **No source**: the Kulkarni theory essentially requires `P^2 = P`; the status is a numerical observation. It is implemented by plain iteration and requires contraction (a spectral radius below one) — established on the problems `A-sep2`, `A-sep3` |
+| Classical Nyström (bare quadrature) | `nystrom`, `iteratedNystrom` | [Atkinson 1997] | Confirmed; **it does not raise the order** |
+| Combined Nyström `L_n = P_chi L + (I - P_chi)L^N_h` (Fredholm) | `combinedNystrom` | [Allouch et al. 2021], [Remogna, Sbibih, Tahrichi 2023] | Confirmed |
+| Combined Nyström (Volterra) | `combinedNystrom` | — | **Adaptation**: there are no proofs for a variable upper limit |
 
-### Замечание о порядках сходимости
+### Remark on the convergence orders
 
-Опубликованные оценки `O(h^7)` для комбинированного оператора и `O(h^8)` для его
-итерированного варианта доказаны **только** для уравнения Фредгольма с равномерной
-сеткой, полиномиальными B-сплайнами и квазиинтерполяционным проектором.
+The published estimates `O(h^7)` for the combined operator and `O(h^8)` for its iterated
+variant are proved **only** for the Fredholm equation with a uniform grid, polynomial
+B-splines and a quasi-interpolation projector.
 
-Измеренные в проекте порядки (`CombinedNystromTest`):
+The orders measured in the project (`CombinedNystromTest`):
 
-* уравнение Фредгольма, задача F2, базис B, семейство `theta`: классический Nyström — около 4.2,
-  комбинированный — около 7.0 (согласуется с теорией);
-* уравнение Вольтерры: **выигрыша не наблюдается**, порядок обоих вариантов около 3.8
-  (см. `CombinedNystromVolterraTest`).
+* the Fredholm equation, problem F2, basis B, family `theta`: classical Nyström — about 4.2,
+  combined — about 7.0 (in agreement with the theory);
+* the Volterra equation: **no gain is observed**, the order of both variants is about 3.8
+  (see `CombinedNystromVolterraTest`).
 
-Для уравнения Вольтерры аналогов теорем о суперсходимости в известной литературе нет:
-переменный верхний предел приводит к зависящим от точки коллокации весам и усечению
-последней ячейки, что требует отдельного анализа.
+For the Volterra equation there are no counterparts of the superconvergence theorems in the
+known literature: a variable upper limit leads to weights that depend on the collocation point
+and to a truncation of the last cell, which requires a separate analysis.
 
-## 4. Уравнения первого рода
+## 4. Equations of the first kind
 
-| Элемент | Реализация | Источник | Статус |
+| Element | Implementation | Source | Status |
 |---|---|---|---|
-| Регуляризация Фредгольма `(alpha I + K)u = f` | `solvers/fredholm`, `FredholmFirstKindSolver` | [Wazwaz 2011a] | Подтверждено |
-| Значение `alpha = 1e-10` | `FredholmFirstKindSolver` | [Kulikov, Makarov 2023] | Экспериментальный выбор авторов, не рекомендация [Wazwaz 2011a]. Попадает в диапазон потери точности: при `alpha = 1e-10` измерен разброс 15.19 % между алгебраически эквивалентными записями при `cond_inf ≈ 2.636149e+10`, при `1e-6`/`1e-8` расхождения нет (0.00 %/0.01 %) — см. [`ACCURACY.md`](ACCURACY.md) |
-| Сведение Вольтерры I → II рода дифференцированием | `solvers/volterra`, `VolterraFirstKindSolver` | [Wazwaz 2011b], [Brunner 2004] | Подтверждено для случая `m = 1`; требует `K(t,t) != 0` во всех точках деления, проверяется `safeDiagonal` |
-| Формулы `(Vu)'` и `(Vu)''` (правило Лейбница) | `VolterraOperator.applyDeriv`, `applyDeriv2` | [Makarov, Kulikov 2026] | `(Vu)'` подтверждено; `(Vu)''` — отдельной публикации нет. Обе формулы численно сверены с `scipy.integrate.quad` проверками слоя L4/L5 `V/V2/rhsDeriv`, `V/V2/rhsDeriv2`, `V/V2exp/rhsDeriv`, `V/V2exp/rhsDeriv2`, `V/V2win/rhsDeriv`, `V/V2win/rhsDeriv2` (эталон выведен независимо от кода: `volterra_image_deriv` в `tools/verify_with_scipy.py`, включая ПОЛНУЮ производную диагонали `d/dt K(t,t) = K_t(t,t) + K_s(t,t)`); фактическое отклонение — машинная точность, до 6.7e-16 при допуске 1e-10 |
+| Fredholm regularization `(alpha I + K)u = f` | `solvers/fredholm`, `FredholmFirstKindSolver` | [Wazwaz 2011a] | Confirmed |
+| The value `alpha = 1e-10` | `FredholmFirstKindSolver` | [Kulikov, Makarov 2023] | An experimental choice of the authors, not a recommendation of [Wazwaz 2011a]. It falls into the range of accuracy loss: at `alpha = 1e-10` a spread of 15.19 % between algebraically equivalent formulations was measured at `cond_inf ≈ 2.636149e+10`, while at `1e-6`/`1e-8` there is no discrepancy (0.00 %/0.01 %) — see [`ACCURACY.md`](ACCURACY.md) |
+| Reduction of Volterra I → II kind by differentiation | `solvers/volterra`, `VolterraFirstKindSolver` | [Wazwaz 2011b], [Brunner 2004] | Confirmed for the case `m = 1`; it requires `K(t,t) != 0` at every breakpoint, which is checked by `safeDiagonal` |
+| The formulas `(Vu)'` and `(Vu)''` (the Leibniz rule) | `VolterraOperator.applyDeriv`, `applyDeriv2` | [Makarov, Kulikov 2026] | `(Vu)'` is confirmed; `(Vu)''` has no separate publication. Both formulas are cross-checked numerically against `scipy.integrate.quad` by the layer L4/L5 checks `V/V2/rhsDeriv`, `V/V2/rhsDeriv2`, `V/V2exp/rhsDeriv`, `V/V2exp/rhsDeriv2`, `V/V2win/rhsDeriv`, `V/V2win/rhsDeriv2` (the reference was derived independently of the code: `volterra_image_deriv` in `tools/verify_with_scipy.py`, including the FULL derivative of the diagonal `d/dt K(t,t) = K_t(t,t) + K_s(t,t)`); the actual deviation is at the machine precision, up to 6.7e-16 against a tolerance of 1e-10 |
 
-## 5. Нелинейное уравнение Урысона
+## 5. The nonlinear Uryson equation
 
-| Элемент | Реализация | Источник | Статус |
+| Element | Implementation | Source | Status |
 |---|---|---|---|
-| Оператор Урысона и производная Фреше | `UrysohnOperator` | [Krasnoselskii 1964], [Zeidler 1986] | Подтверждено |
-| Ньютон с аналитическим якобианом `B(c)_{j,i} = theta_j(U'(x_h) omega_i)` | `CollocationCore.bMatrix` | [Atkinson 1997] | Подтверждено |
-| Схема Кулкарни (квази-Ньютон с предобуславливателем) | `UrysonSecondKindSolver.kulkarni` | [Kulkarni 2003], [Dagnino, Dallefrate, Remogna 2019] | Подтверждено |
-| Сплайн-Nyström для Урысона | `UrysonSecondKindSolver.nystrom` | [Remogna, Sbibih, Tahrichi 2023] | Подтверждено |
-| Комбинированный Nyström для Урысона `L_n = P_theta L + (I - P_theta) L^N_h`, Ньютон с аналитическим якобианом | `UrysonSecondKindSolver.combinedNystrom`, `CombinedNystromSolver` | [Remogna, Sbibih, Tahrichi 2023] | Подтверждено: именно к этому оператору относятся оценки суперсходимости источника; сверен с `FredholmSecondKindSolver.combinedNystrom` на линейном ядре (`CombinedNystromTest`) |
-| Итерированный комбинированный Nyström `u = f + lambda L u^N_h` | `UrysonSecondKindSolver.iteratedNystrom` | [Sloan 1976] | Адаптация: однократное применение точного оператора к приближению комбинированного Nyström |
-| Итерированный Кулкарни `u = f + lambda L u^K_h` | `UrysonSecondKindSolver.iteratedKulkarni` | [Sloan 1976], [Kulkarni 2003] | Адаптация: итерация Слоана, применённая к приближению Кулкарни для нелинейного оператора |
-| Регуляризация Тихонова, стабилизатор `R_h` в норме `W^{1,2}` | `SplineSpace.gramR` | [Тихонов, Арсенин 1977], [Engl, Hanke, Neubauer 1996] | Подтверждено |
-| Гаусс–Ньютон для регуляризованной задачи | `UrysonFirstKindSolver.solveFixedAlpha` | [Engl, Hanke, Neubauer 1996] | Подтверждено (знак в знак) |
-| Принцип невязки Морозова | `UrysonFirstKindSolver.solveMorozov` | [Engl, Hanke, Neubauer 1996], разд. 4.3 | Подтверждено |
-| Гомотопия по убывающему `alpha` с тёплым стартом | `solveMorozov` | — | Деталь реализации |
-| Модель шума (кусочно-линейный профиль), нормировка `NoiseNorm { L2, SUP }` | `noisyRightHandSide`, `noisyThetaCoefficients` | — | Деталь реализации; детерминированность (явный `seed`) и масштабирование под заданную норму соответствуют постановке |
+| The Uryson operator and the Fréchet derivative | `UrysohnOperator` | [Krasnoselskii 1964], [Zeidler 1986] | Confirmed |
+| Newton with the analytical Jacobian `B(c)_{j,i} = theta_j(U'(x_h) omega_i)` | `CollocationCore.bMatrix` | [Atkinson 1997] | Confirmed |
+| Kulkarni scheme (quasi-Newton with a preconditioner) | `UrysonSecondKindSolver.kulkarni` | [Kulkarni 2003], [Dagnino, Dallefrate, Remogna 2019] | Confirmed |
+| Spline Nyström for Uryson | `UrysonSecondKindSolver.nystrom` | [Remogna, Sbibih, Tahrichi 2023] | Confirmed |
+| Combined Nyström for Uryson `L_n = P_theta L + (I - P_theta) L^N_h`, Newton with the analytical Jacobian | `UrysonSecondKindSolver.combinedNystrom`, `CombinedNystromSolver` | [Remogna, Sbibih, Tahrichi 2023] | Confirmed: it is precisely this operator to which the superconvergence estimates of the source refer; cross-checked against `FredholmSecondKindSolver.combinedNystrom` on a linear kernel (`CombinedNystromTest`) |
+| Iterated combined Nyström `u = f + lambda L u^N_h` | `UrysonSecondKindSolver.iteratedNystrom` | [Sloan 1976] | Adaptation: a single application of the exact operator to the combined-Nyström approximation |
+| Iterated Kulkarni `u = f + lambda L u^K_h` | `UrysonSecondKindSolver.iteratedKulkarni` | [Sloan 1976], [Kulkarni 2003] | Adaptation: the Sloan iteration applied to the Kulkarni approximation for a nonlinear operator |
+| Tikhonov regularization, the stabilizer `R_h` in the `W^{1,2}` norm | `SplineSpace.gramR` | [Tikhonov, Arsenin 1977], [Engl, Hanke, Neubauer 1996] | Confirmed |
+| Gauss–Newton for the regularized problem | `UrysonFirstKindSolver.solveFixedAlpha` | [Engl, Hanke, Neubauer 1996] | Confirmed (sign for sign) |
+| Morozov's discrepancy principle | `UrysonFirstKindSolver.solveMorozov` | [Engl, Hanke, Neubauer 1996], sect. 4.3 | Confirmed |
+| Homotopy over a decreasing `alpha` with a warm start | `solveMorozov` | — | An implementation detail |
+| The noise model (a piecewise-linear profile), the normalization `NoiseNorm { L2, SUP }` | `noisyRightHandSide`, `noisyThetaCoefficients` | — | An implementation detail; the determinism (an explicit `seed`) and the scaling to a prescribed norm correspond to the formulation |
 
 ---
 
-## 6. Независимая верификация: чем проверен каждый метод
+## 6. Independent verification: by what each method is checked
 
-Разделы 1–5 связывают методы с публикациями (соответствие ФОРМУЛ). Настоящий
-раздел фиксирует другое: какими **независимыми от кода проекта** средствами
-проверен РЕЗУЛЬТАТ вычислений.
+Sections 1–5 link the methods to publications (a correspondence of FORMULAS). The present
+section records something different: by what means **independent of the project code** the
+RESULT of the computations has been checked.
 
-Причина выделения: характеризационные тесты (`characterization/baseline-eh.tsv`)
-сняты ТОЙ ЖЕ реализацией, которую проверяют: они фиксируют неизменность
-результата, но не его правильность. Ошибка, внесённая до создания эталона,
-была бы зафиксирована вместе с ним.
+The reason for a separate section: the characterization tests
+(`characterization/baseline-eh.tsv`) were captured by the VERY implementation they check: they
+record that the result is unchanged, but not that it is correct. An error introduced before the
+baseline was created would have been recorded together with it.
 
-### Средства верификации
+### The means of verification
 
-| Обозначение | Средство | Реализация | Степень независимости |
+| Symbol | Means | Implementation | Degree of independence |
 |---|---|---|---|
-| **А** | Аналитически точные решения (сепарабельные ядра, свёртка/Лаплас, MMS) | `problems/analytic/AnalyticProblems.kt`, `verification/AnalyticSolutionTest.kt` | Полная: решение и правая часть выведены вручную, без квадратуры проекта |
-| **П** | Опубликованные значения `E_h` и `p_h` (18 таблиц статьи) | `verification/published-values.tsv`, `PublishedValuesTest.kt` | Полная: внешний источник, допуск 2 % |
-| **К** | Перекрёстная согласованность схем между собой | `verification/CrossSchemeConsistencyTest.kt` | Частичная: общая ошибка всех схем не обнаруживается |
-| **И** | Математические инварианты (биортогональность, разбиение единицы, идемпотентность, точность на span) | `splines.SplineCoreHealthCheckTest` (репозиторий minimal-splines) | Высокая: свойства выведены из теории, а не из кода |
-| **Ф** | Сверка с явными замкнутыми формулами (`ReferenceSplines`, `closedFormInternal`) | `splines.SplineCoreHealthCheckTest` (репозиторий minimal-splines) | Высокая: формулы выписаны независимо от общего построения |
-| **С** | Внешняя сверка через SciPy/NumPy | `ScipyCrossVerificationTest` + `tools/verify_with_scipy.py`; задача `scipyVerify` и job `scipy` в CI. В `check` НЕ входит (требует venv с Python); в `test` без venv пропускается | Полная: сторонние библиотеки |
-| **По** | Порядок сходимости против явной таблицы ожиданий | `convergence/ConvergenceOrderTest.kt` (задача `convergenceOrderTest`, 168 сочетаний; быстрый поднабор — тег `fast`) | Внутренняя: ожидаемые порядки сверены с теорией и публикацией, но сами числа считает код проекта |
-| **Н** | Эталонный Nyström на квадратуре Гаусса–Лежандра (без сплайнов и функционалов) | `verification/ReferenceNystromSolver.kt` + `ReferenceNystromCrossCheckTest` (тег `fast`); внешний аналог — слои L6a/L6b `tools/verify_with_scipy.py` | Полная: учебный метод [Atkinson 1997]; собственные узлы Гаусса и гауссово исключение, ни одного импорта из `src/main` |
+| **A** | Analytically exact solutions (separable kernels, convolution/Laplace, MMS) | `problems/analytic/AnalyticProblems.kt`, `verification/AnalyticSolutionTest.kt` | Full: the solution and the right-hand side were derived by hand, without the quadrature of the project |
+| **P** | Published values of `E_h` and `p_h` (18 tables of the article) | `verification/published-values.tsv`, `PublishedValuesTest.kt` | Full: an external source, tolerance 2 % |
+| **C** | Cross-consistency of the schemes with one another | `verification/CrossSchemeConsistencyTest.kt` | Partial: an error common to all schemes is not detected |
+| **I** | Mathematical invariants (biorthogonality, partition of unity, idempotence, exactness on the span) | `splines.SplineCoreHealthCheckTest` (the minimal-splines repository) | High: the properties are derived from the theory rather than from the code |
+| **F** | Comparison with explicit closed-form formulas (`ReferenceSplines`, `closedFormInternal`) | `splines.SplineCoreHealthCheckTest` (the minimal-splines repository) | High: the formulas are written out independently of the general construction |
+| **S** | External cross-check through SciPy/NumPy | `ScipyCrossVerificationTest` + `tools/verify_with_scipy.py`; the task `scipyVerify` and the job `scipy` in CI. It is NOT part of `check` (it requires a venv with Python); in `test` without a venv it is skipped | Full: third-party libraries |
+| **O** | The convergence order against an explicit table of expectations | `convergence/ConvergenceOrderTest.kt` (the task `convergenceOrderTest`, 168 combinations; the fast subset carries the tag `fast`) | Internal: the expected orders are matched against the theory and the publication, but the numbers themselves are computed by the project code |
+| **N** | A reference Nyström method on Gauss–Legendre quadrature (without splines and functionals) | `verification/ReferenceNystromSolver.kt` + `ReferenceNystromCrossCheckTest` (tag `fast`); the external counterpart is the layers L6a/L6b of `tools/verify_with_scipy.py` | Full: a textbook method [Atkinson 1997]; its own Gauss nodes and Gaussian elimination, not a single import from `src/main` |
 
-#### Границы внешней сверки (средство **С**): что НЕ сверяется и почему
+#### The limits of the external cross-check (means **S**): what is NOT checked and why
 
-Слой L2 выгружает пять блоков (`M`, `M2`, `g`, `d`, `c_base`), а сверяет три: `M`, `g`, `c_base`
-(через `scipy.linalg.solve` на той же системе `(I - M) c = g`).
+The layer L2 exports five blocks (`M`, `M2`, `g`, `d`, `c_base`) and checks three: `M`, `g`,
+`c_base` (through `scipy.linalg.solve` on the same system `(I - M) c = g`).
 
-**Блоки `M2` и `d` внешне НЕ СВЕРЯЮТСЯ.** Это зафиксировано явно, а не умолчано:
-по коду (`solvers/core/SecondKindSolverCore.kt`) `M2_{j,i} = chi_j(L(L omega_i))` — то есть
-функционал от ДВОЙНОГО применения интегрального оператора к базисной функции,
-а `d_j = chi_j(L f)`. Оба блока выражены через аппроксимационные функционалы `chi`
-(семейства `theta`, `xi`, `mu`, `lambda`) и базис минимальных сплайнов. Аналогов этих
-конструкций в SciPy нет; выписать их в скрипте значило бы перенести туда ту же
-конструкцию, что проверяется, и получить сверку, замкнутую саму на себя.
-Имитация внешней сверки хуже честного признания её отсутствия: зелёная проверка без
-независимого источника создаёт ложную уверенность.
+**The blocks `M2` and `d` are NOT CHECKED externally.** This is stated explicitly rather than
+passed over in silence: by the code (`solvers/core/SecondKindSolverCore.kt`)
+`M2_{j,i} = chi_j(L(L omega_i))` — that is, a functional of a DOUBLE application of the integral
+operator to a basis function, while `d_j = chi_j(L f)`. Both blocks are expressed through the
+approximation functionals `chi` (the families `theta`, `xi`, `mu`, `lambda`) and the basis of
+minimal splines. SciPy has no counterparts of those constructions; writing them out in the
+script would mean carrying the very construction under test into it and obtaining a cross-check
+closed upon itself. An imitation of an external cross-check is worse than an honest admission of
+its absence: a green check without an independent source creates false confidence.
 
-Чем они проверены вместо этого — и чего это НЕ даёт.
+By what they are checked instead — and what that does NOT give.
 
-* Средство **И**: биортогональность `chi_j(omega_i) = delta_{ij}`, идемпотентность
-  проектора, точность на `span`. Это проверяет ФУНКЦИОНАЛЫ `chi`, из которых собраны
-  `M2` и `d`, но не саму сборку блоков.
-* Внутренняя проверка ПО СЛЕДСТВИЯМ: `M2` и `d` входят ровно в две схемы —
-  `kulkarniProjector` и `iteratedKulkarni` (`solvers/core/SecondKindSolverCore.kt`,
-  `kulkarni()` и `iteratedKulkarni()`). Порядок сходимости обеих проверяется
-  `convergence.ConvergenceOrderTest` (полная матрица — задача `./gradlew convergenceOrderTest`,
-  быстрый поднабор — тег `fast`) против явной таблицы ожидаемых порядков: ошибка в `M2`
-  или `d` сместила бы наблюдаемый порядок `kulkarni`/`iteratedKulkarni` и уронила бы этот
-  тест. Дополнительно числа этих схем зафиксированы характеризационными эталонами
-  (`baseline-eh.tsv`, `baseline-extra.tsv`) — то есть от изменения они защищены.
+* Means **I**: the biorthogonality `chi_j(omega_i) = delta_{ij}`, the idempotence of the
+  projector, the exactness on the `span`. This checks the FUNCTIONALS `chi` out of which `M2`
+  and `d` are built, but not the assembly of the blocks itself.
+* An internal check BY CONSEQUENCES: `M2` and `d` enter exactly two schemes —
+  `kulkarniProjector` and `iteratedKulkarni` (`solvers/core/SecondKindSolverCore.kt`,
+  `kulkarni()` and `iteratedKulkarni()`). The convergence order of both is checked by
+  `convergence.ConvergenceOrderTest` (the full matrix by the task `./gradlew convergenceOrderTest`,
+  the fast subset by the tag `fast`) against an explicit table of expected orders: an error in
+  `M2` or `d` would shift the observed order of `kulkarni`/`iteratedKulkarni` and would break
+  that test. In addition, the numbers of those schemes are recorded by the characterization
+  baselines (`baseline-eh.tsv`, `baseline-extra.tsv`) — that is, they are protected against
+  change.
 
-**Чего у `M2` и `d` НЕТ: внешней сверки — ни прямой, ни косвенной.** Слой L6b сверяет
-только схемы `base` и `sloan`, а `sloan()` использует лишь `matrixM` и `vectorG`
-(`SecondKindSolverCore.kt`, `sloan()`): ни `M2`, ни `d` в неё не входят, поэтому L6b
-на ошибку в них НЕ отреагировал бы. Раньше здесь утверждалось обратное — утверждение
-было ложным и удалено. Итог: `M2` и `d` покрыты внутренней проверкой порядка сходимости
-и характеризационными эталонами, но независимого внешнего источника у них нет.
+**What `M2` and `d` DO NOT have: an external cross-check, neither direct nor indirect.**
+The layer L6b checks only the schemes `base` and `sloan`, and `sloan()` uses only `matrixM` and
+`vectorG` (`SecondKindSolverCore.kt`, `sloan()`): neither `M2` nor `d` enters it, so L6b would
+NOT react to an error in them. The opposite used to be asserted here — the assertion was false
+and has been removed. The outcome: `M2` and `d` are covered by the internal check of the
+convergence order and by the characterization baselines, but they have no independent external
+source.
 
-### Соответствие «метод → средства верификации»
+### The correspondence "method → means of verification"
 
-| Метод | Средства | Статус |
+| Method | Means | Status |
 |---|---|---|
-| Базис минимальных сплайнов (`B`) | Ф, И, С | Проверен (инварианты И/Ф — в minimal-splines; С — здесь) |
-| Базис (`H`) | Ф, И | Проверен (инварианты И/Ф — в minimal-splines) |
-| Базис (`T`) | И | Только инварианты (в minimal-splines): явной эталонной формулы в `ReferenceSplines` нет |
-| Квадратура Гаусса–Лежандра | И, С | Проверена (точность на многочленах до степени 15; модульные тесты — в numerical-core; С — здесь) |
-| Функционалы `theta` | Ф, И | Проверены (в том числе опубликованные коэффициенты `{1/14, -2/7, 10/7, -2/7, 1/14}`; инварианты И/Ф — в minimal-splines) |
-| Функционалы `xi<0>`, `xi<1>`, `xi<2>` | И | Проверены биортогональностью и идемпотентностью (инварианты И — в minimal-splines) |
-| Функционалы `mu`, `lambda` | И | Проверены точностью на `span{1, rho, sigma}` (инварианты И — в minimal-splines) |
-| Базовая коллокация (Фредгольм) | А, П, К | Проверена тремя независимыми средствами |
-| Базовая коллокация (Вольтерра) | А, П, К | Проверена тремя независимыми средствами |
-| Итерация Слоана | А, П, К | Проверена |
-| Схема Кулкарни (проекторы) | А, П, К | Проверена |
-| Схема Кулкарни (квазиинтерполянты) | А, К | Ограничение: расходится при спектральном радиусе больше единицы |
-| Классический Nyström | П, К, И | Проверен |
-| Комбинированный Nyström (Фредгольм) | К | Порядок 7.0 согласуется с опубликованной оценкой `O(h^7)` |
-| Комбинированный Nyström (Вольтерра) | К | Адаптация: суперсходимость не наблюдается (порядок около 3.8) |
-| Вольтерра I рода (редукция) | П | Проверена по `table-v1.tex` |
-| Фредгольм I рода (регуляризация) | П | Проверена по `table-f1.tex` и `table-xi-f1.tex`; шесть ключей `table-f1.tex` — под узким допуском, см. примечание ниже |
-| Урысон (нелинейные схемы) | К | Слабее остальных: аналитические решения не выведены |
+| Basis of minimal splines (`B`) | F, I, S | Checked (the invariants I/F are in minimal-splines; S is here) |
+| Basis (`H`) | F, I | Checked (the invariants I/F are in minimal-splines) |
+| Basis (`T`) | I | Invariants only (in minimal-splines): there is no explicit reference formula in `ReferenceSplines` |
+| Gauss–Legendre quadrature | I, S | Checked (exactness on polynomials up to degree 15; the unit tests are in numerical-core; S is here) |
+| Functionals `theta` | F, I | Checked (including the published coefficients `{1/14, -2/7, 10/7, -2/7, 1/14}`; the invariants I/F are in minimal-splines) |
+| Functionals `xi<0>`, `xi<1>`, `xi<2>` | I | Checked by biorthogonality and idempotence (the invariants I are in minimal-splines) |
+| Functionals `mu`, `lambda` | I | Checked by exactness on `span{1, rho, sigma}` (the invariants I are in minimal-splines) |
+| Plain collocation (Fredholm) | A, P, C | Checked by three independent means |
+| Plain collocation (Volterra) | A, P, C | Checked by three independent means |
+| Sloan iteration | A, P, C | Checked |
+| Kulkarni scheme (projectors) | A, P, C | Checked |
+| Kulkarni scheme (quasi-interpolants) | A, C | Limitation: it diverges when the spectral radius exceeds one |
+| Classical Nyström | P, C, I | Checked |
+| Combined Nyström (Fredholm) | C | The order 7.0 agrees with the published estimate `O(h^7)` |
+| Combined Nyström (Volterra) | C | Adaptation: superconvergence is not observed (the order is about 3.8) |
+| Volterra of the first kind (reduction) | P | Checked against `table-v1.tex` |
+| Fredholm of the first kind (regularization) | P | Checked against `table-f1.tex` and `table-xi-f1.tex`; six keys of `table-f1.tex` fall under a narrow tolerance, see the note below |
+| Uryson (the nonlinear schemes) | C | Weaker than the rest: no analytical solutions have been derived |
 
-#### ЗАКРЫТО (этап 8.6): Фредгольм первого рода против `table-f1.tex`
+#### CLOSED (stage 8.6): Fredholm of the first kind against `table-f1.tex`
 
-ИСТОРИЯ. До этапа 8.6 тест
-`verification.PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` был КРАСНЫМ:
-4 ключа `F.F1.H.theta.*` расходились с публикацией на 6.78 %, 4.23 %, 3.47 % и
-3.14 % при допуске 2 %. Сейчас весь `slowTest` ЗЕЛЁНЫЙ (23 теста).
+HISTORY. Before stage 8.6 the test
+`verification.PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` was RED:
+4 keys `F.F1.H.theta.*` diverged from the publication by 6.78 %, 4.23 %, 3.47 % and
+3.14 % against a tolerance of 2 %. At present the whole `slowTest` is GREEN (23 tests).
 
-Что установлено ИЗМЕРЕНИЯМИ (а не предположено) — полный отчёт в
+What has been established by MEASUREMENT (rather than assumed) — the full report is in
 `.tasks/code-review-remediation/stage8/MEASURE-8.6-f1-tolerance.md`:
 
-* F1 — уравнение ПЕРВОГО рода с регуляризацией Вазваза (`c_L = -1/alpha`,
-  `alpha = 1e-10`): `cond_inf(I - M)` = 1.18e10..2.70e10, `‖g‖_inf` = 1.59e10, а в
-  схеме Слоана два слагаемых порядка 1.38e10 сокращаются до 2.7 — потеря около
-  9.7 из 16 значащих цифр. Поэтому `E_h` ограниченно воспроизводима между
-  реализациями LU;
-* ДВЕ таблицы статьи сняты на РАЗНЫХ арифметических путях. `table-xi-f1.tex`
-  (36 ключей `Eh`) воспроизводится на `multik` с точностью до 0.033 %
-  (медиана 0.0032 %), а `reference` даёт там до 11.485 %; `table-f1.tex` (6 ключей)
-  — наоборот: `reference` воспроизводит её с медианой 0.010 %. То есть единого
-  «бэкенда статьи» НЕ СУЩЕСТВУЕТ — это записано по-таблично в шапке
-  `published-values.tsv`. Прежнее утверждение «`reference` воспроизводит, `multik`
-  — нет» верно только для 6 ключей `table-f1.tex`; на остальных 36 — наоборот.
+* F1 is an equation of the FIRST kind with the Wazwaz regularization (`c_L = -1/alpha`,
+  `alpha = 1e-10`): `cond_inf(I - M)` = 1.18e10..2.70e10, `‖g‖_inf` = 1.59e10, and in
+  the Sloan scheme two terms of the order 1.38e10 cancel down to 2.7 — a loss of about
+  9.7 of the 16 significant digits. For that reason `E_h` is only to a limited extent
+  reproducible between LU implementations;
+* the TWO tables of the article were captured on DIFFERENT arithmetic routes.
+  `table-xi-f1.tex` (36 keys `Eh`) is reproduced on `multik` to within 0.033 %
+  (median 0.0032 %), whereas `reference` gives up to 11.485 % there; `table-f1.tex` (6 keys)
+  is the opposite: `reference` reproduces it with a median of 0.010 %. That is, a single
+  "backend of the article" DOES NOT EXIST — this is recorded table by table in the header of
+  `published-values.tsv`. The former assertion that "`reference` reproduces it while `multik`
+  does not" holds only for the 6 keys of `table-f1.tex`; on the remaining 36 the converse is
+  true.
 
-КАК ЗАКРЫТО. Общий допуск `RELATIVE_TOLERANCE` НЕ ОСЛАБЛЕН и остаётся 2 % для 702
-ключей из 708, включая все ключи `table-xi-f1.tex`. Для шести ключей
-`table-f1.tex` введён УЗКИЙ класс допуска 8 %
-(`PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE`), выведенный из ИЗМЕРЕННОГО
-разброса между `multik` и `reference` НА ЭТИХ ЖЕ ключах (7.267 % + 0.05 %
-точности публикации, округлено вверх), а НЕ из наблюдаемого расхождения с
-публикацией — поэтому допуск не растёт вместе с деградацией. Принадлежность
-классу определяется ПО ПОЛЮ ФАЙЛА-ИСТОЧНИКА в эталоне, а не списком падающих
-ключей; тест-ограничитель `luPathDependentToleranceCoversExactlyTheDeclaredKeys`
-сравнивает МНОЖЕСТВО ослабленных ключей с измеренным и потому ловит тихое
-перенесение послабления на другую величину.
+HOW IT WAS CLOSED. The common tolerance `RELATIVE_TOLERANCE` was NOT RELAXED and remains 2 %
+for 702 keys out of 708, including all the keys of `table-xi-f1.tex`. For the six keys of
+`table-f1.tex` a NARROW tolerance class of 8 % was introduced
+(`PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE`), derived from the MEASURED
+spread between `multik` and `reference` ON THOSE VERY keys (7.267 % + 0.05 %
+of the precision of the publication, rounded up), and NOT from the observed discrepancy with
+the publication — so the tolerance does not grow along with a degradation. Membership of the
+class is determined BY THE SOURCE-FILE FIELD in the baseline rather than by a list of failing
+keys; the restricting test `luPathDependentToleranceCoversExactlyTheDeclaredKeys`
+compares the SET of relaxed keys with the measured one and therefore catches a silent
+transfer of the relaxation to another quantity.
 
-КОМПЕНСАЦИЯ ПОТЕРИ СТРОГОСТИ (без неё послабление было бы недопустимо):
-покрытие F1 в `characterization/baseline-eh.tsv` расширено с 4 до 54 ключей с допуском
-1e-9 — надмножество всех 42 сверяемых с публикацией величин. Замером показано,
-что это не декорация: при огрублении квадратуры 8 → 6 характеризационный гейт
-падает на всех ключах F1, тогда как в ослабленном классе сверка ловит его лишь
-на одном ключе из шести. См. `docs/baseline-changes.md`.
+COMPENSATION FOR THE LOSS OF STRICTNESS (without it the relaxation would be inadmissible):
+the coverage of F1 in `characterization/baseline-eh.tsv` was extended from 4 to 54 keys with a
+tolerance of 1e-9 — a superset of all 42 quantities compared with the publication. It was shown
+by measurement that this is not a decoration: when the quadrature is coarsened 8 → 6, the
+characterization gate fails on all the keys of F1, whereas in the relaxed class the cross-check
+catches it on only one key out of six. See `docs/baseline-changes.md`.
 
-ПОБОЧНАЯ НАХОДКА. `E_h` схемы `sloan` для F1 меняется на 4.3–39.9 % от ОДНОГО ЛИШЬ
-ПОРЯДКА СУММИРОВАНИЯ (прямой / обратный / компенсированный Кэхэна) — больше,
-чем расхождение с публикацией и больше, чем разброс бэкендов. Ключи `F1.*.sloan`
-в эталоне тем самым привязаны к порядку обхода узлов в `FredholmOperator.applyNodes`;
-это свойство задачи, а не дефект, но рефакторинг того цикла сломает гейт 1e-9
-без изменения математики.
+A SIDE FINDING. The `E_h` of the `sloan` scheme for F1 changes by 4.3–39.9 % from THE ORDER OF
+SUMMATION ALONE (forward / backward / Kahan-compensated) — more than the discrepancy with the
+publication and more than the spread of the backends. The keys `F1.*.sloan` in the baseline are
+thereby bound to the order in which the nodes are traversed in `FredholmOperator.applyNodes`;
+this is a property of the problem rather than a defect, but a refactoring of that loop will break
+the 1e-9 gate without changing the mathematics.
 
-### Результат внешней сверки со SciPy (фактический прогон)
+### The result of the external cross-check against SciPy (an actual run)
 
-Сверка выполнена на NumPy 2.5.1 / SciPy 1.18.0 и пройдена полностью: 60 проверок
-(12 547 сравнённых чисел, 83 пропущены как неприменимые), расхождений нет.
-Числа в таблице ниже взяты из `build/verification/scipy-report.json` этого прогона.
+The cross-check was performed on NumPy 2.5.1 / SciPy 1.18.0 and passed in full: 60 checks
+(12 547 numbers compared, 83 skipped as inapplicable), with no discrepancies.
+The numbers in the table below are taken from the `build/verification/scipy-report.json` of that
+run.
 
-**Статус: постоянная проверка, а не разовая.** Сверка оформлена смок-тестами
-`verification.ScipyCrossVerificationTest` и выполняется задачей `./gradlew scipyVerify`
-— в CI на каждой ветке. Окружение Python готовится автоматически задачей
-`setupScipyVerification` (создаёт `.venv-verify` и ставит версии, закреплённые в
-`tools/requirements-verify.txt`). Причина выбора: разовая сверка защищает лишь в
-момент запуска, и любая последующая правка численного ядра могла бы разойтись
-со SciPy незаметно.
+**Status: a permanent check, not a one-off.** The cross-check is arranged as the smoke tests
+`verification.ScipyCrossVerificationTest` and is performed by the task `./gradlew scipyVerify`
+— in CI on every branch. The Python environment is prepared automatically by the task
+`setupScipyVerification` (it creates `.venv-verify` and installs the versions pinned in
+`tools/requirements-verify.txt`). The reason for the choice: a one-off cross-check protects only
+at the moment it is run, and any subsequent edit of the numerical core could diverge from SciPy
+unnoticed.
 
-Поведение без окружения Python зависит от задачи, и это сделано намеренно:
+The behaviour without a Python environment depends on the task, and this is deliberate:
 
-* `./gradlew scipyVerify` — ПАДАЕТ (задача выставляет `scipy.required=true`). Здесь
-  сверка запрошена явно и окружение готовится зависимыми задачами, поэтому тихий
-  пропуск означал бы зелёную сборку без единого внешнего доказательства;
-* `./gradlew test` (и любой другой прогон) — ПРОПУСКАЕТ: отсутствие venv это
-  состояние машины, а не расхождение чисел.
+* `./gradlew scipyVerify` — FAILS (the task sets `scipy.required=true`). Here the cross-check is
+  requested explicitly and the environment is prepared by the dependent tasks, so a silent skip
+  would mean a green build without a single external piece of evidence;
+* `./gradlew test` (and any other run) — SKIPS: the absence of a venv is a state of the machine,
+  not a discrepancy of the numbers.
 
-В обоих режимах РАСХОЖДЕНИЯ ЧИСЕЛ всегда дают падение — смягчается только
-реакция на неготовое окружение.
+In both modes a DISCREPANCY OF THE NUMBERS always causes a failure — only the reaction to an
+unprepared environment is softened.
 
-Действенность проверена внесением искусственного дефекта: возмущение весов
-квадратуры на `1e-9` уронило ровно слои L1 и L4/L5 (с указанием отклонения и
-допуска), оставив L2, L3, L6a/L6b зелёными; после отката все тесты вновь проходят.
+The effectiveness was verified by introducing an artificial defect: a perturbation of the
+quadrature weights by `1e-9` broke exactly the layers L1 and L4/L5 (reporting the deviation and
+the tolerance), leaving L2, L3, L6a/L6b green; after the reversal all the tests pass again.
 
-| Слой | Проверяемое | Эталон | Проверок | Наибольшее отклонение | Допуск |
+| Layer | What is checked | Reference | Checks | Largest deviation | Tolerance |
 |---|---|---|---|---|---|
-| L1 | Узлы и веса Гаусса–Лежандра, `m = 1..16` | `numpy leggauss` | 2 | `1.1e-16` (узлы) / `1.8e-15` (веса), абс. | `1e-14` |
-| L2 | Решение `(I - M) c = g` и невязка | `scipy.linalg.solve` | 2 | `2.2e-16`, абс. | `1e-10` |
-| L3 | Базис `B` и две производные, 4 типа сеток | `scipy.interpolate.BSpline` | 12 | `1.1e-13` абс. (`omega'`) / `1.5e-14` отн. (`omega''`) | `1e-12` / `1e-13` |
-| L4/L5 | Образы `K u`, `V u` и правые части (5 задач) | `scipy.integrate.quad` | 20 | `8.9e-16`, абс. | `1e-10` |
-| L6a | Эталонный Nyström против точного решения (F2, F2exp) | 80 узлов `leggauss` | 2 | `1.3e-15`, абс. | `1e-12` |
-| L6b (а) | `E_h` схем `base`/`sloan` против порогов эталона | эталонный Nyström | 12 | `0.50`, отн. | `1.0` |
-| L6b (б) | порядок сходимости тех же схем не ниже порога | эталонный Nyström | 10 | `0.00` (дефицит p) | `0.0` |
+| L1 | Gauss–Legendre nodes and weights, `m = 1..16` | `numpy leggauss` | 2 | `1.1e-16` (nodes) / `1.8e-15` (weights), abs. | `1e-14` |
+| L2 | The solution of `(I - M) c = g` and the residual | `scipy.linalg.solve` | 2 | `2.2e-16`, abs. | `1e-10` |
+| L3 | The basis `B` and two derivatives, 4 types of grids | `scipy.interpolate.BSpline` | 12 | `1.1e-13` abs. (`omega'`) / `1.5e-14` rel. (`omega''`) | `1e-12` / `1e-13` |
+| L4/L5 | The images `K u`, `V u` and the right-hand sides (5 problems) | `scipy.integrate.quad` | 20 | `8.9e-16`, abs. | `1e-10` |
+| L6a | The reference Nyström against the exact solution (F2, F2exp) | 80 `leggauss` nodes | 2 | `1.3e-15`, abs. | `1e-12` |
+| L6b (a) | `E_h` of the schemes `base`/`sloan` against the thresholds of the reference | the reference Nyström | 12 | `0.50`, rel. | `1.0` |
+| L6b (b) | the convergence order of the same schemes is not below the threshold | the reference Nyström | 10 | `0.00` (deficit of p) | `0.0` |
 
-Пояснение к L6b: его 22 проверки — ДВУХ РАЗНЫХ ВИДОВ, и единого «допуска 1.0» у слоя нет.
+An explanation for L6b: its 22 checks are of TWO DIFFERENT KINDS, and the layer has no single
+"tolerance 1.0".
 
-* Вид (а), 12 проверок: сама величина `E_h`, допуск 1.0 ОТНОСИТЕЛЬНЫЙ — грубый по самой
-  постановке: сравниваются НЕ одни и те же числа, а порядки величин двух разных
-  методов. Фактическое отклонение во всех 12 — около 0.50, то есть запас двукратный.
-* Вид (б), 10 проверок: НАБЛЮДАЕМЫЙ ПОРЯДОК против порога эталона. Здесь допуск 0.0 —
-  не опечатка и не строгость до последнего бита: сравнивается НЕ отклонение, а ДЕФИЦИТ
-  порядка `max(0, порог − наблюдаемый p)`, и «допуск 0» означает требование «порядок не
-  НИЖЕ порога» (превышение разрешено). Сами пороги заданы с запасом от теории.
+* Kind (a), 12 checks: the quantity `E_h` itself, with a RELATIVE tolerance of 1.0 — coarse by
+  the very statement: what is compared is NOT the same numbers but the orders of magnitude of two
+  different methods. The actual deviation in all 12 is about 0.50, that is, a twofold margin.
+* Kind (b), 10 checks: the OBSERVED ORDER against the threshold of the reference. Here the
+  tolerance 0.0 is neither a typo nor strictness down to the last bit: what is compared is NOT a
+  deviation but the DEFICIT of the order `max(0, threshold − observed p)`, and "tolerance 0"
+  means the requirement "the order is not BELOW the threshold" (an excess is permitted). The
+  thresholds themselves are set with a margin against the theory.
 
-Наблюдаемые в этом прогоне порядки: `base` — 3.02...3.05, `sloan` — 4.19...4.28.
-Отметим, что это внешняя сверка порядка только двух схем; систематическая проверка
-порядков всех схем — средство **По** (`ConvergenceOrderTest`), где 24 из 56 строк таблицы
-ожиданий сверены с `published-values.tsv` (худшее расхождение 0.44).
+The orders observed in that run: `base` — 3.02...3.05, `sloan` — 4.19...4.28.
+Note that this is an external check of the order of two schemes only; the systematic check of the
+orders of all the schemes is the means **O** (`ConvergenceOrderTest`), where 24 of the 56 rows of
+the table of expectations are matched against `published-values.tsv` (the worst discrepancy
+is 0.44).
 
-**Обнаруженное расхождение и его разбор.** Первый прогон дал два расхождения на
-второй производной базиса (сетки `quasiUniform` и `graded`): абсолютное отклонение
-`1.79e-12` при допуске `1e-12`. Разбор показал, что дефекта нет, а неверен был
-сам критерий сравнения: `omega''` растёт как `O(1/h^2)` и на этих сетках достигает
-`|omega''| ~ 200...400`, так что наблюдавшееся отклонение отвечает ОТНОСИТЕЛЬНОЙ
-величине `1.2e-14` — порядка 50 ulp. Это шум округления двух разных способов
-вычисления (проект обращает матрицу `M_k` размера 3x3, SciPy использует рекуррентные
-соотношения де Бура), а не расхождение методов. Абсолютный порог заменён
-относительным (`1e-13`); допуск НЕ ослаблялся — исправлена размерность сравнения.
+**A discrepancy that was found and its analysis.** The first run produced two discrepancies on
+the second derivative of the basis (the grids `quasiUniform` and `graded`): an absolute deviation
+of `1.79e-12` against a tolerance of `1e-12`. The analysis showed that there is no defect and
+that the criterion of comparison itself was wrong: `omega''` grows as `O(1/h^2)` and on those
+grids reaches `|omega''| ~ 200...400`, so the observed deviation corresponds to a RELATIVE
+quantity of `1.2e-14` — of the order of 50 ulp. This is the rounding noise of two different ways
+of computing (the project inverts a matrix `M_k` of size 3x3, SciPy uses the de Boor recurrence
+relations), not a divergence of the methods. The absolute threshold was replaced by a relative
+one (`1e-13`); the tolerance was NOT relaxed — the dimensionality of the comparison was corrected.
 
-**Чего средства верификации принципиально НЕ покрывают.**
-тригонометрические минимальные сплайны и все четыре семейства аппроксимационных
-функционалов — конструкции из работ авторов, аналогов в сторонних библиотеках у них
-нет. Для них внешняя сверка (С) неприменима принципиально, а не из-за неполноты
-работы; их проверка опирается на математические инварианты (И), которые выведены из
-теории независимо от реализации.
+**What the means of verification fundamentally do NOT cover.**
+The trigonometric minimal splines and all four families of approximation functionals are
+constructions from the works of the authors, and they have no counterparts in third-party
+libraries. For them the external cross-check (S) is inapplicable in principle rather than because
+of incompleteness of the work; their verification rests on the mathematical invariants (I), which
+are derived from the theory independently of the implementation.
 
 ---
 
-## Список литературы
+## List of references
 
-1. **[Демьянович 1994]** Демьянович Ю. К. *Локальная аппроксимация на многообразии и
-   минимальные сплайны.* — СПб.: Изд-во С.-Петерб. ун-та, 1994. — 356 с.
+1. **[Demyanovich 1994]** Demyanovich Yu. K. *Local Approximation on a Manifold and Minimal
+   Splines* (in Russian). — St. Petersburg: St. Petersburg University Press, 1994. — 356 p.
 
-2. **[Тихонов, Арсенин 1977]** Тихонов А. Н., Арсенин В. Я. *Методы решения
-   некорректных задач.* — М.: Наука, 1977.
+2. **[Tikhonov, Arsenin 1977]** Tikhonov A. N., Arsenin V. Ya. *Solutions of Ill-Posed
+   Problems.* — Winston & Sons, Washington, 1977.
 
 3. **[Makarov 2012]** Makarov A. A. Construction of Splines of Maximal Smoothness //
    Journal of Mathematical Sciences. — 2012. — Vol. 178, No. 6. — P. 589–604.
@@ -331,8 +338,8 @@
    2023. — Vol. 272, No. 4. — P. 558–565. DOI: 10.1007/s10958-023-06449-3.
 
 10. **[Kulikov, Makarov 2025]** Kulikov E. K., Makarov A. A. On Projection-Type
-    Approximation Functionals for Minimal Splines // Записки научных семинаров ПОМИ. —
-    2025. — Т. 542. — С. 126–143.
+    Approximation Functionals for Minimal Splines // Zapiski Nauchnykh Seminarov POMI. —
+    2025. — Vol. 542. — P. 126–143.
 
 11. **[Makarov, Kulikov 2026]** Makarov A., Kulikov E. Spline collocation for Volterra
     integral equations with improved accuracy // Numerical Algorithms. — 2026.
@@ -369,7 +376,7 @@
     Journal of Computational and Applied Mathematics. — 2019. — Vol. 354. — P. 360–372.
     DOI: 10.1016/j.cam.2018.06.054.
 
-20. **[Allouch и др. 2021]** Allouch C., Remogna S., Sbibih D., Tahrichi M.
+20. **[Allouch et al. 2021]** Allouch C., Remogna S., Sbibih D., Tahrichi M.
     Superconvergent methods based on quasi-interpolating operators for Fredholm integral
     equations of the second kind // Applied Mathematics and Computation. — 2021. —
     Vol. 404. — Art. 126227. DOI: 10.1016/j.amc.2021.126227.

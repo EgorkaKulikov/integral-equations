@@ -1,13 +1,13 @@
 package solvers.core
 
 /**
- * Результат регуляризованного решения уравнения первого рода.
+ * Result of the regularized solution of a first-kind equation.
  *
- * @param coeffs коэффициенты найденного сплайна.
- * @param eval вычислитель приближённого решения.
- * @param alpha выбранный параметр регуляризации.
- * @param residual дискретная невязка при этом параметре.
- * @param omega значение стабилизатора `c^T R_h c`.
+ * @param coeffs coefficients of the spline found.
+ * @param eval evaluator of the approximate solution.
+ * @param alpha the regularization parameter chosen.
+ * @param residual the discrete residual at that parameter.
+ * @param omega value of the stabilizer `c^T R_h c`.
  */
 public class FirstKindSolution(
     public val coeffs: DoubleArray,

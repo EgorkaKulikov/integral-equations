@@ -14,14 +14,14 @@ import kotlin.test.assertTrue
 import problems.fredholm.FredholmProblem
 
 /**
- * Тесты КОМБИНИРОВАННОГО оператора Nyström L_n = P_chi L + (I - P_chi) L^N_h.
+ * Tests of the COMBINED Nyström operator L_n = P_chi L + (I - P_chi) L^N_h.
  *
- * Именно к этому оператору относятся опубликованные оценки суперсходимости
- * O(h^7) / O(h^8) (см. docs/REFERENCES.md), тогда как «голая» квадратура
- * [FredholmSecondKindSolver.nystrom] такого порядка не даёт. Тесты проверяют не сами
- * теоретические константы (для их достижения нужны очень гладкие данные и большие
- * n, где вмешивается обусловленность), а ПРАКТИЧЕСКИ ПРОВЕРЯЕМОЕ следствие:
- * комбинированный оператор существенно точнее классического на одной и той же сетке.
+ * It is exactly this operator that the published superconvergence estimates
+ * O(h^7) / O(h^8) refer to (see docs/REFERENCES.md), whereas the "bare" quadrature
+ * [FredholmSecondKindSolver.nystrom] does not give such an order. The tests check not the
+ * theoretical constants themselves (attaining them requires very smooth data and large
+ * n, where the conditioning interferes), but a PRACTICALLY CHECKABLE consequence:
+ * the combined operator is substantially more accurate than the classical one on the same grid.
  */
 @Tag("fast")
 class CombinedNystromTest {
@@ -43,8 +43,8 @@ class CombinedNystromTest {
     }
 
     /**
-     * Комбинированный оператор обязан быть ЗАМЕТНО точнее классической квадратуры:
-     * в разности L - L_n остаток проектора входит дважды.
+     * The combined operator must be NOTICEABLY more accurate than the classical quadrature:
+     * in the difference L - L_n the remainder of the projector enters twice.
      */
     @Test
     fun combinedIsMoreAccurateThanClassicalNystrom() {
@@ -56,15 +56,15 @@ class CombinedNystromTest {
             val combinedError = errorEh(exact, solver.combinedNystrom().eval, grid)
             assertTrue(
                 combinedError < classicalError,
-                "n=$n: комбинированный оператор ($combinedError) должен быть точнее " +
-                    "классической квадратуры ($classicalError)",
+                "n=$n: the combined operator ($combinedError) must be more accurate than " +
+                    "the classical quadrature ($classicalError)",
             )
         }
     }
 
     /**
-     * Порядок сходимости комбинированного оператора должен превосходить порядок
-     * классической квадратуры. Проверяется эмпирический порядок p = log2(E_n / E_2n).
+     * The convergence order of the combined operator must exceed the order of the
+     * classical quadrature. The empirical order p = log2(E_n / E_2n) is checked.
      */
     @Test
     fun combinedHasHigherConvergenceOrderThanClassical() {
@@ -85,13 +85,13 @@ class CombinedNystromTest {
 
         assertTrue(
             combinedOrder > classicalOrder + 0.5,
-            "Порядок комбинированного оператора ($combinedOrder) должен заметно превосходить " +
-                "порядок классической квадратуры ($classicalOrder). " +
-                "Ошибки: классические=$classicalErrors, комбинированные=$combinedErrors",
+            "The order of the combined operator ($combinedOrder) must noticeably exceed " +
+                "the order of the classical quadrature ($classicalOrder). " +
+                "The errors: classical=$classicalErrors, combined=$combinedErrors",
         )
     }
 
-    /** Итерированный комбинированный Nyström уточняет комбинированный (аналог итерации Слоана). */
+    /** The iterated combined Nyström refines the combined one (an analogue of the Sloan iteration). */
     @Test
     fun iteratedCombinedRefinesCombined() {
         val problem = FredholmProblem.F2
@@ -102,20 +102,20 @@ class CombinedNystromTest {
             val iteratedError = errorEh(exact, solver.iteratedCombinedNystrom().eval, grid)
             assertTrue(
                 iteratedError <= combinedError,
-                "n=$n: итерированный вариант ($iteratedError) не должен быть хуже " +
-                    "исходного ($combinedError)",
+                "n=$n: the iterated variant ($iteratedError) must not be worse than " +
+                    "the original one ($combinedError)",
             )
         }
     }
 
     /**
-     * На задаче, точное решение которой лежит в span порождающей системы, комбинированный
-     * оператор должен быть на много порядков точнее классической квадратуры.
+     * On a problem whose exact solution lies in the span of the generating system, the combined
+     * operator must be many orders more accurate than the classical quadrature.
      *
-     * Примечание: точной (машинной) точности здесь НЕ требуется, в отличие от базовой
-     * схемы: приближение u^N_h = f + L_n u^N_h лежит вне сплайнового пространства, а
-     * квадратурная часть (I - P_chi)L^N_h не воспроизводит span точно. Фактически
-     * наблюдается ~3e-10 при n=8 против ~5e-5 у классической квадратуры.
+     * A note: exact (machine) accuracy is NOT required here, unlike for the base
+     * scheme: the approximation u^N_h = f + L_n u^N_h lies outside the spline space, while
+     * the quadrature part (I - P_chi)L^N_h does not reproduce the span exactly. In fact
+     * ~3e-10 is observed at n=8 against ~5e-5 for the classical quadrature.
      */
     @Test
     fun combinedIsFarMoreAccurateThanClassicalOnSpanProblem() {
@@ -127,13 +127,13 @@ class CombinedNystromTest {
             val combinedError = errorEh(exact, solver.combinedNystrom().eval, grid)
             assertTrue(
                 combinedError < 1e-4 * classicalError,
-                "F2span, n=$n: комбинированный Nyström ($combinedError) должен быть на много " +
-                    "порядков точнее классического ($classicalError)",
+                "F2span, n=$n: the combined Nyström ($combinedError) must be many " +
+                    "orders more accurate than the classical one ($classicalError)",
             )
         }
     }
 
-    /** Комбинированный оператор, как и классический, не поддерживает семейство xi (нужны производные). */
+    /** The combined operator, like the classical one, does not support the family xi (derivatives are needed). */
     @Test
     fun combinedRejectsDerivativeFamilies() {
         val problem = FredholmProblem.F2

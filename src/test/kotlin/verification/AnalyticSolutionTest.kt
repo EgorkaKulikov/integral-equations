@@ -19,87 +19,87 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * НЕЗАВИСИМАЯ ВЕРИФИКАЦИЯ по аналитически точным решениям (задание, п. 2.1).
+ * INDEPENDENT VERIFICATION against analytically exact solutions (the assignment, item 2.1).
  *
- * Все прочие проверки проекта замкнуты на собственную реализацию: характеризационный
- * тест фиксирует, что результат НЕ ИЗМЕНИЛСЯ, но не доказывает, что он ПРАВИЛЬНЫЙ.
- * Здесь эталон получен вне кода — решением конечных систем и взятием интегралов
- * ВРУЧНУЮ (см. выкладки в KDoc задач [AnalyticFredholmProblem],
+ * All the other checks of the project are closed on its own implementation: the characterization
+ * test records that the result HAS NOT CHANGED, but does not prove that it is CORRECT.
+ * Here the baseline is obtained outside the code — by solving finite systems and taking integrals
+ * BY HAND (see the derivations in the KDoc of the problems [AnalyticFredholmProblem],
  * [AnalyticVolterraProblem]).
  *
- * Тесты разделены на два уровня, и это разделение принципиально.
+ * The tests are split into two levels, and this split is essential.
  *
- *  1. ТОЖДЕСТВО `u* - K u* = f` ([fredholmAnalyticIdentityHolds],
- *     [volterraAnalyticIdentityHolds]). Проверяет САМИ ВЫКЛАДКИ, а не решатель:
- *     если в ручном выводе допущена ошибка, она будет обнаружена здесь, а не станет
- *     молча «эталоном». Используется высокоточная квадратура [PRECISE_QUADRATURE_ORDER]
- *     узлов на подынтервал с мелким разбиением — она не участвует в работе схем и
- *     служит только независимой сверкой.
+ *  1. THE IDENTITY `u* - K u* = f` ([fredholmAnalyticIdentityHolds],
+ *     [volterraAnalyticIdentityHolds]). It checks THE DERIVATIONS THEMSELVES and not the solver:
+ *     if an error was made in the manual derivation, it will be detected here instead of silently
+ *     becoming the "baseline". A high-precision quadrature of [PRECISE_QUADRATURE_ORDER]
+ *     nodes per subinterval with a fine partition is used — it does not take part in the work of the schemes and
+ *     serves only as an independent cross-check.
  *
- *  2. СХОДИМОСТЬ схем к аналитическому решению. Проверяет уже сам решатель против
- *     эталона, доверие к которому обеспечено уровнем 1.
+ *  2. THE CONVERGENCE of the schemes to the analytic solution. It checks the solver itself against
+ *     the baseline, trust in which is ensured by level 1.
  *
- * Ключевое отличие от `problems.fredholm.FredholmProblem`: там правая часть строится
- * численно тем же оператором, который затем проверяется, из-за чего погрешность
- * квадратуры входит в обе части сравнения и частично сокращается. Здесь `f` выписана
- * аналитически, поэтому такой взаимной компенсации нет.
+ * The key difference from `problems.fredholm.FredholmProblem`: there the right-hand side is built
+ * numerically by the same operator that is then checked, because of which the quadrature error
+ * enters both sides of the comparison and partly cancels. Here `f` is written out
+ * analytically, so there is no such mutual compensation.
  */
 @Tag("slow")
 class AnalyticSolutionTest {
 
     private companion object {
         /**
-         * Порядок квадратуры для НЕЗАВИСИМОЙ проверки тождества. Он вдвое выше
-         * рабочего (8) и применяется на мелком разбиении: цель — чтобы погрешность
-         * самой проверки была заведомо ниже проверяемого допуска.
+         * The quadrature order for the INDEPENDENT check of the identity. It is twice the
+         * working one (8) and is applied on a fine partition: the goal is that the error
+         * of the check itself be definitely below the tolerance being checked.
          */
         const val PRECISE_QUADRATURE_ORDER = 16
 
-        /** Число подынтервалов составного разбиения при проверке тождества. */
+        /** The number of subintervals of the composite partition when checking the identity. */
         const val PRECISE_SUBDIVISIONS = 32
 
         /**
-         * Допуск проверки тождества `u* - K u* = f`. Величина отражает предел
-         * точности составной квадратуры высокого порядка на гладких данных.
+         * The tolerance of the check of the identity `u* - K u* = f`. The value reflects the limit
+         * of accuracy of a high-order composite quadrature on smooth data.
          */
         const val IDENTITY_TOLERANCE = 1e-12
 
-        /** Число точек, в которых проверяется тождество. */
+        /** The number of points at which the identity is checked. */
         const val IDENTITY_SAMPLE_COUNT = 21
 
-        /** Шаг центральной разности при сверке аналитических производных `f'`. */
+        /** The central difference step when cross-checking the analytic derivatives `f'`. */
         const val DERIVATIVE_STEP = 1e-5
 
-        /** Допуск сверки `f'` с центральной разностью (ошибка разности ~ h^2). */
+        /** The tolerance of the cross-check of `f'` with a central difference (the difference error is ~ h^2). */
         const val FIRST_DERIVATIVE_TOLERANCE = 1e-6
 
-        /** Шаг центральной разности при сверке `f''` (второй порядок требует большего шага). */
+        /** The central difference step when cross-checking `f''` (the second order requires a larger step). */
         const val SECOND_DERIVATIVE_STEP = 1e-4
 
-        /** Допуск сверки `f''` со второй центральной разностью. */
+        /** The tolerance of the cross-check of `f''` with a second central difference. */
         const val SECOND_DERIVATIVE_TOLERANCE = 1e-4
 
         /**
-         * Допуск для задачи, решение которой лежит в `span{1, t, t^2}`: метод обязан
-         * воспроизводить его практически точно.
+         * The tolerance for the problem whose solution lies in `span{1, t, t^2}`: the method must
+         * reproduce it practically exactly.
          */
         const val SPAN_EXACTNESS_TOLERANCE = 1e-10
 
         /**
-         * Верхняя граница погрешности на самой мелкой сетке набора. Значение выбрано
-         * с большим запасом относительно наблюдаемых величин (порядка 1e-6 и ниже):
-         * тест обязан реагировать на поломку схемы, а не на колебания константы.
+         * The upper bound of the error on the finest grid of the set. The value is chosen
+         * with a large margin relative to the observed quantities (of order 1e-6 and below):
+         * the test must react to a breakage of the scheme and not to fluctuations of a constant.
          */
         const val MAX_FINE_GRID_ERROR = 1e-3
 
-        /** Сетки для проверки сходимости схем к аналитическому решению. */
+        /** The grids for checking the convergence of the schemes to the analytic solution. */
         val GRID_SIZES = listOf(8, 16, 32)
     }
 
-    /** Квадратура для независимой проверки тождества (в схемах НЕ используется). */
+    /** The quadrature for the independent check of the identity (NOT used in the schemes). */
     private val preciseQuadrature = GaussLegendre(PRECISE_QUADRATURE_ORDER)
 
-    /** Высокоточный интеграл по `[lo, hi]` составной квадратурой. */
+    /** A high-precision integral over `[lo, hi]` by a composite quadrature. */
     private fun preciseIntegral(lo: Double, hi: Double, integrand: (Double) -> Double): Double {
         if (hi <= lo) return 0.0
         val breakpoints = DoubleArray(PRECISE_SUBDIVISIONS + 1) {
@@ -108,36 +108,36 @@ class AnalyticSolutionTest {
         return preciseQuadrature.integrate(breakpoints, integrand)
     }
 
-    /** Равномерная выборка точек отрезка `[0, 1]`. */
+    /** A uniform sample of points of the interval `[0, 1]`. */
     private fun samplePoints(): List<Double> =
         (0 until IDENTITY_SAMPLE_COUNT).map { it.toDouble() / (IDENTITY_SAMPLE_COUNT - 1) }
 
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
         "theta" -> ProjFunctionals(basis)
         "mu" -> AveragingFunctionals(basis)
-        else -> error("Неизвестное семейство функционалов: '$name'")
+        else -> error("Unknown functional family: '$name'")
     }
 
     private fun reportIfAny(failures: List<String>) {
         assertTrue(
             failures.isEmpty(),
-            "Обнаружено ${failures.size} расхождений с аналитическим эталоном:\n" +
+            "${failures.size} discrepancies with the analytic baseline were found:\n" +
                 failures.joinToString("\n").take(6000),
         )
     }
 
     // ------------------------------------------------------------------------
-    // Уровень 1: проверка САМИХ ВЫКЛАДОК (не решателя)
+    // Level 1: checking THE DERIVATIONS THEMSELVES (not the solver)
     // ------------------------------------------------------------------------
 
     /**
-     * Тождество `u*(t) - \int_0^1 K(t,s) u*(s) ds = f(t)` для всех аналитических
-     * задач Фредгольма.
+     * The identity `u*(t) - \\int_0^1 K(t,s) u*(s) ds = f(t)` for all the analytic
+     * Fredholm problems.
      *
-     * Это страховка от ошибки в ручном выводе: и `u*`, и `f` выписаны на бумаге,
-     * и если хотя бы одна из выкладок неверна, тождество нарушится. Проверка не
-     * обращается ни к базису, ни к функционалам, ни к решателю — только к ядру и
-     * независимой высокоточной квадратуре.
+     * This is an insurance against an error in the manual derivation: both `u*` and `f` are written out on paper,
+     * and if at least one of the derivations is wrong, the identity will break. The check does not
+     * address the basis, the functionals or the solver — only the kernel and
+     * an independent high-precision quadrature.
      */
     @Test
     fun fredholmAnalyticIdentityHolds() {
@@ -154,20 +154,20 @@ class AnalyticSolutionTest {
                 }
             }
             if (worstDeviation > IDENTITY_TOLERANCE) {
-                failures += "${problem.name}: |u* - K u* - f| = $worstDeviation при t=$worstPoint " +
-                    "(допуск $IDENTITY_TOLERANCE). Вывод: ${problem.derivation}"
+                failures += "${problem.name}: |u* - K u* - f| = $worstDeviation at t=$worstPoint " +
+                    "(tolerance $IDENTITY_TOLERANCE). Derivation: ${problem.derivation}"
             }
         }
         reportIfAny(failures)
     }
 
     /**
-     * Тождество `u*(t) - \int_0^t K(t,s) u*(s) ds = f(t)` для всех аналитических
-     * задач Вольтерры.
+     * The identity `u*(t) - \\int_0^t K(t,s) u*(s) ds = f(t)` for all the analytic
+     * Volterra problems.
      *
-     * Для задач с ядром свёртки это независимая проверка решения, полученного
-     * преобразованием Лапласа: образ считается прямым интегрированием, а не через
-     * операционное исчисление.
+     * For the problems with a convolution kernel this is an independent check of the solution obtained
+     * by the Laplace transform: the image is computed by direct integration rather than through
+     * operational calculus.
      */
     @Test
     fun volterraAnalyticIdentityHolds() {
@@ -184,20 +184,20 @@ class AnalyticSolutionTest {
                 }
             }
             if (worstDeviation > IDENTITY_TOLERANCE) {
-                failures += "${problem.name}: |u* - V u* - f| = $worstDeviation при t=$worstPoint " +
-                    "(допуск $IDENTITY_TOLERANCE). Вывод: ${problem.derivation}"
+                failures += "${problem.name}: |u* - V u* - f| = $worstDeviation at t=$worstPoint " +
+                    "(tolerance $IDENTITY_TOLERANCE). Derivation: ${problem.derivation}"
             }
         }
         reportIfAny(failures)
     }
 
     /**
-     * Согласованность аналитических производных правой части `f'` и `f''` с самой `f`.
+     * The consistency of the analytic derivatives of the right-hand side `f'` and `f''` with `f` itself.
      *
-     * Производные выписаны вручную и используются семействами функционалов
-     * де Бура–Фикса. Ошибка в них не проявилась бы в семействах `theta`/`mu`
-     * (они производных не читают) и осталась бы незамеченной. Сверка выполняется
-     * конечными разностями — независимо от какой-либо части проекта.
+     * The derivatives are written out by hand and are used by the de Boor–Fix functional
+     * families. An error in them would not show up in the families `theta`/`mu`
+     * (they do not read derivatives) and would stay unnoticed. The cross-check is performed
+     * by finite differences — independently of any part of the project.
      */
     @Test
     fun analyticRightHandSideDerivativesAreConsistent() {
@@ -214,12 +214,12 @@ class AnalyticSolutionTest {
                 val numericFirst =
                     (rhs(t + DERIVATIVE_STEP) - rhs(t - DERIVATIVE_STEP)) / (2 * DERIVATIVE_STEP)
                 if (abs(rhsDeriv(t) - numericFirst) > FIRST_DERIVATIVE_TOLERANCE) {
-                    failures += "$name: f'($t)=${rhsDeriv(t)} расходится с разностной $numericFirst"
+                    failures += "$name: f'($t)=${rhsDeriv(t)} disagrees with the difference value $numericFirst"
                 }
                 val h = SECOND_DERIVATIVE_STEP
                 val numericSecond = (rhs(t + h) - 2 * rhs(t) + rhs(t - h)) / (h * h)
                 if (abs(rhsDeriv2(t) - numericSecond) > SECOND_DERIVATIVE_TOLERANCE) {
-                    failures += "$name: f''($t)=${rhsDeriv2(t)} расходится с разностной $numericSecond"
+                    failures += "$name: f''($t)=${rhsDeriv2(t)} disagrees with the difference value $numericSecond"
                 }
             }
         }
@@ -234,16 +234,16 @@ class AnalyticSolutionTest {
     }
 
     // ------------------------------------------------------------------------
-    // Уровень 2: сходимость схем к аналитическому решению
+    // Level 2: the convergence of the schemes to the analytic solution
     // ------------------------------------------------------------------------
 
     /**
-     * Задача из постановки задания (`K = t*s`, `f = t`, точное решение `u* = (3/2)t`)
-     * решается ТОЧНО: линейная функция лежит в `span{1, t, t^2}` полиномиальной
-     * порождающей системы.
+     * The problem from the statement of the assignment (`K = t*s`, `f = t`, the exact solution `u* = (3/2)t`)
+     * is solved EXACTLY: a linear function lies in `span{1, t, t^2}` of the polynomial
+     * generating system.
      *
-     * Проверка охватывает всю цепочку — базис, функционалы, квадратуру, сборку
-     * матрицы и решение СЛАУ — против результата, полученного вручную на бумаге.
+     * The check covers the whole chain — the basis, the functionals, the quadrature, the assembly
+     * of the matrix and the linear solve — against a result obtained by hand on paper.
      */
     @Test
     fun separableRank1ExampleIsReproducedExactly() {
@@ -258,8 +258,8 @@ class AnalyticSolutionTest {
                 val solver = analyticFredholmSolver(problem, basis, funcs, op)
                 val error = errorEh(problem.exact, solver.base().eval, grid)
                 if (!(error < SPAN_EXACTNESS_TOLERANCE)) {
-                    failures += "${problem.name}/$familyName/n=$n: E_h=$error должно быть " +
-                        "ниже $SPAN_EXACTNESS_TOLERANCE (u*=(3/2)t лежит в span порождающей системы B)"
+                    failures += "${problem.name}/$familyName/n=$n: E_h=$error must be " +
+                        "below $SPAN_EXACTNESS_TOLERANCE (u*=(3/2)t lies in the span of the generating system B)"
                 }
             }
         }
@@ -267,32 +267,32 @@ class AnalyticSolutionTest {
     }
 
     /**
-     * Схемы `base`, `sloan`, `kulkarni` сходятся к АНАЛИТИЧЕСКОМУ решению задач
-     * Фредгольма с вырожденным ядром и задачи MMS.
+     * The schemes `base`, `sloan`, `kulkarni` converge to the ANALYTIC solution of the Fredholm
+     * problems with a degenerate kernel and of the MMS problem.
      *
-     * Проверяются два содержательных условия: погрешность убывает при измельчении
-     * сетки и на самой мелкой сетке достигает разумной абсолютной величины.
-     * Измерение порядка сходимости — предмет отдельного теста
-     * [convergence.ConvergenceOrderTest] (явная таблица ожидаемых порядков на задачах
-     * `F2`/`V2`); здесь проверяется сходимость к АНАЛИТИЧЕСКОМУ решению, а не её скорость.
+     * Two substantial conditions are checked: the error decreases under refinement of the
+     * grid and on the finest grid reaches a reasonable absolute magnitude.
+     * Measuring the convergence order is the subject of a separate test,
+     * [convergence.ConvergenceOrderTest] (an explicit table of expected orders on the problems
+     * `F2`/`V2`); here the convergence to the ANALYTIC solution is checked, not its rate.
      *
-     * ВАЖНО о семействе `mu`. Для квазиинтерполянтов схема Кулкарни реализована
-     * ПРОСТОЙ ИТЕРАЦИЕЙ (`kulkarniQuasi`), которая требует `rho(K) < 1`. На задачах
-     * [AnalyticFredholmProblem.SEPARABLE_RANK2] (`rho ~ 1.27`) и
-     * [AnalyticFredholmProblem.SEPARABLE_RANK3] (`rho ~ 1.41`) она расходится. Это
-     * ограничение МЕТОДА, а не дефект реализации и не свойство задач: сами задачи
-     * однозначно разрешимы, и прямые схемы решают их штатно. Поэтому схема Кулкарни
-     * для `mu` проверяется только на задачах с `rho < 1`, а расхождение на остальных
-     * зафиксировано отдельным тестом [quasiKulkarniDivergesWhenSpectralRadiusExceedsOne]
-     * — это осознанное ограничение, а не подгонка допуска.
+     * IMPORTANT about the family `mu`. For quasi-interpolants the Kulkarni scheme is implemented
+     * by a SIMPLE ITERATION (`kulkarniQuasi`), which requires `rho(K) < 1`. On the problems
+     * [AnalyticFredholmProblem.SEPARABLE_RANK2] (`rho ~ 1.27`) and
+     * [AnalyticFredholmProblem.SEPARABLE_RANK3] (`rho ~ 1.41`) it diverges. This is a
+     * limitation OF THE METHOD, not a defect of the implementation and not a property of the problems: the problems themselves
+     * are uniquely solvable, and the direct schemes solve them regularly. Therefore the Kulkarni scheme
+     * for `mu` is checked only on the problems with `rho < 1`, and the divergence on the rest is
+     * recorded by a separate test, [quasiKulkarniDivergesWhenSpectralRadiusExceedsOne]
+     * — this is a deliberate limitation and not a fitting of the tolerance.
      */
     @Test
     fun fredholmSchemesConvergeToAnalyticSolution() {
         val failures = mutableListOf<String>()
         for (problem in AnalyticFredholmProblem.CONVERGENT) {
             for (familyName in listOf("theta", "mu")) {
-                // Проектор theta использует редукцию Кулкарни с ПРЯМЫМ решением СЛАУ
-                // и пригоден всегда; квазиинтерполянт mu — простую итерацию.
+                // The projector theta uses the Kulkarni reduction with a DIRECT linear solve
+                // and is always applicable; the quasi-interpolant mu uses a simple iteration.
                 val iterativeKulkarni = familyName == "mu"
                 val includeKulkarni = !iterativeKulkarni || problem.supportsFixedPointSchemes
                 val errors = linkedMapOf<String, MutableList<Double>>(
@@ -319,24 +319,24 @@ class AnalyticSolutionTest {
     }
 
     /**
-     * ДОКУМЕНТИРОВАННОЕ ОГРАНИЧЕНИЕ: схема Кулкарни для квазиинтерполянтов
-     * расходится при `rho(K) > 1`, тогда как прямые схемы решают те же задачи штатно.
+     * A DOCUMENTED LIMITATION: the Kulkarni scheme for quasi-interpolants
+     * diverges at `rho(K) > 1`, whereas the direct schemes solve the same problems regularly.
      *
-     * Найдено при разработке настоящего теста: на [AnalyticFredholmProblem.SEPARABLE_RANK2]
-     * и [AnalyticFredholmProblem.SEPARABLE_RANK3] итерация даёт величины порядка 1e21
-     * и 1e29 соответственно (не зависящие от `n` — признак расходимости итерации,
-     * а не ошибки аппроксимации, которая убывала бы).
+     * Found while developing this very test: on [AnalyticFredholmProblem.SEPARABLE_RANK2]
+     * and [AnalyticFredholmProblem.SEPARABLE_RANK3] the iteration gives quantities of order 1e21
+     * and 1e29 respectively (independent of `n` — a sign of a divergence of the iteration
+     * and not of an approximation error, which would decrease).
      *
-     * Тест закрепляет три факта: (а) прямые схемы работают — значит, задача
-     * корректна и эталон верен; (б) итерационная по умолчанию СИГНАЛИЗИРУЕТ
-     * об ошибке исключением (единый контракт сходимости); (в) в режиме
-     * `throwOnDivergence = false` та же схема возвращает результат, помеченный
-     * `converged = false`, и его погрешность действительно катастрофическая.
+     * The test fixes three facts: (a) the direct schemes work — hence the problem
+     * is well posed and the baseline is right; (b) the iterative one by default SIGNALS
+     * the error with an exception (the single convergence contract); (c) in the mode
+     * `throwOnDivergence = false` the same scheme returns a result marked
+     * `converged = false`, and its error is indeed catastrophic.
      *
-     * ИСТОРИЯ: изначально тест проверял, что `kulkarni()` МОЛЧА возвращает
-     * расходящийся результат с `E_h ~ 1e21`. После введения единого контракта
-     * такое поведение стало недопустимым, и тест обновлён осознанно: именно
-     * такого падения и требовала задача 4 — молчаливый возврат больше невозможен.
+     * HISTORY: originally the test checked that `kulkarni()` SILENTLY returns
+     * a diverging result with `E_h ~ 1e21`. After the introduction of the single contract
+     * such behaviour became inadmissible, and the test was updated deliberately: it is exactly
+     * such a failure that task 4 required — a silent return is no longer possible.
      */
     @Test
     fun quasiKulkarniDivergesWhenSpectralRadiusExceedsOne() {
@@ -344,50 +344,50 @@ class AnalyticSolutionTest {
         val divergent = AnalyticFredholmProblem.ALL.filterNot { it.supportsFixedPointSchemes }
         assertTrue(
             divergent.isNotEmpty(),
-            "Набор задач обязан содержать хотя бы одну с rho > 1 для этой проверки",
+            "The set of problems must contain at least one with rho > 1 for this check",
         )
         for (problem in divergent) {
             val grid = Grid.uniform(8)
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
             val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(8))
 
-            // (а) Прямая схема на проекторе theta — задача решается штатно.
+            // (a) The direct scheme on the projector theta — the problem is solved regularly.
             val projectorSolver = analyticFredholmSolver(problem, basis, ProjFunctionals(basis), op)
             val directError = errorEh(problem.exact, projectorSolver.base().eval, grid)
             if (!(directError < MAX_FINE_GRID_ERROR)) {
-                failures += "${problem.name}: прямая схема (theta/base) обязана решать задачу " +
-                    "с rho=${problem.spectralRadius}, но E_h=$directError"
+                failures += "${problem.name}: the direct scheme (theta/base) must solve the problem " +
+                    "with rho=${problem.spectralRadius}, but E_h=$directError"
             }
 
-            // (б) По умолчанию расходимость обязана быть явной ошибкой.
+            // (b) By default a divergence must be an explicit error.
             val strictSolver = analyticFredholmSolver(problem, basis, AveragingFunctionals(basis), op)
             assertFailsWith<IllegalStateException>(
-                "${problem.name}: при rho=${problem.spectralRadius} > 1 схема обязана " +
-                    "сообщить о расходимости исключением, а не возвращать результат",
+                "${problem.name}: at rho=${problem.spectralRadius} > 1 the scheme must " +
+                    "report the divergence with an exception instead of returning a result",
             ) { strictSolver.kulkarni() }
 
-            // (в) В явно разрешённом режиме результат доступен, но помечен как несошедшийся.
+            // (c) In the explicitly permitted mode the result is available but marked as non-converged.
             val lenientSolver = analyticFredholmSolver(
                 problem, basis, AveragingFunctionals(basis), op, throwOnDivergence = false,
             )
             val solution = lenientSolver.kulkarni()
             if (solution.converged) {
-                failures += "${problem.name}: результат при rho=${problem.spectralRadius} > 1 " +
-                    "обязан быть помечен converged = false"
+                failures += "${problem.name}: the result at rho=${problem.spectralRadius} > 1 " +
+                    "must be marked converged = false"
             }
             val iterativeError = errorEh(problem.exact, solution.eval, grid)
             if (iterativeError < 1.0) {
-                failures += "${problem.name}: ожидалась расходимость kulkarniQuasi при " +
-                    "rho=${problem.spectralRadius} > 1, но получено E_h=$iterativeError. " +
-                    "Если схема улучшена — обновите ожидание осознанно"
+                failures += "${problem.name}: a divergence of kulkarniQuasi was expected at " +
+                    "rho=${problem.spectralRadius} > 1, but E_h=$iterativeError was obtained. " +
+                    "If the scheme was improved — update the expectation deliberately"
             }
         }
         reportIfAny(failures)
     }
 
     /**
-     * Схемы `base`, `sloan`, `kulkarni` сходятся к АНАЛИТИЧЕСКОМУ решению задач
-     * Вольтерры: трёх с ядром свёртки (решены преобразованием Лапласа) и одной MMS.
+     * The schemes `base`, `sloan`, `kulkarni` converge to the ANALYTIC solution of the Volterra
+     * problems: three with a convolution kernel (solved by the Laplace transform) and one MMS.
      */
     @Test
     fun volterraSchemesConvergeToAnalyticSolution() {
@@ -416,11 +416,11 @@ class AnalyticSolutionTest {
     }
 
     /**
-     * Общая проверка набора погрешностей: монотонное убывание и достижение разумной
-     * абсолютной точности на самой мелкой сетке.
+     * A common check of a set of errors: a monotone decrease and reaching a reasonable
+     * absolute accuracy on the finest grid.
      *
-     * Значения ниже [SPAN_EXACTNESS_TOLERANCE] от проверки убывания освобождаются:
-     * там доминирует шум округления, и требовать монотонности бессмысленно.
+     * Values below [SPAN_EXACTNESS_TOLERANCE] are exempt from the decrease check:
+     * there the rounding noise dominates and requiring monotonicity is pointless.
      */
     private fun collectConvergenceFailures(
         tag: String,
@@ -431,18 +431,18 @@ class AnalyticSolutionTest {
             val formatted = values.joinToString(", ") { "%.3e".format(it) }
             val detail = "$tag.$scheme: E_h(n=${GRID_SIZES.joinToString(",")}) = [$formatted]"
             if (values.any { !it.isFinite() }) {
-                failures += "$detail — присутствует нечисловое значение"
+                failures += "$detail — a non-numeric value is present"
                 continue
             }
             val fine = values.last()
             if (fine > MAX_FINE_GRID_ERROR) {
-                failures += "$detail — погрешность на мелкой сетке превышает $MAX_FINE_GRID_ERROR"
+                failures += "$detail — the error on the fine grid exceeds $MAX_FINE_GRID_ERROR"
             }
-            // Убывание проверяем только пока не достигнут уровень округления.
+            // We check the decrease only until the rounding level is reached.
             for (i in 0 until values.size - 1) {
                 if (values[i] < SPAN_EXACTNESS_TOLERANCE) break
                 if (values[i + 1] >= values[i]) {
-                    failures += "$detail — погрешность не убывает на шаге ${GRID_SIZES[i]}->" +
+                    failures += "$detail — the error does not decrease at the step ${GRID_SIZES[i]}->" +
                         "${GRID_SIZES[i + 1]}"
                     break
                 }

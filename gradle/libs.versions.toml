@@ -1,11 +1,11 @@
-# Каталог версий (Gradle version catalog).
+# Version catalog (Gradle version catalog).
 #
-# Здесь собраны версии ИНСТРУМЕНТОВ и внешних библиотек, чтобы их не приходилось
-# искать по тексту build.gradle.kts. Версии numerical-core и minimal-splines сюда
-# НЕ ВЫНЕСЕНЫ намеренно: их правит процедура обновления зависимостей, и они живут
-# в gradle.properties (`numericalCoreVersion`, `minimalSplinesVersion`). Здесь
-# объявлены только их КООРДИНАТЫ (группа и артефакт), а версия подставляется в
-# build.gradle.kts из свойства проекта.
+# This file collects the versions of TOOLS and external libraries so that they need
+# not be hunted down in the text of build.gradle.kts. The numerical-core and
+# minimal-splines versions are deliberately NOT declared here: they are updated by the
+# dependency-update procedure and live in gradle.properties (`numericalCoreVersion`,
+# `minimalSplinesVersion`). Only their COORDINATES (group and artifact) are declared
+# here, while the version is substituted in build.gradle.kts from a project property.
 
 [versions]
 kotlin = "2.0.0"
@@ -16,7 +16,7 @@ junit = "5.11.4"
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 
-# Версия задаётся в build.gradle.kts из gradle.properties (см. шапку файла).
+# The version is set in build.gradle.kts from gradle.properties (see the file header).
 numerical-core = { module = "io.github.egorkakulikov:numerical-core" }
 minimal-splines = { module = "io.github.egorkakulikov:minimal-splines" }
 

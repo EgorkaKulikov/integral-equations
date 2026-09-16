@@ -14,47 +14,47 @@ import solvers.core.reportConvergence
 import solvers.core.NewtonResult
 
 /**
- * Решатели нелинейного уравнения Урысона ВТОРОГО рода
+ * Solvers for the nonlinear Uryson equation of the SECOND kind
  * `x(t) - cL \int_a^b K(t,s,x(s)) ds = f(t)`.
  *
- * Реализованы схемы: базовая коллокация, итерация Слоана, модификация Кулкарни и её
- * итерированный вариант, простой сплайн-метод Nyström, а также комбинированный метод
- * Nyström `P_theta L + (I - P_theta) L^N_h` и его итерированный вариант.
- * Источники перечислены в `docs/REFERENCES.md`.
+ * Implemented schemes: base collocation, Sloan iteration, Kulkarni's modification and its
+ * iterated variant, the plain spline Nyström method, and the combined Nyström method
+ * `P_theta L + (I - P_theta) L^N_h` together with its iterated variant.
+ * The sources are listed in `docs/REFERENCES.md`.
  *
- * Решатель не знает о модельных задачах: правая часть передаётся функцией [rhs],
- * а множитель — параметром [cL]. Готовые фабрики для модельных задач находятся
- * в пакете `problems.uryson`.
+ * The solver knows nothing about model problems: the right-hand side is supplied as the
+ * function [rhs] and the multiplier as the parameter [cL]. Ready-made factories for the model
+ * problems live in the `problems.uryson` package.
  *
- * ПОЧЕМУ ЗДЕСЬ НЕТ ОБЩЕГО ЯДРА `solvers.core.SecondKindSolverCore`. Ядро строит
- * матрицу `M_{j,i} = chi_j(L omega_i)`, которая существует лишь для ЛИНЕЙНОГО `L`:
- * образ базисной функции не зависит от решения. У Урысона оператор нелинеен, и
- * аналогом `M` служит якобиан [CollocationCore.bMatrix], ЗАВИСЯЩИЙ от текущего
- * приближения `c`; базовая схема — цикл Ньютона, а не одно `LinearAlgebra.solve`.
+ * WHY THERE IS NO SHARED `solvers.core.SecondKindSolverCore` HERE. The core builds the
+ * matrix `M_{j,i} = chi_j(L omega_i)`, which exists only for a LINEAR `L`: the image of a
+ * basis function does not depend on the solution. In the Uryson case the operator is nonlinear,
+ * and the analogue of `M` is the Jacobian [CollocationCore.bMatrix], which DEPENDS on the
+ * current approximation `c`; the base scheme is a Newton loop, not a single `LinearAlgebra.solve`.
  *
- * @param basis базис минимальных сплайнов.
- * @param funcs семейство проекционных функционалов `theta_j`. Тип сужен до
- *        [ProjFunctionals] НЕ исторически: схемы обходят `th.nodes`/`th.coeffs`
- *        напрямую через `valueFunctional`, который на любом другом семействе
- *        падает, а в [UrysonFirstKindSolver.solveMorozov] от `usesDerivative ==
- *        false` зависит корректность `cChi()` как оценки усиления шума.
- * @param space сплайн-пространство (нужны веса Nyström `W_j`).
- * @param op оператор Урысона.
- * @param cL множитель перед интегральным оператором.
- * @param rhs правая часть `f(t)` — сырая функция, а НЕ `RhsWithDerivatives`.
- *        Производные `f` читают только `chi_j` семейств `xi`, а здесь [funcs] —
- *        всегда [ProjFunctionals] с `usesDerivative == false`: все обращения к
- *        правой части берут лишь значение. Тройка добавила бы два поля, которые
- *        никогда не читаются, но выглядели бы влияющими на результат.
- * @param tol критерий останова по норме невязки и норме шага.
- * @param maxIter предел числа итераций Ньютона в БАЗОВОЙ схеме.
- * @param kulkarniMaxIter предел числа итераций квази-Ньютона в схеме Кулкарни.
- * @param nystromMaxIter предел числа итераций Ньютона в схеме Nyström.
- * @param throwOnDivergence поведение при недостижении сходимости Ньютона:
- *        `true` (по умолчанию) — исключение, `false` — результат с
- *        `converged = false`. Ранее все три схемы только писали предупреждение
- *        в лог и возвращали результат: при программном использовании библиотеки
- *        такое предупреждение оставалось незамеченным.
+ * @param basis basis of minimal splines.
+ * @param funcs family of projection functionals `theta_j`. The type is narrowed to
+ *        [ProjFunctionals] NOT for historical reasons: the schemes traverse `th.nodes`/`th.coeffs`
+ *        directly via `valueFunctional`, which fails for any other family, while in
+ *        [UrysonFirstKindSolver.solveMorozov] the correctness of `cChi()` as a noise
+ *        amplification estimate depends on `usesDerivative == false`.
+ * @param space spline space (the Nyström weights `W_j` are needed).
+ * @param op Uryson operator.
+ * @param cL multiplier in front of the integral operator.
+ * @param rhs right-hand side `f(t)` — a raw function, NOT an `RhsWithDerivatives`.
+ *        Derivatives of `f` are read only by the `chi_j` of the `xi` families, whereas here
+ *        [funcs] is always a [ProjFunctionals] with `usesDerivative == false`: every access to
+ *        the right-hand side takes the value only. The triple would add two fields that are
+ *        never read but would look as if they influenced the result.
+ * @param tol stopping criterion on the residual norm and the step norm.
+ * @param maxIter limit on the number of Newton iterations in the BASE scheme.
+ * @param kulkarniMaxIter limit on the number of quasi-Newton iterations in Kulkarni's scheme.
+ * @param nystromMaxIter limit on the number of Newton iterations in the Nyström scheme.
+ * @param throwOnDivergence behaviour when Newton's method fails to converge:
+ *        `true` (the default) — an exception, `false` — a result with
+ *        `converged = false`. Formerly all three schemes only wrote a warning
+ *        to the log and returned the result: when the library is used programmatically
+ *        such a warning went unnoticed.
  */
 public class UrysonSecondKindSolver(
     public val basis: MinimalSplineBasis,
@@ -71,46 +71,46 @@ public class UrysonSecondKindSolver(
     public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     init {
-        // Семейство и сплайн-пространство считают ЧАСТИ ТОЙ ЖЕ задачи — тем же бэкендом.
+        // The family and the spline space compute PARTS OF THE SAME problem — with the same backend.
         NumericsContext.requireSame("UrysonSecondKindSolver", ctx, "funcs", funcs.ctx)
         NumericsContext.requireSame("UrysonSecondKindSolver", ctx, "space", space.ctx)
     }
 
     public companion object {
-        /** Критерий останова по умолчанию: близко к машинной точности. */
+        /** Default stopping criterion: close to machine precision. */
         public const val DEFAULT_TOLERANCE: Double = 1e-12
 
         /**
-         * Предел итераций Ньютона в базовой схеме. Взят с большим запасом: метод
-         * квадратично сходится за единицы итераций, а предел защищает лишь от
-         * зацикливания на вырожденных данных.
+         * Limit on Newton iterations in the base scheme. Taken with a wide margin: the method
+         * converges quadratically within a handful of iterations, and the limit only guards
+         * against looping forever on degenerate data.
          */
         public const val DEFAULT_MAX_ITERATIONS: Int = 10_000
 
         /**
-         * Предел итераций для схем Кулкарни и Nyström.
+         * Iteration limit for the Kulkarni and Nyström schemes.
          *
-         * Он существенно меньше [DEFAULT_MAX_ITERATIONS], потому что цена одной
-         * итерации здесь несопоставимо выше: схема Кулкарни на каждом шаге вычисляет
-         * вложенные интегралы, а Nyström строит конечно-разностный якобиан, требующий
-         * `P` полных вычислений правой части. Ранее это значение было зашито в код
-         * константой, из-за чего параметр `maxIter` на данные схемы не влиял вопреки
-         * документации.
+         * It is substantially smaller than [DEFAULT_MAX_ITERATIONS] because the price of one
+         * iteration here is incomparably higher: Kulkarni's scheme evaluates nested integrals
+         * at every step, and Nyström builds a finite-difference Jacobian requiring
+         * `P` full right-hand side evaluations. Formerly this value was hard-wired in the code
+         * as a constant, so the `maxIter` parameter had no effect on those schemes, contrary to
+         * the documentation.
          */
         public const val DEFAULT_FIXED_POINT_MAX_ITERATIONS: Int = 60
 
-        /** Нижняя граница критерия останова для схем, использующих аналитический якобиан. */
+        /** Lower bound of the stopping criterion for schemes using the analytic Jacobian. */
         private const val NEWTON_TOLERANCE_FLOOR = 1e-13
 
-        /** Нижняя граница критерия останова для схемы с конечно-разностным якобианом. */
+        /** Lower bound of the stopping criterion for the scheme with a finite-difference Jacobian. */
         private const val FINITE_DIFFERENCE_TOLERANCE_FLOOR = 1e-12
 
         /**
-         * Относительный шаг конечно-разностного якобиана в схеме Nyström.
+         * Relative step of the finite-difference Jacobian in the Nyström scheme.
          *
-         * Значение близко к корню из машинного эпсилона (`sqrt(2.2e-16) ~ 1.5e-8`) —
-         * это классический компромисс для односторонней разности между ошибкой
-         * усечения (растёт с шагом) и ошибкой округления (растёт при его уменьшении).
+         * The value is close to the square root of machine epsilon (`sqrt(2.2e-16) ~ 1.5e-8`) —
+         * the classical trade-off for a one-sided difference between the truncation error
+         * (grows with the step) and the round-off error (grows as the step shrinks).
          */
         private const val JACOBIAN_RELATIVE_STEP = 1e-7
     }
@@ -118,21 +118,21 @@ public class UrysonSecondKindSolver(
     public val grid: Grid = basis.grid
     public val n: Int = grid.n
 
-    /** Предвычисленные значения `theta_j(f)` для точной правой части. */
+    /** Precomputed values `theta_j(f)` for the exact right-hand side. */
     private val thetaF: DoubleArray = DoubleArray(n + 2) { k -> funcs.valueFunctional(k - 2).applyTo(rhs) }
 
     private val collocation = CollocationCore(basis, funcs, op, ctx)
 
     /**
-     * Базовая схема: `c = theta(f) + cL Xi(c)`.
+     * Base scheme: `c = theta(f) + cL Xi(c)`.
      *
-     * Решается методом Ньютона для `F(c) = c - theta(f) - cL Xi(c) = 0` с
-     * аналитическим якобианом `J = I - cL B(c)`. Ньютон выбран вместо простой
-     * итерации, поскольку сходится и при отсутствии сжатия (например, при `cL = 1`
-     * и кубическом ядре).
+     * Solved by Newton's method for `F(c) = c - theta(f) - cL Xi(c) = 0` with the
+     * analytic Jacobian `J = I - cL B(c)`. Newton is chosen over simple iteration because it
+     * converges even in the absence of contraction (for instance at `cL = 1`
+     * with a cubic kernel).
      *
-     * @return коэффициенты сплайна вместе со сведениями о сходимости Ньютона.
-     * @throws IllegalStateException при недостижении сходимости, если [throwOnDivergence].
+     * @return spline coefficients together with the Newton convergence information.
+     * @throws IllegalStateException on failure to converge, if [throwOnDivergence].
      */
     public fun solveBase(): NewtonResult {
         val c = thetaF.copyOf()
@@ -150,7 +150,7 @@ public class UrysonSecondKindSolver(
         reportConvergence(
             converged = run.converged,
             throwOnDivergence = throwOnDivergence,
-            methodName = "Ньютон (базовая схема Урысона)",
+            methodName = "Newton (base Uryson scheme)",
             iterations = run.performedSteps,
             maxIterations = maxIter,
             residual = run.residual,
@@ -161,40 +161,40 @@ public class UrysonSecondKindSolver(
     }
 
     /**
-     * Пояснение для диагностики, если счёт прерван ЗАСТОЕМ ([NewtonRun.stalled]).
+     * Diagnostic note used when the run was stopped by STALLING ([NewtonRun.stalled]).
      *
-     * Без него сообщение [reportConvergence] утверждало бы «не достигнуто за N
-     * итераций (предел M)», из чего читатель заключил бы, что поможет повышение
-     * предела. При застое это неверно: предел НЕ исчерпан, итерация просто
-     * перестала двигаться.
+     * Without it the [reportConvergence] message would claim "not attained in N
+     * iterations (limit M)", from which a reader would conclude that raising the limit
+     * helps. Under stalling that is wrong: the limit is NOT exhausted, the iteration has
+     * simply stopped moving.
      */
     private fun stallHint(run: NewtonRun): String? =
         if (!run.stalled) {
             null
         } else {
-            "Счёт прерван ЗАСТОЕМ на шаге ${run.performedSteps}: норма шага упала ниже допуска, " +
-                "а невязка осталась выше него. Предел итераций НЕ исчерпан, поэтому его повышение " +
-                "не поможет: итерация перестала двигаться (вероятные причины — плохая " +
-                "обусловленность якобиана либо его приближённость). Нужно менять сетку, " +
-                "начальное приближение или требуемую точность"
+            "run stopped by STALLING at step ${run.performedSteps}: the step norm fell below the tolerance, " +
+                "while the residual stayed above it. The iteration limit is NOT exhausted, so raising it " +
+                "will not help: the iteration has stopped moving (likely causes — poor " +
+                "conditioning of the Jacobian or its being only approximate). One has to change the grid, " +
+                "the initial guess or the requested accuracy"
         }
 
     /**
-     * Шаг Ньютона с АНАЛИТИЧЕСКИМ якобианом `I - cL B(c)`, ОБЩИЙ для базовой
-     * схемы и схемы Кулкарни.
+     * Newton step with the ANALYTIC Jacobian `I - cL B(c)`, SHARED by the base scheme
+     * and Kulkarni's scheme.
      *
-     * Совпадение ЗДЕСЬ НЕ СЛУЧАЙНОЕ и потому вынесено в одно место: у Кулкарни
-     * якобиан базовой схемы выступает ПРЕДОБУСЛАВЛИВАТЕЛЕМ квази-Ньютона ПО
-     * ПРЕДПИСАНИЮ ИСТОЧНИКА (см. KDoc [kulkarni]) — то есть тождественность шага
-     * является частью определения схемы, а не совпадением реализаций. Различие двух
-     * схем живёт ЦЕЛИКОМ в `residualAt` (`F(c)` против `c - G_K(c)`), и общий шаг
-     * это различие не размывает. Схема `nystrom` сюда НЕ входит: у неё другой,
-     * конечно-разностный якобиан и другое пространство неизвестных.
+     * The coincidence HERE IS NOT ACCIDENTAL and is therefore kept in one place: in Kulkarni's
+     * scheme the Jacobian of the base scheme acts as the PRECONDITIONER of the quasi-Newton
+     * iteration AS PRESCRIBED BY THE SOURCE (see the KDoc of [kulkarni]) — that is, the identity
+     * of the step is part of the definition of the scheme, not a coincidence of implementations.
+     * The difference between the two schemes lives ENTIRELY in `residualAt` (`F(c)` versus
+     * `c - G_K(c)`), and the shared step does not blur it. The `nystrom` scheme is NOT included
+     * here: it has a different, finite-difference Jacobian and a different space of unknowns.
      */
     private val analyticNewtonStep: (DoubleArray, DoubleArray) -> DoubleArray =
         { current, residual -> newtonStep(current, DoubleArray(n + 2) { -residual[it] }) }
 
-    /** Шаг Ньютона с якобианом `J = I - cL B(c)` (строки собираются независимо). */
+    /** Newton step with the Jacobian `J = I - cL B(c)` (the rows are assembled independently). */
     private fun newtonStep(c: DoubleArray, negativeResidual: DoubleArray): DoubleArray {
         val b = collocation.bMatrix(c)
         val jacobian = ParallelAssembly.assembleDense(n + 2, n + 2, ctx.parallel) { r, col ->
@@ -205,16 +205,16 @@ public class UrysonSecondKindSolver(
     }
 
     /**
-     * Реконструкция правой части схемы Кулкарни по коэффициентам `c` сплайна `y_h`.
+     * Reconstruction of the right-hand side of Kulkarni's scheme from the coefficients `c` of the spline `y_h`.
      *
-     * Возвращает тройку:
-     *  - `yhNodes` — значения `y_h` в узлах квадратуры [UrysohnOperator.gNode];
-     *  - `gAtSupport` — функция `g(t) = f(t) + cL (U y_h)(t)` (вычисляется в любой
-     *    точке, в частности в опорных точках функционалов);
-     *  - `gCoeffs` — коэффициенты проекции `P_theta g`.
+     * Returns a triple:
+     *  - `yhNodes` — the values of `y_h` at the quadrature nodes [UrysohnOperator.gNode];
+     *  - `gAtSupport` — the function `g(t) = f(t) + cL (U y_h)(t)` (evaluated at any
+     *    point, in particular at the support points of the functionals);
+     *  - `gCoeffs` — the coefficients of the projection `P_theta g`.
      *
-     * Блок нужен дважды: на каждой итерации квази-Ньютона (внутри `G_K`) и после
-     * выхода из цикла — при восстановлении `x_h^K = y_h + (I - P_theta) g`.
+     * The block is needed twice: on every quasi-Newton iteration (inside `G_K`) and after
+     * leaving the loop — when recovering `x_h^K = y_h + (I - P_theta) g`.
      */
     private fun projectedRhs(c: DoubleArray): Triple<DoubleArray, (Double) -> Double, DoubleArray> {
         val yhNodes = DoubleArray(op.gNode.size) { basis.evalSpline(c, op.gNode[it]) }
@@ -223,7 +223,7 @@ public class UrysonSecondKindSolver(
         return Triple(yhNodes, gAtSupport, gCoeffs)
     }
 
-    /** Базовое приближение `x_h` как сплайн. */
+    /** Base approximation `x_h` as a spline. */
     public fun base(): SolutionFunc {
         val newton = solveBase()
         val c = newton.coeffs
@@ -235,7 +235,7 @@ public class UrysonSecondKindSolver(
         )
     }
 
-    /** Итерация Слоана: `\tilde x_h(t) = f(t) + cL (U x_h)(t)`. */
+    /** Sloan iteration: `\tilde x_h(t) = f(t) + cL (U x_h)(t)`. */
     public fun sloan(): SolutionFunc {
         val newton = solveBase()
         val c = newton.coeffs
@@ -250,25 +250,25 @@ public class UrysonSecondKindSolver(
     }
 
     /**
-     * Модификация Кулкарни.
+     * Kulkarni's modification.
      *
-     * Система для `y_h = P_theta x_h^K`: `c = theta(f) + cL Theta(U(arg(c)))`, где
-     * `arg = y_h + (I - P_theta)[f + cL U(y_h)]`. Решается квази-Ньютоном, у которого
-     * в роли предобуславливателя выступает якобиан БАЗОВОЙ схемы `I - cL B(c)`.
-     * Такой выбор предписан источником и обеспечивает сходимость при отсутствии сжатия,
-     * где простая итерация расходится.
+     * The system for `y_h = P_theta x_h^K`: `c = theta(f) + cL Theta(U(arg(c)))`, where
+     * `arg = y_h + (I - P_theta)[f + cL U(y_h)]`. It is solved by a quasi-Newton iteration whose
+     * preconditioner is the Jacobian of the BASE scheme `I - cL B(c)`.
+     * That choice is prescribed by the source and secures convergence in the absence of contraction,
+     * where simple iteration diverges.
      *
-     * Итоговое приближение восстанавливается как `x_h^K = y_h + (I - P_theta)[f + cL U(y_h)]`.
+     * The final approximation is recovered as `x_h^K = y_h + (I - P_theta)[f + cL U(y_h)]`.
      */
     public fun kulkarni(): SolutionFunc {
         val fNodes = DoubleArray(op.gNode.size) { rhs(op.gNode[it]) }
 
-        /** Правая часть системы Кулкарни `G_K(c)`. */
+        /** Right-hand side of Kulkarni's system `G_K(c)`. */
         fun gK(c: DoubleArray): DoubleArray {
             val (yhNodes, _, gCoeffs) = projectedRhs(c)
             val uyhNodes = DoubleArray(op.gNode.size) { op.applyNodes(op.gNode[it], yhNodes) }
             val gNodes = DoubleArray(op.gNode.size) { fNodes[it] + cL * uyhNodes[it] }
-            // Остаток проектора в узлах квадратуры: arg = y_h + (I - P_theta) g.
+            // Projector remainder at the quadrature nodes: arg = y_h + (I - P_theta) g.
             val argNodes = DoubleArray(op.gNode.size) {
                 yhNodes[it] + gNodes[it] - basis.evalSpline(gCoeffs, op.gNode[it])
             }
@@ -295,7 +295,7 @@ public class UrysonSecondKindSolver(
         reportConvergence(
             converged = run.converged,
             throwOnDivergence = throwOnDivergence,
-            methodName = "Квази-Ньютон (схема Кулкарни Урысона)",
+            methodName = "Quasi-Newton (Uryson Kulkarni scheme)",
             iterations = run.performedSteps,
             maxIterations = kulkarniMaxIter,
             residual = run.residual,
@@ -313,29 +313,29 @@ public class UrysonSecondKindSolver(
     }
 
     /**
-     * Сплайн-метод Nyström: `x_h^N(t) = f(t) + cL sum_j theta_j(g_t) W_j`,
-     * где `g_t(s) = K(t, s, x_h^N(s))`.
+     * Spline Nyström method: `x_h^N(t) = f(t) + cL sum_j theta_j(g_t) W_j`,
+     * where `g_t(s) = K(t, s, x_h^N(s))`.
      *
-     * Неизвестными являются значения решения в опорных точках функционалов. Система
-     * решается методом Ньютона с КОНЕЧНО-РАЗНОСТНЫМ якобианом: формула не содержит
-     * вложенных интегралов, поэтому вычисление правой части дёшево, и разностный
-     * якобиан оказывается выгоднее аналитического.
+     * The unknowns are the values of the solution at the support points of the functionals. The
+     * system is solved by Newton's method with a FINITE-DIFFERENCE Jacobian: the formula contains
+     * no nested integrals, so evaluating the right-hand side is cheap and the difference
+     * Jacobian turns out to be cheaper than the analytic one.
      *
-     * Начальное приближение — проекция постоянной функции `P_theta(1)`. Нулевой старт
-     * непригоден: для ядер с `dK/du(t,s,0) = 0` (например, кубических) якобиан в нуле
-     * вырождается и метод не сдвигается с места.
+     * The initial guess is the projection of the constant function `P_theta(1)`. A zero start
+     * is unusable: for kernels with `dK/du(t,s,0) = 0` (cubic ones, for instance) the Jacobian at
+     * zero is singular and the method never moves.
      */
     public fun nystrom(): SolutionFunc {
-        // Порядок точек — ПОРЯДОК ПЕРВОГО ВХОЖДЕНИЯ при обходе `j = -2..n-1`: он задаёт
-        // нумерацию неизвестных, порядок строк якобиана и вектор начального приближения.
-        // Индексация — по паре (номер функционала, номер узла), а НЕ поиском по значению
-        // точки в `HashMap<Double, Int>`, который требовал побитового совпадения Double.
+        // The order of the points is the ORDER OF FIRST OCCURRENCE while traversing `j = -2..n-1`: it fixes
+        // the numbering of the unknowns, the row order of the Jacobian and the initial guess vector.
+        // Indexing is by the pair (functional number, node number), and NOT by looking the point value
+        // up in a `HashMap<Double, Int>`, which required bitwise equality of Doubles.
         val vfs = Array(n + 2) { funcs.valueFunctional(it - 2) }
         val support = SupportPoints.byFirstOccurrence(vfs, grid.breakpointInclusionEps)
         val pts = support.points
         val wInt = space.wInt
 
-        /** Правая часть схемы Nyström по значениям решения в опорных точках. */
+        /** Right-hand side of the Nyström scheme from the solution values at the support points. */
         fun evalAtVals(t: Double, xVals: DoubleArray): Double {
             var acc = 0.0
             for (j in -2..n - 1) {
@@ -354,17 +354,17 @@ public class UrysonSecondKindSolver(
         val constantProjection = funcs.projectorCoeffs({ 1.0 })
         val x = DoubleArray(p) { basis.evalSpline(constantProjection, pts[it]) }
         val newtonTol = maxOf(tol, FINITE_DIFFERENCE_TOLERANCE_FLOOR)
-        // Правая часть `G(x)` в ТЕКУЩЕЙ точке, передаваемая из расчёта невязки в расчёт
-        // шага. Не восстанавливается как `x - F(x)` СОЗНАТЕЛЬНО: такое обратное вычитание
-        // в IEEE 754 воспроизводит исходные биты лишь пока `x` и `G(x)` близки по порядку,
-        // а при большом разбросе порядков теряет точность — это молча сдвинуло бы числа.
-        // Повторное вычисление `G` тоже нежелательно: оно стоит `p` вычислений правой
-        // части. Передача опирается на ГАРАНТИЮ ПОРЯДКА ВЫЗОВОВ, явно записанную в KDoc
-        // параметра `stepAt` функции [runNewtonIterations]: `residualAt` всегда вызывается
-        // непосредственно перед `stepAt` в той же точке. `null` вместо мёртвого
-        // нулевого массива — не микрооптимизация, а КОНТРОЛЬ: если гарантию когда-нибудь
-        // нарушат, `error` ниже упадёт громко, тогда как нулевой массив молча дал бы
-        // неверный якобиан и правдоподобные числа.
+        // Right-hand side `G(x)` at the CURRENT point, handed over from the residual computation to the
+        // step computation. It is DELIBERATELY not recovered as `x - F(x)`: such a backward subtraction
+        // in IEEE 754 reproduces the original bits only while `x` and `G(x)` are of comparable magnitude,
+        // and loses accuracy when the magnitudes differ widely — that would silently shift the numbers.
+        // Recomputing `G` is undesirable too: it costs `p` right-hand side
+        // evaluations. The hand-over relies on the CALL-ORDER GUARANTEE written explicitly in the KDoc
+        // of the `stepAt` parameter of [runNewtonIterations]: `residualAt` is always called
+        // immediately before `stepAt` at the same point. `null` instead of a dead
+        // zero array is not a micro-optimization but a CHECK: should the guarantee ever be
+        // violated, the `error` below fails loudly, whereas a zero array would silently produce
+        // a wrong Jacobian and plausible numbers.
         var currentG: DoubleArray? = null
         val run = runNewtonIterations(
             x = x,
@@ -378,19 +378,19 @@ public class UrysonSecondKindSolver(
             stepAt = { current, residual ->
                 val gx = currentG
                     ?: error(
-                        "Нарушена гарантия порядка вызовов runNewtonIterations: stepAt вызван без " +
-                            "предшествующего residualAt, поэтому G(x) в текущей точке неизвестна.",
+                        "call-order guarantee of runNewtonIterations violated: stepAt was called without " +
+                            "a preceding residualAt, so G(x) at the current point is unknown.",
                     )
                 val jacobian = DenseMatrix.zeros(p, p)
                 for (col in 0 until p) {
                     val saved = current[col]
-                    // Шаг масштабируется величиной переменной, чтобы сохранять точность
-                    // и при больших, и при близких к нулю значениях.
+                    // The step is scaled by the magnitude of the variable, to keep accuracy
+                    // both for large values and for values close to zero.
                     val step = JACOBIAN_RELATIVE_STEP * (abs(saved) + 1.0)
                     current[col] = saved + step
                     val perturbed = DoubleArray(p) { evalAtVals(pts[it], current) }
                     current[col] = saved
-                    // F(x) = x - G(x), поэтому dF[row]/dx[col] = [row == col] - dG[row]/dx[col].
+                    // F(x) = x - G(x), hence dF[row]/dx[col] = [row == col] - dG[row]/dx[col].
                     for (row in 0 until p) {
                         val identity = if (row == col) 1.0 else 0.0
                         jacobian[row, col] = (identity * step - (perturbed[row] - gx[row])) / step
@@ -402,7 +402,7 @@ public class UrysonSecondKindSolver(
         reportConvergence(
             converged = run.converged,
             throwOnDivergence = throwOnDivergence,
-            methodName = "Ньютон (схема Nyström Урысона)",
+            methodName = "Newton (Uryson Nyström scheme)",
             iterations = run.performedSteps,
             maxIterations = nystromMaxIter,
             residual = run.residual,
@@ -419,26 +419,26 @@ public class UrysonSecondKindSolver(
     }
 
     /**
-     * КОМБИНИРОВАННЫЙ метод Nyström: `u = f + cL L_n u`,
-     * `L_n = P_theta L + (I - P_theta) L^N_h` — точный оператор на образе проектора,
-     * квадратура на его дополнении. Именно к этому оператору (а не к простому [nystrom])
-     * относятся оценки суперсходимости для полиномиальных квазиинтерполянтов
-     * (Remogna–Sbibih–Tahrichi, Mathematics 11 (2023), Art. 3236; см. `docs/REFERENCES.md`).
+     * COMBINED Nyström method: `u = f + cL L_n u`,
+     * `L_n = P_theta L + (I - P_theta) L^N_h` — the exact operator on the range of the projector,
+     * the quadrature on its complement. It is to this operator (and not to the plain [nystrom])
+     * that the superconvergence estimates for polynomial quasi-interpolants apply
+     * (Remogna–Sbibih–Tahrichi, Mathematics 11 (2023), Art. 3236; see `docs/REFERENCES.md`).
      *
-     * Система решается методом Ньютона с аналитическим якобианом по значениям решения
-     * в опорных точках функционалов и в узлах квадратуры; подробности — [CombinedNystromSolver].
+     * The system is solved by Newton's method with an analytic Jacobian in the solution values
+     * at the support points of the functionals and at the quadrature nodes; details in [CombinedNystromSolver].
      */
     public fun combinedNystrom(): SolutionFunc = CombinedNystromSolver(this).combined()
 
     /**
-     * Итерированный комбинированный Nyström: `\hat u^N_h = f + cL L u^N_h`, где `u^N_h` —
-     * решение [combinedNystrom]; однократное применение точного оператора без новой системы.
+     * Iterated combined Nyström: `\hat u^N_h = f + cL L u^N_h`, where `u^N_h` is the
+     * solution of [combinedNystrom]; a single application of the exact operator, with no new system.
      */
     public fun iteratedCombinedNystrom(): SolutionFunc = CombinedNystromSolver(this).iterated()
 
     /**
-     * Итерированный метод Кулкарни: `\hat u^K_h = f + cL L u^K_h`, где `u^K_h` — решение
-     * [kulkarni]; аналог итерации Слоана, применённой к приближению Кулкарни.
+     * Iterated Kulkarni method: `\hat u^K_h = f + cL L u^K_h`, where `u^K_h` is the solution of
+     * [kulkarni]; the analogue of the Sloan iteration applied to Kulkarni's approximation.
      */
     public fun iteratedKulkarni(): SolutionFunc {
         val k = kulkarni()

@@ -9,14 +9,14 @@ import splines.MinimalSplineBasis
 import numerics.NumericsContext
 
 /**
- * Сплайн-пространство: веса, матрица Грама и интегральные характеристики базиса.
+ * Spline space: weights, Gram matrix and integral characteristics of the basis.
  *
- * Объединяет базис, сетку и квадратуру, предоставляя величины, общие для схем
- * второго и первого рода: веса дискретной нормы, веса метода Nyström и матрицу
- * стабилизатора Тихонова.
+ * Combines basis, grid and quadrature, providing the quantities shared by the schemes of
+ * the second and the first kind: discrete-norm weights, Nyström weights and the matrix
+ * of the Tikhonov stabilizer.
  *
- * @param basis базис минимальных сплайнов.
- * @param quad квадратура для интегралов по сеточным интервалам.
+ * @param basis basis of minimal splines.
+ * @param quad quadrature for integrals over grid intervals.
  */
 public class SplineSpace(
     public val basis: MinimalSplineBasis,
@@ -28,66 +28,66 @@ public class SplineSpace(
     public val dim: Int = n + 2
 
     /**
-     * Допуск отбрасывания узлов, совпавших с концами подынтервала.
+     * Tolerance for discarding nodes that coincide with the ends of a subinterval.
      *
-     * Значение берётся из ЕДИНОГО ИСТОЧНИКА [Grid.breakpointInclusionEps] (там же —
-     * обоснование относительности и оговорка про мелкие отрезки), а не вычисляется
-     * здесь повторно: раньше та же формула дублировалась в `VolterraOperator`, причём
-     * была записана иначе (`coerceAtLeast` против `maxOf`).
+     * The value comes from the SINGLE SOURCE [Grid.breakpointInclusionEps] (which also carries
+     * the rationale for making it relative and the caveat about short intervals) instead of being
+     * recomputed here: the same formula used to be duplicated in `VolterraOperator`, and written
+     * differently there (`coerceAtLeast` versus `maxOf`).
      *
-     * ОБЪЯВЛЕНО ДО [gramRInternal] НЕ СЛУЧАЙНО: инициализаторы свойств в Kotlin
-     * выполняются в порядке объявления, а `buildGram()` вызывает [subBreakpoints],
-     * читающий этот порог. При объявлении ПОСЛЕ порог был бы ещё `0.0`, и матрица
-     * Грама считалась бы с ДРУГИМ разбиением — тихое изменение чисел без ошибки.
+     * DECLARED BEFORE [gramRInternal] ON PURPOSE: in Kotlin property initializers run in
+     * declaration order, and `buildGram()` calls [subBreakpoints], which reads this threshold.
+     * Declared AFTER, the threshold would still be `0.0`, and the Gram matrix would be built
+     * with a DIFFERENT partition — a silent change of numbers with no error.
      */
     private val breakpointEps: Double = grid.breakpointInclusionEps
 
     /**
-     * Веса дискретной нормы `w_j = (x_{j+3} - x_j)/3`, `j = -2..n-1` (индекс массива `j+2`).
+     * Discrete-norm weights `w_j = (x_{j+3} - x_j)/3`, `j = -2..n-1` (array index `j+2`).
      *
-     * Пропорциональны длине носителя сплайна `omega_j`; их сумма равна длине отрезка,
-     * что делает дискретную норму согласованной с `L^2`.
+     * They are proportional to the support length of the spline `omega_j`; their sum equals the
+     * length of the interval, which makes the discrete norm consistent with `L^2`.
      */
     private val weightsInternal: DoubleArray = DoubleArray(dim) { (grid.x(it - 2 + 3) - grid.x(it - 2)) / 3.0 }
 
     /**
-     * Веса дискретной нормы (КОПИЯ: мутация результата не затрагивает пространство).
+     * Discrete-norm weights (A COPY: mutating the result does not affect the space).
      *
-     * Поле ХОЛОДНОЕ: все вызывающие читают его один раз и сохраняют в своё поле
-     * (см. `TikhonovSolver`), поэтому копия не попадает в горячий цикл.
+     * The field is COLD: all callers read it once and store it in a field of their own
+     * (see `TikhonovSolver`), so the copy never enters a hot loop.
      */
     public val weights: DoubleArray get() = weightsInternal.copyOf()
 
-    /** Веса метода Nyström `W_j = \int_a^b omega_j(s) ds`. */
+    /** Nyström weights `W_j = \int_a^b omega_j(s) ds`. */
     private val wIntInternal: DoubleArray = DoubleArray(dim) { k ->
         val j = k - 2
         quad.integrate(grid.breakpoints) { t -> basis.omega(j, t) }
     }
 
     /**
-     * Веса метода Nyström (КОПИЯ, см. обоснование у [weights]).
+     * Nyström weights (A COPY, see the rationale at [weights]).
      *
-     * Единственный боевой читатель — `UrysonSecondKindSolver.nystrom`, где значение берётся
-     * в локальную переменную ДО цикла Ньютона.
+     * The only production reader is `UrysonSecondKindSolver.nystrom`, where the value is taken
+     * into a local variable BEFORE the Newton loop.
      */
     public val wInt: DoubleArray get() = wIntInternal.copyOf()
 
     /**
-     * Матрица Грама стабилизатора: `[R]_{i,j} = \int (omega_i omega_j + omega_i' omega_j') ds`.
+     * Gram matrix of the stabilizer: `[R]_{i,j} = \int (omega_i omega_j + omega_i' omega_j') ds`.
      *
-     * Это матрица скалярного произведения пространства Соболева `W^{1,2}`, то есть
-     * стабилизатор Тихонова штрафует и саму функцию, и её первую производную.
-     * Матрица симметрична, положительно определена и полосная: `|i-j| <= 2`, поскольку
-     * носители сплайнов, отстоящих дальше, не пересекаются.
+     * This is the inner-product matrix of the Sobolev space `W^{1,2}`, i.e. the Tikhonov
+     * stabilizer penalizes both the function itself and its first derivative.
+     * The matrix is symmetric, positive definite and banded: `|i-j| <= 2`, because the supports
+     * of splines further apart do not overlap.
      */
     private val gramRInternal: DenseMatrix = buildGram()
 
     /**
-     * Матрица Грама стабилизатора (КОПИЯ, см. обоснование у [weights]).
+     * Gram matrix of the stabilizer (A COPY, see the rationale at [weights]).
      *
-     * У [DenseMatrix] значения лежат в ОДНОМ плоском массиве, поэтому различие
-     * «поверхностная/глубокая копия» здесь исчезает вместе со строками-массивами:
-     * `copy()` копирует всё содержимое, и сквозной записи в поле больше нет.
+     * In [DenseMatrix] the values live in ONE flat array, so the distinction between
+     * "shallow/deep copy" disappears here together with the per-row arrays:
+     * `copy()` copies the whole content, and write-through into the field is gone.
      */
     public val gramR: DenseMatrix get() = gramRInternal.copy()
 
@@ -97,7 +97,7 @@ public class SplineSpace(
             val i = ki - 2
             for (kj in ki until dim) {
                 val j = kj - 2
-                if (abs(i - j) > 2) continue // полосная структура: носители не пересекаются
+                if (abs(i - j) > 2) continue // banded structure: the supports do not overlap
                 val lo = maxOf(grid.x(i), grid.x(j))
                 val hi = minOf(grid.x(i + 3), grid.x(j + 3))
                 if (hi <= lo) continue
@@ -113,7 +113,7 @@ public class SplineSpace(
         return r
     }
 
-    /** Узлы сетки внутри `[lo, hi]` плюс концы — разбиение для составной квадратуры. */
+    /** Grid nodes inside `[lo, hi]` plus the ends — the partition for the composite quadrature. */
     private fun subBreakpoints(lo: Double, hi: Double): DoubleArray {
         val pts = ArrayList<Double>()
         pts.add(lo)
@@ -125,12 +125,12 @@ public class SplineSpace(
         return pts.toDoubleArray()
     }
 
-    /** Сумма весов `sum_j w_j`; по построению должна равняться длине отрезка `b - a`. */
+    /** Sum of the weights `sum_j w_j`; by construction it must equal the interval length `b - a`. */
     public fun weightsSum(): Double = weightsInternal.sum()
 
-    /** Квадратичная форма стабилизатора `Omega(x_h) = c^T R_h c`. */
+    /** Quadratic form of the stabilizer `Omega(x_h) = c^T R_h c`. */
     public fun omegaReg(c: DoubleArray): Double {
-        // Внутри класса читаем бэкинг-поле напрямую: копия здесь была бы лишней.
+        // Inside the class the backing field is read directly: a copy would be pointless here.
         val rc = LinearAlgebra.matVec(gramRInternal, c, ctx.backend)
         var s = 0.0
         for (i in c.indices) s += c[i] * rc[i]

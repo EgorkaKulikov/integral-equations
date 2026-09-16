@@ -1,143 +1,147 @@
-# Точность результата: что библиотека гарантирует, а что нет
+# Accuracy of the result: what the library guarantees and what it does not
 
-Документ отвечает на один вопрос: **насколько можно верить числу, которое вернул
-решатель**. Он нужен потому, что успешный возврат из `solve` НЕ означает, что в
-ответе есть хоть одна верная значащая цифра, и по одному лишь результату
-отличить эти два случая нельзя.
+The document answers a single question: **how far the number returned by a solver can be
+trusted**. It is needed because a successful return from `solve` does NOT mean that the answer
+contains even one correct significant digit, and the two cases cannot be told apart from the
+result alone.
 
-## Почему это отдельный файл
+## Why this is a separate file
 
-`docs/HPC.md` описывает скорость, `docs/TESTING.md` — гейты, `docs/REFERENCES.md` —
-происхождение формул, `docs/baseline-changes.md` — протокол правки эталонов. Ни
-один из них не про **границы достижимой точности**: это отдельный предмет, и его
-дописывание в конец существующего файла сделало бы предмет того файла нечётким.
+`docs/HPC.md` describes speed, `docs/TESTING.md` the gates, `docs/REFERENCES.md` the origin of
+the formulas, `docs/baseline-changes.md` the protocol for editing the baselines. None of them
+is about **the limits of attainable accuracy**: this is a separate subject, and appending it to
+the end of an existing file would blur the subject of that file.
 
-Общая теория — обратная и прямая ошибка плотного решателя, диагностика
-`LinearAlgebra.solveDiagnosed`, типы `ForwardError` и `ConditionEstimate`, два пути
-оценки `cond` — принадлежит библиотеке `numerical-core` и изложена полностью в
+The general theory — the backward and forward error of a dense solver, the
+`LinearAlgebra.solveDiagnosed` diagnostics, the types `ForwardError` and `ConditionEstimate`,
+the two routes for estimating `cond` — belongs to the library `numerical-core` and is set out
+in full in
 [`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md).
-Здесь эти разделы сведены к резюме; предмет настоящего документа —
-уравнения **первого рода**, прежде всего задача F1 и её параметр регуляризации `alpha`.
+Here those sections are reduced to a summary; the subject of the present document is the
+equations of the **first kind**, primarily the problem F1 and its regularization parameter
+`alpha`.
 
 ---
 
-## 1. Обратная и прямая ошибка — разные величины
+## 1. Backward and forward error are different quantities
 
-Плотный решатель `LinearAlgebra.solve` из `numerical-core` **обратно устойчив**:
-постпроверка внутри `solve` контролирует только обратную ошибку `‖Ax − b‖` и по
-построению ловит лишь откровенный мусор, а прямая ошибка растёт как `cond∞(A) · ε`
-(при `cond ≈ 2.6e+10` — около 6 верных десятичных разрядов, при `1e+16` — ни одного).
-Полное изложение — [`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md).
+The dense solver `LinearAlgebra.solve` from `numerical-core` is **backward stable**:
+the post-check inside `solve` controls only the backward error `‖Ax − b‖` and by construction
+catches only outright garbage, whereas the forward error grows as `cond∞(A) · ε`
+(at `cond ≈ 2.6e+10` about 6 correct decimal digits, at `1e+16` none at all).
+The full account is in [`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md).
 
-Для уравнений первого рода существенно следующее решение, и менять его нельзя:
-проверка в `solve` сделана **по невязке, а не по обусловленности**. Задача F1
-(уравнение первого рода с `alpha = 1e-10`) **штатно** даёт `cond ~ 1e10`; отбраковывать
-её по обусловленности было бы неверно по сути — это рабочий режим метода, а не
-неисправность. Обоснование — в KDoc `LinearAlgebra.SINGULARITY_RELATIVE_TOLERANCE`.
-Отсюда и устройство диагностики: она **опциональна** и **ничего не отбраковывает**;
-решение, доверять ли числу, принимает вызывающий.
-
----
-
-## 2. Как измерить прямую ошибку
-
-`LinearAlgebra.solveDiagnosed(a, b)` возвращает то же решение, что и `solve`, плюс
-`ForwardError` с тремя режимами, разделёнными **конструкторами типа**: `Bounded`
-(граница прямой ошибки есть), `NoFiniteBound` (`σ_min = 0`, конечного `cond` нет) и
-`Unreliable` (оценка `cond` недостоверна). Источник оценки выбирается
-`ConditionSource`: `INVERSION` (O(n³), без требований) либо `SYMMETRIC_SPECTRUM`
-(метод Якоби, только для симметричных матриц, отличает «cond нет» от «cond велико»).
-Диагностика **не встроена** в `solve` и стоит отдельных O(n³). Полное изложение и
-измерения, обосновавшие разделение, — [`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md).
-
-Измерения, относящиеся к уравнениям первого рода: при `alpha <= 1e-12` невязка
-обращения `‖A A⁻¹ − I‖∞` матрицы F1 достигала `0.08…760` — результат обращения не
-имел смысла, и оценка `cond` через `INVERSION` честно сообщала `Unreliable`; на
-матрице дискретизации ядра `1/(1 + t + s)` метод Якоби даёт `σ_min` **ровно 0**, тогда
-как оценка через обращение выдавала немонотонный шум порядка `1e16…1e19`.
+For equations of the first kind the following decision is essential and must not be changed:
+the check in `solve` is made **by the residual, not by the conditioning**. The problem F1
+(an equation of the first kind with `alpha = 1e-10`) gives `cond ~ 1e10` **as a matter of
+course**; rejecting it by the conditioning would be wrong in substance — this is a working
+regime of the method, not a malfunction. The justification is in the KDoc of
+`LinearAlgebra.SINGULARITY_RELATIVE_TOLERANCE`. Hence the design of the diagnostics: it is
+**optional** and **rejects nothing**; the decision whether to trust the number is taken by the
+caller.
 
 ---
 
-## 3. Граница применимости регуляризованного пути F1 по `alpha`
+## 2. How to measure the forward error
 
-`FredholmFirstKindSolver` сводит уравнение первого рода к уравнению второго рода
-с `c_L = -1/alpha`. Элементы `M` растут как `alpha^{-1}`, `M2` — как `alpha^{-2}`,
-поэтому малое `alpha` напрямую ухудшает обусловленность.
+`LinearAlgebra.solveDiagnosed(a, b)` returns the same solution as `solve`, plus a
+`ForwardError` with three modes separated by the **constructors of the type**: `Bounded`
+(a bound on the forward error exists), `NoFiniteBound` (`σ_min = 0`, no finite `cond`) and
+`Unreliable` (the estimate of `cond` is not reliable). The source of the estimate is selected by
+`ConditionSource`: `INVERSION` (O(n³), with no requirements) or `SYMMETRIC_SPECTRUM`
+(the Jacobi method, for symmetric matrices only, distinguishing "no cond" from "cond is large").
+The diagnostics is **not built into** `solve` and costs a separate O(n³). The full account and
+the measurements that justified the separation are in [`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md).
 
-### Измеренные последствия
+The measurements that concern equations of the first kind: at `alpha <= 1e-12` the inversion
+residual `‖A A⁻¹ − I‖∞` of the F1 matrix reached `0.08…760` — the result of the inversion was
+meaningless, and the estimate of `cond` through `INVERSION` honestly reported `Unreliable`; on
+the discretization matrix of the kernel `1/(1 + t + s)` the Jacobi method gives `σ_min` equal to
+**exactly 0**, whereas the estimate through inversion produced non-monotone noise of the order
+`1e16…1e19`.
 
-Установлено независимой верификацией (вторым, независимо написанным кодом):
+---
 
-| `alpha` | расхождение между 8 законными вариантами реализации |
+## 3. The limit of applicability of the regularized F1 route in terms of `alpha`
+
+`FredholmFirstKindSolver` reduces the equation of the first kind to an equation of the second
+kind with `c_L = -1/alpha`. The entries of `M` grow as `alpha^{-1}` and those of `M2` as
+`alpha^{-2}`, so a small `alpha` directly degrades the conditioning.
+
+### Measured consequences
+
+Established by independent verification (by a second, independently written implementation):
+
+| `alpha` | discrepancy between 8 legitimate implementation variants |
 |---|---|
 | `1e-6` | `0.00 %` |
 | `1e-8` | `0.01 %` |
 | `1e-10` | **`15.19 %`** |
 
-При `alpha = 1e-10` обусловленность собранной системы составила
-`cond_inf ≈ 2.636149e+10`, и восемь законных вариантов реализации (разные порядки
-вычисления ядра и правой части, разные решатели плотной СЛАУ) дали **четыре
-различных значения** одной и той же величины:
+At `alpha = 1e-10` the conditioning of the assembled system amounted to
+`cond_inf ≈ 2.636149e+10`, and eight legitimate implementation variants (different orders of
+evaluation of the kernel and of the right-hand side, different dense linear solvers) produced
+**four different values** of one and the same quantity:
 `3.822e-05 / 4.108e-05 / 4.176e-05 / 4.402e-05`.
 
-Априорная оценка `eps · cond / значение ≈ 14.6 %` совпадает с наблюдаемым
-разбросом. **Это не ошибка в коде, а ограничение точности.**
+The a priori estimate `eps · cond / value ≈ 14.6 %` agrees with the observed spread.
+**This is not an error in the code but a limitation of accuracy.**
 
-Насколько малого изменения достаточно, чтобы сдвинуть ответ: запись точного
-решения делением `cos(ωt)/(1+t)` против умножения `cos(ωt) · p`, где `p = 1/(1+t)`,
-различается ровно **на одно округление** — и меняет результат на `7.49 %`.
+How small a change suffices to shift the answer: writing the exact solution as the division
+`cos(ωt)/(1+t)` versus the multiplication `cos(ωt) · p` with `p = 1/(1+t)` differs by exactly
+**one rounding** — and changes the result by `7.49 %`.
 
-### Практический вывод
+### Practical conclusion
 
-**Ниже примерно `alpha = 1e-8` значащих цифр в результате остаётся мало.**
-`DEFAULT_REGULARIZATION = 1e-10` попадает **именно в этот диапазон**: значение
-воспроизводит экспериментальный выбор авторов цитируемой работы, а не
-рекомендацию теории, и требует осознанного принятия. Если задача терпит большее
-`alpha`, точность будет выше.
+**Below roughly `alpha = 1e-8` few significant digits remain in the result.**
+`DEFAULT_REGULARIZATION = 1e-10` falls **precisely into that range**: the value reproduces the
+experimental choice of the authors of the cited work rather than a recommendation of the theory,
+and requires a deliberate acceptance. If the problem tolerates a larger `alpha`, the accuracy
+will be higher.
 
-Граница подтверждена и на самой библиотеке
-(`FredholmFirstKindConditionTest`): при `alpha = 1e-6` и `1e-8` оценка `cond`
-собранной матрицы достоверна, при `alpha = 1e-10` — уже нет.
-
----
-
-## 4. Самопроверка без внешнего эталона
-
-Приём, не требующий ни точного решения, ни второй реализации: посчитать величину
-**двумя алгебраически эквивалентными способами записи** и сравнить — расхождение есть
-оценка **снизу** реально доступной точности, а сверху её ограничивает `cond_inf · ε`
-(подробнее — [`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md)). Именно этот
-приём и обнаружил границу по `alpha` для F1: деление `u/(1+t)` против умножения
-`u · p` с `p = 1/(1+t)` при `alpha = 1e-10` даёт расхождение `15.19 %`, а при
-`1e-6` — `0.00 %`.
+The limit is confirmed on the library itself as well
+(`FredholmFirstKindConditionTest`): at `alpha = 1e-6` and `1e-8` the estimate of `cond` of the
+assembled matrix is reliable, at `alpha = 1e-10` it is no longer so.
 
 ---
 
-## 5. Как увидеть `cond` собранной системы
+## 4. Self-check without an external reference
 
-Для F1 число обусловленности измеримо из самого решателя:
+A technique that requires neither an exact solution nor a second implementation: compute the
+quantity **in two algebraically equivalent ways** and compare — the discrepancy is a **lower**
+estimate of the accuracy actually available, while from above it is bounded by `cond_inf · ε`
+(for details see [`numerical-core/docs/ACCURACY.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/ACCURACY.md)). It is exactly this
+technique that revealed the limit in `alpha` for F1: the division `u/(1+t)` versus the
+multiplication `u · p` with `p = 1/(1+t)` gives a discrepancy of `15.19 %` at `alpha = 1e-10`
+and of `0.00 %` at `1e-6`.
+
+---
+
+## 5. How to see the `cond` of the assembled system
+
+For F1 the condition number is measurable from the solver itself:
 
 ```kotlin
 val solver = FredholmFirstKindSolver(basis, funcs, op, rhs, rhsDeriv, alpha = 1e-10)
 val est = solver.baseCondition()
 
 println(est.valueOrNull()?.let { "cond_inf = $it" }
-    ?: "оценка недостоверна: невязка обращения ${est.inversionResidual}")
+    ?: "estimate is not reliable: inversion residual ${est.inversionResidual}")
 ```
 
-`baseCondition()` берёт **ту же** матрицу `I − M`, с которой решается система, и
-возвращает `ConditionEstimate` (тип из `numerical-core`) — с признаком достоверности,
-а не голый `Double`. Метод не вызывается ни одной схемой: его цена O(n⁴) платится
-только тем, кто явно спросил. Это ответ на требование рецензии о протоколе
-воспроизводимости: число обусловленности стало измеримым из самой библиотеки.
+`baseCondition()` takes **the same** matrix `I − M` with which the system is solved, and returns
+a `ConditionEstimate` (a type from `numerical-core`) — carrying a reliability flag rather than
+a bare `Double`. The method is not called by any scheme: its O(n⁴) cost is paid only by whoever
+asks for it explicitly. This is the answer to the reviewers' requirement of a reproducibility
+protocol: the condition number has become measurable from the library itself.
 
 ---
 
-## Сводка требований
+## Summary of the requirements
 
-1. Успешный возврат `solve` означает малую **обратную** ошибку — и только её.
-2. Прямая ошибка не оценивается, пока её не запросили через `solveDiagnosed`.
-3. Большое `cond` **не** является основанием для отбраковки: для F1 это штатный режим.
-4. Недостоверная оценка `cond` не может быть напечатана как число — этому мешает тип.
-5. При `alpha` ниже примерно `1e-8` результату F1 верить в значащих цифрах нельзя;
-   `DEFAULT_REGULARIZATION = 1e-10` лежит ниже этой границы.
+1. A successful return from `solve` means a small **backward** error — and nothing more.
+2. The forward error is not estimated until it is requested through `solveDiagnosed`.
+3. A large `cond` is **not** a ground for rejection: for F1 it is a normal regime.
+4. An unreliable estimate of `cond` cannot be printed as a number — the type prevents it.
+5. Below roughly `alpha = 1e-8` the significant digits of an F1 result cannot be trusted;
+   `DEFAULT_REGULARIZATION = 1e-10` lies below that limit.

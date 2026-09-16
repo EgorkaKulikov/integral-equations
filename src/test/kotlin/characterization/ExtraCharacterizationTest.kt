@@ -6,90 +6,90 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * ДОПОЛНИТЕЛЬНАЯ ХАРАКТЕРИЗАЦИОННАЯ СЕТЬ — закрывает дыры основного гейта
- * [EhCharacterizationTest] перед выносом общего кода решателей в базовый класс.
+ * AN ADDITIONAL CHARACTERIZATION NET — it closes the holes of the main gate
+ * [EhCharacterizationTest] before extracting the common code of the solvers into a base class.
  *
- * Что именно закрыто (основной эталон `baseline-eh.tsv` этого НЕ покрывает):
- *  - схемы `combinedNystrom` и `iteratedCombinedNystrom` обоих решателей. Их критерии
- *    останова РАЗЛИЧНЫ (Фредгольм — гауссовы узлы `op.gNode`, Вольтерра — `4n+1`
- *    равномерных контрольных точек), поэтому механическое слияние тел изменит число
- *    итераций и результат;
- *  - неравномерные сетки `quasiUniform`, `geometric`, `graded`;
- *  - отрезок `[0,2]` — на нём работает масштабирование `Grid.breakpointInclusionEps`.
+ * What exactly is closed (the main baseline `baseline-eh.tsv` does NOT cover this):
+ *  - the schemes `combinedNystrom` and `iteratedCombinedNystrom` of both solvers. Their stopping
+ *    criteria are DIFFERENT (Fredholm — the Gauss nodes `op.gNode`, Volterra — `4n+1`
+ *    uniform control points), so a mechanical merging of the bodies will change the number
+ *    of iterations and the result;
+ *  - the non-uniform grids `quasiUniform`, `geometric`, `graded`;
+ *  - the interval `[0,2]` — on it the scaling of `Grid.breakpointInclusionEps` works.
  *
- * Состав матрицы и обоснование выбора сочетаний — в KDoc [ExtraCharacterizationMatrix];
- * там же единственное перечисление сочетаний, общее для этого теста и инструмента
- * снятия [ExtraBaselineSnapshotTool] (рассинхронизация невозможна по построению).
+ * The composition of the matrix and the justification of the choice of the combinations are in the KDoc of [ExtraCharacterizationMatrix];
+ * there is also the single enumeration of the combinations, shared by this test and the snapshot
+ * tool [ExtraBaselineSnapshotTool] (a desynchronization is impossible by construction).
  *
- * Эталон: `src/test/resources/characterization/baseline-extra.tsv`. Основной эталон
- * `baseline-eh.tsv` НЕ ЗАТРАГИВАЕТСЯ и остаётся отдельным неприкосновенным гейтом.
+ * The baseline: `src/test/resources/characterization/baseline-extra.tsv`. The main baseline
+ * `baseline-eh.tsv` is NOT TOUCHED and stays a separate untouchable gate.
  *
- * ЧТО ЭТОТ ТЕСТ ЛОВИТ (проверено мутациями, см. отчёт этапа 4.1):
- *  - подмену критерия останова комбинированного Nyström в решателе Вольтерры
- *    (контрольные точки `4n+1` → гауссовы узлы, как у Фредгольма) — НО ЛОВИТ ЕЁ
- *    ТОЛЬКО КЛЮЧАМИ `*.residual`. Это важный и НЕОЧЕВИДНЫЙ результат замера:
- *    при такой подмене значения E_h и число итераций не меняются НИ НА БИТ (оба
- *    контрольных множества достаточно плотны, итерация приходит в ту же точку за то
- *    же число шагов), и сеть без ключей невязки пропустила бы эту ошибку молча;
- *  - изменение порядка суммирования в цикле сборки матрицы — расхождение выше допуска
- *    (перестановка слагаемых в плавающей арифметике не ассоциативна).
+ * WHAT THIS TEST CATCHES (verified by mutations, see the report of stage 4.1):
+ *  - a substitution of the stopping criterion of the combined Nyström in the Volterra solver
+ *    (the control points `4n+1` → the Gauss nodes, as in Fredholm) — BUT IT CATCHES IT
+ *    ONLY BY THE `*.residual` KEYS. This is an important and NON-OBVIOUS result of the measurement:
+ *    under such a substitution the E_h values and the number of iterations do not change BY A SINGLE BIT (both
+ *    control sets are dense enough, the iteration arrives at the same point in the same
+ *    number of steps), and a net without the residual keys would let this error through silently;
+ *  - a change of the summation order in the matrix assembly loop — a discrepancy above the tolerance
+ *    (a permutation of the summands in floating-point arithmetic is not associative).
  *
- * ЧЕГО ЭТОТ ТЕСТ НЕ ЛОВИТ (осознанное ограничение допуска, ПРОВЕРЕНО).
- * Сдвиг значения на 1 ULP НЕ обнаруживается. Замер: ключу
- * `F.F2.B.theta.uniform.s01.n8.combNystrom` (эталон 1.11661491164e-08) был сдвинут на
- * один ULP вверх, что дало относительное расхождение 1.48e-16, и тест остался
- * ЗЕЛЁНЫМ — допуск [ExtraCharacterizationMatrix.RELATIVE_TOLERANCE] = 1e-9 на семь
- * порядков грубее.
+ * WHAT THIS TEST DOES NOT CATCH (a deliberate limitation of the tolerance, VERIFIED).
+ * A shift of a value by 1 ULP is NOT detected. Measurement: the key
+ * `F.F2.B.theta.uniform.s01.n8.combNystrom` (baseline 1.11661491164e-08) was shifted by
+ * one ULP upwards, which gave a relative discrepancy of 1.48e-16, and the test stayed
+ * GREEN — the tolerance [ExtraCharacterizationMatrix.RELATIVE_TOLERANCE] = 1e-9 is seven
+ * orders coarser.
  *
- * Это выбрано намеренно: перестановка слагаемых при ПАРАЛЛЕЛЬНОЙ сборке матриц
- * законно даёт разницу такого масштаба, и более жёсткий допуск сделал бы сеть
- * недостоверной (ложные срабатывания вместо находок). Практическое следствие:
- * рефакторинг, меняющий только последние биты ЗНАЧЕНИЙ E_h, этот тест пройдёт —
- * и это ожидаемое, а не дефектное поведение. ОГОВОРКА: ключи `*.residual`
- * гораздо чувствительнее (см. [ExtraCharacterizationMatrix.RESIDUAL_RELATIVE_TOLERANCE]).
+ * This is chosen on purpose: a permutation of the summands under a PARALLEL assembly of the matrices
+ * legitimately gives a difference of this scale, and a stricter tolerance would make the net
+ * untrustworthy (false positives instead of findings). The practical consequence:
+ * a refactoring changing only the last bits of the E_h VALUES will pass this test —
+ * and this is expected and not defective behaviour. A CAVEAT: the `*.residual` keys
+ * are far more sensitive (see [ExtraCharacterizationMatrix.RESIDUAL_RELATIVE_TOLERANCE]).
  *
- * СТОИМОСТЬ И ТЕГ. Прогон — ~17 с (1344 значения), что не укладывается в бюджет
- * fast-набора (255 тестов за ~8 с целиком), поэтому тег — `slow`, а для отдельного
- * запуска заведена задача `./gradlew extraCharacterizationTest`.
+ * THE COST AND THE TAG. The run takes ~17 s (1344 values), which does not fit into the budget of the
+ * fast suite (255 tests in ~8 s in total), hence the tag `slow`, while for a separate
+ * run the task `./gradlew extraCharacterizationTest` is provided.
  *
- * ФОРМАТ ЭТАЛОНА: `ключ<TAB>значение<TAB>класс` (17 значащих цифр). Значение — либо
- * число, либо один из маркеров `NaN`, `Infinity`, `-Infinity`, `ERROR:<класс>`.
- * Маркеры сравниваются ПОДСТРОЧНО, а не численно: снимок фиксирует текущее поведение,
- * включая отказы, и превращение отказа в число — такое же изменение поведения, как
- * и изменение самого числа.
+ * THE BASELINE FORMAT: `key<TAB>value<TAB>class` (17 significant digits). The value is either
+ * a number, or one of the markers `NaN`, `Infinity`, `-Infinity`, `ERROR:<class>`.
+ * The markers are compared AS STRINGS and not numerically: the snapshot records the current behaviour,
+ * failures included, and turning a failure into a number is the same change of behaviour as
+ * a change of the number itself.
  *
- * РЕЖИМ СРАВНЕНИЯ БЕРЁТСЯ ИЗ КОЛОНКИ `класс`, а не из суффикса ключа. Прежде здесь
- * стояла цепочка `if (key.endsWith(".residual"))`, выбиравшая одну из пяти пар
- * «допуск + пол»; теперь режим — свойство ДАННЫХ ([BaselineClass], [BaselineFormat]),
- * а колонка ВЫЧИСЛЯЕТСЯ задачей `./gradlew classifyBaseline`. В этом файле встречаются
- * `portable` (значения E_h), `residual` (отн. 1e-3 при шуме 6e-15) и `exact`
- * (счётчики `*.iters` — строгое равенство строк).
+ * THE COMPARISON MODE IS TAKEN FROM THE `class` COLUMN, and not from the suffix of the key. Previously there
+ * was a chain `if (key.endsWith(".residual"))` here, choosing one of five pairs
+ * "tolerance + floor"; now the mode is a property of the DATA ([BaselineClass], [BaselineFormat]),
+ * and the column is COMPUTED by the task `./gradlew classifyBaseline`. In this file occur
+ * `portable` (the E_h values), `residual` (rel. 1e-3 at the noise 6e-15) and `exact`
+ * (the `*.iters` counters — a strict equality of the strings).
  *
- * ТЕГА `machine` БОЛЬШЕ НЕТ. Измерение: снятие матрицы на `-Dnumerics.backend=java`
- * и на `native` даёт 0 падений гейта на ОБОИХ бэкендах (максимум расхождения —
- * 1.0e-15 абс. у ключей E_h и 1.33e-2 отн. у ключей `*.residual` при значении ~1e-14,
- * всё поглощается полами), а счётчики `*.iters` не разошлись ни разу (0 из 336).
- * То есть привязки к машине у этого эталона не было вовсе, и гейт гоняется в CI.
+ * THE `machine` TAG IS GONE. The measurement: shooting the matrix on `-Dnumerics.backend=java`
+ * and on `native` gives 0 gate failures on BOTH backends (the maximum discrepancy is
+ * 1.0e-15 abs. for the E_h keys and 1.33e-2 rel. for the `*.residual` keys at a value of ~1e-14,
+ * all absorbed by the floors), and the `*.iters` counters never diverged (0 of 336).
+ * That is, this baseline had no binding to a machine at all, and the gate runs in CI.
  */
 @Tag("slow")
 class ExtraCharacterizationTest {
 
-    /** Пара «ключ эталона -> зафиксированное значение и класс сравнения». */
+    /** The pair "baseline key -> the recorded value and the comparison class". */
     private val baseline: Map<String, BaselineEntry> by lazy {
         val resource = javaClass.getResourceAsStream(ExtraCharacterizationMatrix.RESOURCE_PATH)
-            ?: fail("Не найден файл эталона ${ExtraCharacterizationMatrix.RESOURCE_PATH}")
+            ?: fail("The baseline file ${ExtraCharacterizationMatrix.RESOURCE_PATH} is not found")
         resource.bufferedReader().useLines {
             BaselineFormat.parse(it, ExtraCharacterizationMatrix.RESOURCE_PATH)
         }
     }
 
     /**
-     * Сверяет свежий прогон всей дополнительной матрицы с эталоном.
+     * Cross-checks a fresh run of the whole additional matrix against the baseline.
      *
-     * Проверяются обе стороны соответствия: и что каждое вычисленное значение совпало
-     * с эталонным, и что в эталоне не осталось ключей, которых больше не производит
-     * матрица (иначе удаление сочетания из [ExtraCharacterizationMatrix] тихо сузило бы
-     * сеть, а тест остался бы зелёным).
+     * Both sides of the correspondence are checked: both that every computed value matched
+     * the baseline one, and that no keys are left in the baseline that the matrix no longer
+     * produces (otherwise removing a combination from [ExtraCharacterizationMatrix] would quietly narrow
+     * the net while the test stayed green).
      */
     @Test
     fun extraMatrixMatchesBaseline() {
@@ -99,7 +99,7 @@ class ExtraCharacterizationTest {
         for ((key, actualValue) in actual) {
             val expected = baseline[key]
             if (expected == null) {
-                mismatches += "$key: отсутствует в эталоне (вычислено $actualValue)"
+                mismatches += "$key: absent from the baseline (computed $actualValue)"
                 continue
             }
             BaselineFormat.compare(key, expected, actualValue)?.let { mismatches += it }
@@ -108,14 +108,14 @@ class ExtraCharacterizationTest {
         val producedKeys = actual.map { it.first }.toSet()
         for (key in baseline.keys.sorted()) {
             if (key !in producedKeys) {
-                mismatches += "$key: есть в эталоне, но больше не вычисляется (сочетание исчезло из матрицы)"
+                mismatches += "$key: present in the baseline but no longer computed (the combination disappeared from the matrix)"
             }
         }
 
         assertTrue(
             mismatches.isEmpty(),
-            "Обнаружено изменение численного поведения дополнительной матрицы " +
-                "(${mismatches.size} из ${actual.size} значений):\n" +
+            "A change of the numerical behaviour of the additional matrix was detected " +
+                "(${mismatches.size} of ${actual.size} values):\n" +
                 mismatches.joinToString("\n").take(6000),
         )
     }

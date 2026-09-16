@@ -1,66 +1,66 @@
 # integral-equations
 
-Численное решение интегральных уравнений первого и второго рода методом сплайн-коллокации
-на квадратичных минимальных сплайнах. Рассматриваются три класса уравнений: линейное
-уравнение Фредгольма `u(t) − λ∫ₐᵇ K(t,s) u(s) ds = f(t)` с постоянными пределами
-интегрирования, линейное уравнение Вольтерры `u(t) − λ∫ₐᵗ K(t,s) u(s) ds = f(t)`
-с переменным верхним пределом и нелинейное уравнение Урысона
-`u(t) − ∫ₐᵇ K(t,s,u(s)) ds = f(t)`. Репозиторий содержит решатели, модельные задачи,
-демонстрационные расчёты и численную верификацию; как библиотека он не публикуется.
+Numerical solution of integral equations of the first and second kind by spline collocation
+on quadratic minimal splines. Three classes of equations are considered: the linear Fredholm
+equation `u(t) − λ∫ₐᵇ K(t,s) u(s) ds = f(t)` with constant limits of integration, the linear
+Volterra equation `u(t) − λ∫ₐᵗ K(t,s) u(s) ds = f(t)` with a variable upper limit, and the
+nonlinear Uryson equation `u(t) − ∫ₐᵇ K(t,s,u(s)) ds = f(t)`. The repository contains solvers,
+model problems, demonstration runs and numerical verification; it is not published as a library.
 
-## Обоснование
+## Rationale
 
-Для уравнений второго рода реализованы базовая коллокация, итерация Слоана, схема Кулкарни
-и её итерированный вариант, метод Нюстрёма, комбинированный оператор
-`L_n = P_χ L + (I − P_χ) L^N_h` и его итерированный вариант. Все схемы строятся над
-произвольной порождающей системой — полиномиальной, гиперболической или тригонометрической —
-и над пятью семействами аппроксимационных функционалов, тогда как известные реализации
-ограничены полиномиальным случаем. Уравнения первого рода некорректны по Адамару и решаются
-с регуляризацией: сведением к уравнению второго рода с `c_L = −1/α` (Фредгольм),
-дифференцированием (Вольтерра), стабилизатором Тихонова с выбором параметра по принципу
-невязки Морозова (Урысон).
+For equations of the second kind the repository implements plain collocation, Sloan iteration,
+the Kulkarni scheme and its iterated variant, the Nyström method, the combined operator
+`L_n = P_χ L + (I − P_χ) L^N_h` and its iterated variant. All schemes are built over an
+arbitrary generating system — polynomial, hyperbolic or trigonometric — and over five families
+of approximation functionals, whereas known implementations are restricted to the polynomial
+case. Equations of the first kind are ill-posed in the sense of Hadamard and are solved with
+regularization: by reduction to an equation of the second kind with `c_L = −1/α` (Fredholm),
+by differentiation (Volterra), and by a Tikhonov stabilizer with the parameter chosen by
+Morozov's discrepancy principle (Uryson).
 
-Каждая схема сопровождается ссылкой на первичную публикацию, а её результат проверяется
-средствами, не зависящими от кода проекта: аналитически точными решениями, опубликованными
-таблицами, сверкой со SciPy/NumPy и независимо написанным эталонным методом Нюстрёма.
-Характеризационные эталоны фиксируют, что результат не изменился, но не доказывают его
-правильности, поэтому внешние средства верификации остаются основными.
+Every scheme comes with a reference to its primary publication, and its result is checked by
+means independent of the project code: analytically exact solutions, published tables,
+a cross-check against SciPy/NumPy and an independently written reference Nyström method.
+The characterization baselines record that a result has not changed, but they do not prove
+it correct, so the external verification means remain the primary ones.
 
-Сетки, сплайны, аппроксимационные функционалы, квадратура и плотная линейная алгебра
-берутся из библиотек `minimal-splines` (пакеты `splines.*`) и `numerical-core`
-(пакеты `numerics.*`); в этом репозитории они не дублируются.
+Grids, splines, approximation functionals, quadrature and dense linear algebra are taken from
+the libraries `minimal-splines` (packages `splines.*`) and `numerical-core` (packages
+`numerics.*`); they are not duplicated in this repository.
 
-## Сборка и запуск
+## Build and run
 
-Требуется JDK 21 или новее; Gradle поставляется wrapper'ом. Обе библиотеки подключаются
-только как опубликованные артефакты, их версии закреплены в `gradle.properties`
-(`numericalCoreVersion`, `minimalSplinesVersion`) и разрешаются через `mavenLocal()` — после
-`./gradlew publishToMavenLocal` в каждой из библиотек — либо через GitHub Packages, чтение
-которых требует токена с правом `read:packages` (`gpr.user` и `gpr.token`
-в `~/.gradle/gradle.properties` либо переменные `GITHUB_ACTOR` и `GITHUB_TOKEN`).
+JDK 21 or newer is required; Gradle is supplied by the wrapper. Both libraries are consumed as
+published artifacts only, their versions are pinned in `gradle.properties`
+(`numericalCoreVersion`, `minimalSplinesVersion`) and are resolved through `mavenLocal()` —
+after `./gradlew publishToMavenLocal` in each library — or through GitHub Packages, reading
+which requires a token with the `read:packages` scope (`gpr.user` and `gpr.token`
+in `~/.gradle/gradle.properties`, or the variables `GITHUB_ACTOR` and `GITHUB_TOKEN`).
 
-    ./gradlew fastTest      # быстрый набор проверок, единицы секунд
-    ./gradlew build         # компиляция всех наборов исходников и численные гейты, около 9 минут
-    ./gradlew runFredholm   # таблицы сходимости для уравнения Фредгольма
-    ./gradlew runVolterra   # то же для уравнения Вольтерры
-    ./gradlew runUryson     # то же для уравнения Урысона
-    ./gradlew runBenchmark  # измерение производительности
+    ./gradlew fastTest      # fast set of checks, a few seconds
+    ./gradlew build         # compilation of all source sets and numerical gates, about 9 minutes
+    ./gradlew runFredholm   # convergence tables for the Fredholm equation
+    ./gradlew runVolterra   # the same for the Volterra equation
+    ./gradlew runUryson     # the same for the Uryson equation
+    ./gradlew runBenchmark  # performance measurement
 
-Задача `build` включает гейты, привязанные к машине снятия эталонов; в непрерывной
-интеграции они отключаются свойством `-PmachineDependentGates=false`.
+The `build` task includes gates bound to the machine on which the baselines were captured;
+in continuous integration they are disabled by the property `-PmachineDependentGates=false`.
 
-## Документация
+## Documentation
 
-Границы достижимой точности уравнений первого рода описаны в `docs/ACCURACY.md`;
-вычислительная эффективность, параллельная сборка матриц и бенчмарк — в `docs/HPC.md`;
-источники схем и средства их верификации — в `docs/REFERENCES.md`; состав тестовых наборов,
-задачи Gradle и непрерывная интеграция — в `docs/TESTING.md`; протокол изменения численных
-эталонов и история их правок — в `docs/baseline-changes.md`. Правила внесения изменений
-изложены в `CONTRIBUTING.md`, реферат программы для государственной регистрации —
-в `docs/ABSTRACT.md`.
+The limits of attainable accuracy for equations of the first kind are described in
+`docs/ACCURACY.md`; computational efficiency, parallel matrix assembly and the benchmark
+in `docs/HPC.md`; the sources of the schemes and the means of their verification in
+`docs/REFERENCES.md`; the composition of the test sets, the Gradle tasks and continuous
+integration in `docs/TESTING.md`; the protocol for changing the numerical baselines and the
+history of their edits in `docs/baseline-changes.md`. The rules for making changes are set out
+in `CONTRIBUTING.md`, and the program abstract for state registration — in `docs/ABSTRACT.md`
+(kept in Russian, as required by the registration procedure).
 
-## Лицензия
+## License
 
-Проект распространяется на условиях Apache License 2.0; правообладатель — Куликов Егор
-Константинович. Текст лицензии находится в файле `LICENSE`, сведения о сторонних
-компонентах — в файле `NOTICE`.
+The project is distributed under the terms of the Apache License 2.0; the copyright holder is
+Egor Konstantinovich Kulikov. The text of the license is in the file `LICENSE`, and information
+about third-party components is in the file `NOTICE`.

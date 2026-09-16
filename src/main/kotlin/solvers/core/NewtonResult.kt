@@ -1,21 +1,21 @@
 package solvers.core
 
 /**
- * Результат итераций Ньютона в пространстве коэффициентов.
+ * Result of the Newton iterations in the coefficient space.
  *
- * Ранее [UrysonSecondKindSolver.solveBase] возвращал `Pair<DoubleArray, Int>`, из которого
- * было невозможно узнать, сошлась ли итерация: число итераций, равное пределу,
- * одинаково возникает и при сходимости на последнем шаге, и при расходимости.
+ * Previously [UrysonSecondKindSolver.solveBase] returned a `Pair<DoubleArray, Int>` from which
+ * it was impossible to tell whether the iteration had converged: an iteration count equal to the limit
+ * arises alike on convergence at the last step and on divergence.
  *
- * @param coeffs найденные коэффициенты сплайна.
- * @param converged признак достижения сходимости.
- * @param iterations число ФАКТИЧЕСКИ ВЫПОЛНЕННЫХ шагов Ньютона (см. [NewtonRun]);
- *        `0` означает, что коэффициенты не изменились относительно начального
- *        приближения.
- * @param residual норма невязки. При `converged == true` — измеренная В ТОЙ ЖЕ
- *        точке, что возвращается в [coeffs]. При исчерпании предела шагов — невязка
- *        ПЕРЕД ПОСЛЕДНИМ шагом, а НЕ в возвращаемой точке: сознательное ограничение,
- *        полное обоснование — в KDoc [runNewtonIterations] и [NewtonRun.residual].
+ * @param coeffs the spline coefficients found.
+ * @param converged convergence flag.
+ * @param iterations number of Newton steps ACTUALLY PERFORMED (see [NewtonRun]);
+ *        `0` means that the coefficients did not change relative to the initial
+ *        guess.
+ * @param residual norm of the residual. When `converged == true` it is measured AT THE SAME
+ *        point that is returned in [coeffs]. When the step limit is exhausted it is the residual
+ *        BEFORE THE LAST step and NOT at the returned point: a deliberate limitation, the
+ *        full rationale is in the KDoc of [runNewtonIterations] and [NewtonRun.residual].
  */
 public class NewtonResult(
     public val coeffs: DoubleArray,

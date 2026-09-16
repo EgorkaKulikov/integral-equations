@@ -18,41 +18,41 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * ЕДИНЫЙ КОНТРАКТ ДИАГНОСТИКИ РАСХОДИМОСТИ (задача 4).
+ * SINGLE DIAGNOSTIC CONTRACT FOR DIVERGENCE (task 4).
  *
- * До введения контракта итерационные схемы вели себя по-разному: комбинированный
- * Nyström бросал исключение, `kulkarniQuasi` в обоих линейных решателях МОЛЧА
- * возвращал последний итерант, а схемы Урысона лишь писали предупреждение в лог.
- * Пользователь библиотеки не мог отличить сошедшийся результат от расходящегося:
- * при программном использовании запись в журнал остаётся незамеченной.
+ * Before the contract, the iterative schemes behaved differently: the combined
+ * Nyström threw an exception, `kulkarniQuasi` in both linear solvers SILENTLY
+ * returned the last iterate, and the Uryson schemes only wrote a warning to the log.
+ * A user of the library could not tell a converged result from a diverging one:
+ * in programmatic use a log record goes unnoticed.
  *
- * Здесь проверяется, что контракт соблюдается: по умолчанию — исключение, а в режиме
- * `throwOnDivergence = false` — результат с `converged = false` и содержательной
- * невязкой.
+ * Here it is checked that the contract holds: by default an exception, and in the
+ * `throwOnDivergence = false` mode a result with `converged = false` and a meaningful
+ * residual.
  *
- * Задача для проверки расходимости выбрана НЕ произвольно: ядро `K = 4` на `[0,1]`
- * даёт норму оператора `||L|| = 4 > 1`, поэтому простая итерация, лежащая в основе
- * схемы Кулкарни для квазиинтерполянтов и комбинированного Nyström, заведомо
- * расходится при любом числе шагов. Это свойство самой задачи, а не следствие
- * малого предела итераций.
+ * The problem for the divergence check is chosen NOT arbitrarily: the kernel `K = 4` on `[0,1]`
+ * gives the operator norm `||L|| = 4 > 1`, so the simple iteration underlying the Kulkarni
+ * scheme for quasi-interpolants and the combined Nyström diverges for any number of
+ * steps. This is a property of the problem itself, not a consequence of a small
+ * iteration limit.
  */
 @Tag("fast")
 class DivergenceContractTest {
 
     private companion object {
-        /** Ядро с нормой оператора 4 > 1: простая итерация обязана расходиться. */
+        /** Kernel with operator norm 4 > 1: the simple iteration must diverge. */
         val DIVERGENT_KERNEL = KernelF(k = { _, _ -> 4.0 })
     }
 
-    /** Строит решатель заведомо расходящейся задачи с заданной политикой. */
+    /** Builds a solver of a deliberately diverging problem with the given policy. */
     private fun divergentSolver(
         throwOnDivergence: Boolean,
         useQuasiInterpolant: Boolean,
     ): FredholmSecondKindSolver {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
-        // mu — квазиинтерполянт: kulkarni() уходит в итерационную ветвь kulkarniQuasi.
-        // theta — проектор: kulkarni() решает СЛАУ, итераций нет.
+        // mu is a quasi-interpolant: kulkarni() goes into the iterative branch kulkarniQuasi.
+        // theta is a projector: kulkarni() solves a linear system, no iterations.
         val funcs = if (useQuasiInterpolant) AveragingFunctionals(basis) else ProjFunctionals(basis)
         val op = FredholmOperator(DIVERGENT_KERNEL, grid, GaussLegendre(8))
         return FredholmSecondKindSolver(
@@ -67,66 +67,66 @@ class DivergenceContractTest {
     }
 
     /**
-     * По умолчанию схема Кулкарни для квазиинтерполянта обязана БРОСАТЬ исключение,
-     * а не возвращать последний итерант, как было ранее.
+     * By default the Kulkarni scheme for a quasi-interpolant must THROW an exception
+     * instead of returning the last iterate, as it did before.
      */
     @Test
     fun quasiKulkarniThrowsByDefaultOnDivergence() {
         val solver = divergentSolver(throwOnDivergence = true, useQuasiInterpolant = true)
         val failure = assertFailsWith<IllegalStateException> { solver.kulkarni() }
         val message = failure.message ?: ""
-        // Сообщение обязано быть диагностическим: без числа итераций и достигнутой
-        // невязки пользователь не может понять, что произошло.
+        // The message must be diagnostic: without the iteration count and the attained
+        // residual the user cannot understand what happened.
         assertTrue(
-            message.contains("сходимость не достигнута", ignoreCase = true),
-            "Сообщение должно явно называть причину, получено: $message",
+            message.contains("convergence not reached", ignoreCase = true),
+            "The message must name the cause explicitly, got: $message",
         )
         assertTrue(
-            message.contains("итераций") && message.contains("требуется"),
-            "Сообщение должно содержать число итераций и требуемую точность, получено: $message",
+            message.contains("iteration") && message.contains("required"),
+            "The message must report the iteration count and the required accuracy, got: $message",
         )
     }
 
     /**
-     * В режиме `throwOnDivergence = false` тот же вызов обязан вернуть результат,
-     * ЯВНО помеченный как несошедшийся, с содержательной невязкой. Это и есть
-     * осознанный доступ к несошедшемуся результату для исследовательских сценариев.
+     * In the `throwOnDivergence = false` mode the same call must return a result
+     * EXPLICITLY marked as non-converged, with a meaningful residual. This is the
+     * deliberate access to a non-converged result for research scenarios.
      */
     @Test
     fun quasiKulkarniReportsNotConvergedWhenAllowed() {
         val solver = divergentSolver(throwOnDivergence = false, useQuasiInterpolant = true)
         val solution = solver.kulkarni()
-        assertFalse(solution.converged, "Расходящийся результат обязан быть помечен converged = false")
+        assertFalse(solution.converged, "A diverging result must be marked converged = false")
         assertTrue(
             solution.iterations > 0,
-            "Число выполненных итераций обязано быть осмысленным, получено ${solution.iterations}",
+            "The number of performed iterations must be meaningful, got ${solution.iterations}",
         )
         assertTrue(
             solution.residual > 0.0 && !solution.residual.isNaN(),
-            "Достигнутая невязка обязана быть содержательной, получено ${solution.residual}",
+            "The attained residual must be meaningful, got ${solution.residual}",
         )
     }
 
-    /** Тот же контракт для комбинированного оператора Nyström. */
+    /** The same contract for the combined Nyström operator. */
     @Test
     fun combinedNystromFollowsSameContract() {
         assertFailsWith<IllegalStateException>(
-            "По умолчанию комбинированный Nyström обязан бросать исключение при расходимости",
+            "By default the combined Nyström must throw an exception on divergence",
         ) {
             divergentSolver(throwOnDivergence = true, useQuasiInterpolant = false).combinedNystrom()
         }
 
         val solution = divergentSolver(throwOnDivergence = false, useQuasiInterpolant = false)
             .combinedNystrom()
-        assertFalse(solution.converged, "Расходящийся результат обязан быть помечен converged = false")
-        assertTrue(solution.residual > 0.0, "Невязка обязана быть содержательной")
+        assertFalse(solution.converged, "A diverging result must be marked converged = false")
+        assertTrue(solution.residual > 0.0, "The residual must be meaningful")
     }
 
     /**
-     * Признак сходимости НАСЛЕДУЕТСЯ производными схемами. Итерация Слоана поверх
-     * расходящегося приближения сама итераций не делает, но её результат осмыслен
-     * лишь тогда, когда осмыслено исходное приближение, — иначе `converged = true`
-     * у итерированной схемы скрывал бы расходимость базовой.
+     * The convergence flag is INHERITED by derived schemes. The Sloan iteration on top of
+     * a diverging approximation performs no iterations itself, but its result is meaningful
+     * only when the underlying approximation is meaningful — otherwise `converged = true`
+     * of the iterated scheme would hide the divergence of the base one.
      */
     @Test
     fun iteratedSchemesInheritConvergenceFlag() {
@@ -134,14 +134,14 @@ class DivergenceContractTest {
         val iterated = solver.iteratedKulkarni()
         assertFalse(
             iterated.converged,
-            "Итерированная схема обязана наследовать признак расходимости базовой",
+            "The iterated scheme must inherit the divergence flag of the base one",
         )
     }
 
     /**
-     * ПРЯМЫЕ схемы (СЛАУ без итераций) на штатной задаче сообщают тривиальную
-     * сходимость: `converged = true`, `iterations = 0`. Проверка защищает от
-     * противоположной ошибки — пометки корректного результата как несошедшегося.
+     * DIRECT schemes (a linear system without iterations) report trivial convergence
+     * on a regular problem: `converged = true`, `iterations = 0`. The check guards against
+     * the opposite mistake: marking a correct result as non-converged.
      */
     @Test
     fun directSchemesReportTrivialConvergence() {
@@ -161,13 +161,13 @@ class DivergenceContractTest {
         for ((name, solution) in listOf(
             "base" to solver.base(),
             "sloan" to solver.sloan(),
-            "kulkarni (проектор)" to solver.kulkarni(),
+            "kulkarni (projector)" to solver.kulkarni(),
             "nystrom" to solver.nystrom(),
         )) {
-            assertTrue(solution.converged, "Прямая схема $name обязана сообщать converged = true")
+            assertTrue(solution.converged, "Direct scheme $name must report converged = true")
             assertTrue(
                 solution.iterations == 0,
-                "Прямая схема $name итераций не выполняет, получено ${solution.iterations}",
+                "Direct scheme $name performs no iterations, got ${solution.iterations}",
             )
         }
     }

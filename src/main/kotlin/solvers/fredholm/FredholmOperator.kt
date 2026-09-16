@@ -6,18 +6,18 @@ import splines.functionals.*
 import splines.metrics.*
 
 /**
- * Ядро K(t,s) линейного уравнения Фредгольма вместе с аналитическими частными
- * производными.
+ * The kernel K(t,s) of a linear Fredholm equation together with its analytic partial
+ * derivatives.
  *
- * @param k само ядро `K(t,s)`.
- * @param kT производная `K_t(t,s)`; требуется семействам функционалов
- *        де Бура–Фикса `xi^<1>`, `xi^<2>`.
- * @param kTT вторая производная `K_tt(t,s)`; требуется семейству `xi^<0>`.
+ * @param k the kernel `K(t,s)` itself.
+ * @param kT the derivative `K_t(t,s)`; required by the de Boor–Fix functional families
+ *        `xi^<1>`, `xi^<2>`.
+ * @param kTT the second derivative `K_tt(t,s)`; required by the family `xi^<0>`.
  *
- * Значения по умолчанию равны нулю и допустимы ТОЛЬКО тогда, когда соответствующая
- * производная действительно тождественно нулевая, либо когда выбранное семейство
- * функционалов её не использует: иначе система будет построена неверно без какой-либо
- * диагностики.
+ * The default values are zero and are admissible ONLY when the corresponding
+ * derivative is indeed identically zero, or when the chosen family of
+ * functionals does not use it: otherwise the system is built incorrectly without any
+ * diagnostics.
  */
 public class KernelF(
     public val k: (Double, Double) -> Double,
@@ -26,30 +26,30 @@ public class KernelF(
 )
 
 /**
- * Оператор Фредгольма `(K u)(t) = \int_a^b K(t,s) u(s) ds` с постоянными пределами
- * интегрирования.
+ * Fredholm operator `(K u)(t) = \int_a^b K(t,s) u(s) ds` with constant integration
+ * limits.
  *
- * При создании предвычисляются глобальные гауссовы узлы [gNode] и веса [gW]
- * составной квадратуры, так что `\int h = sum_k gW[k] * h(gNode[k])`. Это позволяет
- * многократно применять оператор к уже вычисленным в этих узлах значениям функции
- * (см. [applyNodes]), не пересчитывая её заново.
+ * At construction time the global Gauss nodes [gNode] and weights [gW] of the composite
+ * quadrature are precomputed, so that `\int h = sum_k gW[k] * h(gNode[k])`. This makes it possible
+ * to apply the operator repeatedly to the function values already computed at those nodes
+ * (see [applyNodes]) without recomputing them.
  *
- * @param kernel ядро уравнения.
- * @param grid сетка, задающая отрезок `[a,b]` и точки разбиения для составной квадратуры.
- * @param quad квадратурная формула Гаусса–Лежандра на ячейке.
+ * @param kernel kernel of the equation.
+ * @param grid grid defining the interval `[a,b]` and the breakpoints of the composite quadrature.
+ * @param quad Gauss–Legendre quadrature rule on a cell.
  */
 public class FredholmOperator(public val kernel: KernelF, public val grid: Grid, public val quad: GaussLegendre) {
     /**
-     * Глобальные узлы составной квадратуры.
+     * Global nodes of the composite quadrature.
      *
-     * READ-ONLY ПО СОГЛАШЕНИЮ: содержимое НЕЛЬЗЯ изменять. ГОРЯЧЕЕ поле — копия не
-     * возвращается сознательно: массив читается во внутренних циклах [applyNodes],
-     * [applyDerivNodes], [applyDeriv2Nodes] и при сборке матриц — копирование на каждом
-     * обращении дало бы квадратичный рост аллокаций. Записей в проекте нет.
+     * READ-ONLY BY CONVENTION: the contents MUST NOT be modified. A HOT field — a copy is
+     * deliberately not returned: the array is read in the inner loops of [applyNodes],
+     * [applyDerivNodes], [applyDeriv2Nodes] and during matrix assembly — copying on every
+     * access would give a quadratic growth of allocations. There are no writes in the project.
      */
     public val gNode: DoubleArray
 
-    /** Веса квадратуры при узлах [gNode]. READ-ONLY по соглашению (горячее, см. [gNode]). */
+    /** Quadrature weights at the nodes [gNode]. READ-ONLY by convention (hot, see [gNode]). */
     public val gW: DoubleArray
 
     init {
@@ -67,33 +67,33 @@ public class FredholmOperator(public val kernel: KernelF, public val grid: Grid,
         gW = ws.toDoubleArray()
     }
 
-    /** (\mathcal K u)(t) для произвольной u(s). */
+    /** (\mathcal K u)(t) for an arbitrary u(s). */
     public fun apply(t: Double, u: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.k(t, s) * u(s) }
 
-    /** d/dt (\mathcal K u)(t) = \int_a^b dK/dt(t,s) u(s) ds (для xi-функционалов). */
+    /** d/dt (\mathcal K u)(t) = \int_a^b dK/dt(t,s) u(s) ds (for the xi functionals). */
     public fun applyDeriv(t: Double, u: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.kT(t, s) * u(s) }
 
-    /** d^2/dt^2 (\mathcal K u)(t) = \int_a^b d^2K/dt^2(t,s) u(s) ds (для xi^<0>). */
+    /** d^2/dt^2 (\mathcal K u)(t) = \int_a^b d^2K/dt^2(t,s) u(s) ds (for xi^<0>). */
     public fun applyDeriv2(t: Double, u: (Double) -> Double): Double =
         quad.integrate(grid.breakpoints) { s -> kernel.kTT(t, s) * u(s) }
 
-    /** (\mathcal K u)(tau) по предвычисленным значениям u в глобальных узлах. */
+    /** (\mathcal K u)(tau) from the precomputed values of u at the global nodes. */
     public fun applyNodes(tau: Double, uNodes: DoubleArray): Double {
         var s = 0.0
         for (k in gNode.indices) s += gW[k] * kernel.k(tau, gNode[k]) * uNodes[k]
         return s
     }
 
-    /** d/dt (\mathcal K u)(tau) по предвычисленным uNodes. */
+    /** d/dt (\mathcal K u)(tau) from the precomputed uNodes. */
     public fun applyDerivNodes(tau: Double, uNodes: DoubleArray): Double {
         var s = 0.0
         for (k in gNode.indices) s += gW[k] * kernel.kT(tau, gNode[k]) * uNodes[k]
         return s
     }
 
-    /** d^2/dt^2 (\mathcal K u)(tau) по предвычисленным uNodes (для xi^<0>). */
+    /** d^2/dt^2 (\mathcal K u)(tau) from the precomputed uNodes (for xi^<0>). */
     public fun applyDeriv2Nodes(tau: Double, uNodes: DoubleArray): Double {
         var s = 0.0
         for (k in gNode.indices) s += gW[k] * kernel.kTT(tau, gNode[k]) * uNodes[k]

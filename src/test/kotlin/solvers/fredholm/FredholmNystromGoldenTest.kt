@@ -12,9 +12,9 @@ import kotlin.test.assertTrue
 import problems.fredholm.FredholmProblem
 
 /**
- * Golden/regression-тест сплайн-метода Nyström (базовый + итерированный) для F2.
- * Числа зафиксированы из реального прогона main() (таблица T3[F2], базис B, theta).
- * Проверяется также, что xi (де Бура--Фикса) кидает понятное исключение.
+ * A golden/regression test of the spline Nyström method (base + iterated) for F2.
+ * The numbers are recorded from a real run of main() (the table T3[F2], basis B, theta).
+ * It is also checked that xi (de Boor--Fix) throws a clear exception.
  */
 @Tag("fast")
 class FredholmNystromGoldenTest {
@@ -49,7 +49,7 @@ class FredholmNystromGoldenTest {
         assertTrue(e16 < e8, "iterated Nyström should converge")
     }
 
-    /** RAW xi (с производной) ПО-ПРЕЖНЕМУ не поддерживается в Nyström (usesDerivative=true). */
+    /** RAW xi (with a derivative) is STILL not supported in Nyström (usesDerivative=true). */
     @Test fun nystrom_xi_unsupported() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
@@ -70,7 +70,7 @@ class FredholmNystromGoldenTest {
             solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })) to grid
     }
 
-    /** Дискретизованный xitilde^{<1>},xitilde^{<2>} ПРИНИМАЕТСЯ Nyström и сходится на F2. */
+    /** The discretized xitilde^{<1>},xitilde^{<2>} IS ACCEPTED by Nyström and converges on F2. */
     @Test fun nystrom_xitilde_f2_converges() {
         for (r in 1..2) {
             val (s8, g8) = xiTildeSolver(FredholmProblem.F2, 8, r)
@@ -82,7 +82,7 @@ class FredholmNystromGoldenTest {
         }
     }
 
-    /** Health-check: xitilde value-only — аргументы-производные игнорируются. */
+    /** A health check: xitilde is value-only — the derivative arguments are ignored. */
     @Test fun xitilde_is_value_only() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)

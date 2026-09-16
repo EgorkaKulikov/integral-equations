@@ -5,22 +5,22 @@ import splines.functionals.ProjFunctionals
 import splines.functionals.ValueFunctional
 
 /**
- * Применяет функционал к функции значений, явно передавая нулевые производные.
+ * Applies a functional to a value function, passing zero derivatives explicitly.
  *
- * Проекционные функционалы `theta_j` производных не используют, но общий интерфейс
- * [ApproxFunctional] их принимает. Отдельное имя (вместо `apply`) выбрано, чтобы
- * исключить неоднозначность с одноимённой функцией-областью видимости из стандартной
- * библиотеки Kotlin.
+ * The projection functionals `theta_j` do not use derivatives, but the generic interface
+ * [ApproxFunctional] accepts them. A dedicated name (instead of `apply`) is chosen to rule
+ * out ambiguity with the scope function of the same name from the Kotlin standard
+ * library.
  */
 internal fun ApproxFunctional.applyTo(f: (Double) -> Double): Double = apply(f, { 0.0 }, { 0.0 })
 
 /**
- * Возвращает функционал `theta_j` в виде линейной комбинации значений.
+ * Returns the functional `theta_j` as a linear combination of values.
  *
- * Схемы Урысона (сборка `Xi`, якобиана и метод Nyström) работают напрямую с опорными
- * точками и коэффициентами функционала, поэтому нужен именно [ValueFunctional].
- * Семейство `theta` состоит из таких функционалов по построению.
+ * The Uryson schemes (assembly of `Xi`, of the Jacobian and the Nyström method) work directly
+ * with the support points and coefficients of the functional, so exactly a [ValueFunctional]
+ * is required. The `theta` family consists of such functionals by construction.
  */
 internal fun ProjFunctionals.valueFunctional(j: Int): ValueFunctional =
     chi(j) as? ValueFunctional
-        ?: error("Функционал theta_$j не является линейной комбинацией значений (ValueFunctional).")
+        ?: error("Functional theta_$j is not a linear combination of values (ValueFunctional).")

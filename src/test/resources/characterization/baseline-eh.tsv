@@ -1,42 +1,42 @@
-# ХАРАКТЕРИЗАЦИОННЫЙ ЭТАЛОН E_h (снимок собственного поведения реализации).
+# CHARACTERIZATION BASELINE OF E_h (a snapshot of the implementation's own behaviour).
 #
-# Сверяется тестом characterization.EhCharacterizationTest.
-# ФОРМАТ СТРОКИ:  ключ <TAB> значение <TAB> класс.
-#   значение — 17 значащих цифр (%.17g): это МИНИМУМ, при котором десятичная запись
-#              double восстанавливается побитово; при 12 цифрах сама запись эталона
-#              вносила погрешность хранения ~1e-12 — грубее измеренного расхождения
-#              реализаций BLAS (<= 1.0e-14 на не-F1 ключах);
-#   класс    — режим сравнения, ВЫЧИСЛЕННЫЙ инструментом `./gradlew classifyBaseline`
-#              по двум снимкам (-Dnumerics.backend=java против native). Рукой он не
-#              проставляется: рукописный список повторил бы «что сегодня падает».
-#     portable  — отн. 1e-9 при поле 6e-13 = 10^3*eps*||u||inf. Расхождение путей LU
-#                 на этих ключах <= 1.0e-14, то есть запас 60x;
-#     sensitive — |dlt| <= 2*cond_1*max(omega,eps)*||u||inf, где cond и omega ВЫЧИСЛЯЮТСЯ
-#                 в том же прогоне и на том же бэкенде (characterization.F1SystemConditioning).
-#                 Константу здесь хранить нельзя: она вернула бы привязку к машине;
-#     exact     — строгое совпадение строк (целочисленные счётчики итераций);
-#     residual  — отн. 1e-3 при шуме 6e-15.
-# Строки, начинающиеся с #, и пустые — комментарии. ЛЮБАЯ иная строка обязана
-# разбиваться ровно на три колонки, иначе разбор ПАДАЕТ (прежний парсер молча
-# считал такую строку комментарием, и ключ становился «отсутствующим в эталоне»).
+# Cross-checked by the test characterization.EhCharacterizationTest.
+# ROW FORMAT:  key <TAB> value <TAB> class.
+#   value — 17 significant digits (%.17g): this is the MINIMUM at which the decimal record
+#           of a double is restored bitwise; at 12 digits the record of the baseline itself
+#           introduced a storage error of ~1e-12 — coarser than the measured discrepancy
+#           of the BLAS implementations (<= 1.0e-14 on the non-F1 keys);
+#   class — the comparison mode, COMPUTED by the tool `./gradlew classifyBaseline`
+#           from two snapshots (-Dnumerics.backend=java against native). It is not set
+#           by hand: a handwritten list would repeat "what fails today".
+#     portable  — rel. 1e-9 at the floor 6e-13 = 10^3*eps*||u||inf. The discrepancy of the LU paths
+#                 on these keys is <= 1.0e-14, that is, a 60x margin;
+#     sensitive — |dlt| <= 2*cond_1*max(omega,eps)*||u||inf, where cond and omega are COMPUTED
+#                 in the same run and on the same backend (characterization.F1SystemConditioning).
+#                 A constant must not be stored here: it would bring back the binding to a machine;
+#     exact     — a strict match of the strings (integral iteration counters);
+#     residual  — rel. 1e-3 at the noise 6e-15.
+# Lines starting with # and empty ones are comments. ANY other line must
+# split into exactly three columns, otherwise the parsing FAILS (the former parser silently
+# treated such a line as a comment, and the key became "absent from the baseline").
 #
-# ОКРУЖЕНИЕ СНЯТИЯ (существенно: числа к нему привязаны).
-#   бэкенд линейной алгебры : netlib + системная LAPACK (Apple Accelerate), -Dnumerics.backend=native
-#   библиотеки              : numerical-core 1.1.0, minimal-splines 1.1.0
+# THE SHOOTING ENVIRONMENT (essential: the numbers are bound to it).
+#   linear algebra backend : netlib + system LAPACK (Apple Accelerate), -Dnumerics.backend=native
+#   libraries              : numerical-core 1.1.0, minimal-splines 1.1.0
 #   JDK                     : 21 (jvmToolchain(21))
-#   платформа               : macOS aarch64 (Apple silicon)
-# ПЕРЕНОСИМОСТЬ ПРОВЕРЕНА: гейт зелёный и на `native`, и на `java` (другой путь LU).
-# Ровно поэтому тег `machine` с гейта снят, и он гоняется в CI на ubuntu/OpenBLAS.
+#   platform               : macOS aarch64 (Apple silicon)
+# PORTABILITY IS VERIFIED: the gate is green both on `native` and on `java` (a different LU path).
+# Exactly for that reason the `machine` tag was removed from the gate, and it runs in CI on ubuntu/OpenBLAS.
 #
-# КЛЮЧИ F1.*.sloan ПРИВЯЗАНЫ К ПОРЯДКУ СУММИРОВАНИЯ, а не только к бэкенду.
-# F1 — уравнение первого рода, решаемое регуляризацией Вазваза с alpha = 1e-10, то есть
-# c_L = -1/alpha = -1e10. Решение Слоана есть fEff(t) + c_L*applyNodes(t, .), где ОБА
-# слагаемых имеют порядок 1.38e10, а их сумма — порядок 2.7: сокращение в 5e9 раз,
-# теряется около 9.7 из 16 значащих цифр. Три МАТЕМАТИЧЕСКИ ЭКВИВАЛЕНТНЫХ порядка
-# суммирования дают E_h, различающиеся на 4.3–39.9 % (медиана 28 %). Именно эти ключи
-# и получили класс sensitive — их сверка идёт с вычисляемой границей, а не с допуском.
+# THE F1.*.sloan KEYS ARE BOUND TO THE SUMMATION ORDER, and not only to the backend.
+# F1 is an equation of the first kind, solved by Wazwaz regularization with alpha = 1e-10, that is,
+# c_L = -1/alpha = -1e10. The Sloan solution is fEff(t) + c_L*applyNodes(t, .), where BOTH
+# terms are of order 1.38e10, while their sum is of order 2.7: a cancellation by 5e9 times,
+# about 9.7 of the 16 significant digits are lost. Three MATHEMATICALLY EQUIVALENT summation
+# orders give E_h differing by 4.3-39.9 % (median 28 %). It is exactly these keys
+# that got the class sensitive — they are cross-checked against a computed bound, not a tolerance.
 #
-# ИСТОРИЯ ИЗМЕНЕНИЙ ЭТАЛОНА: docs/baseline-changes.md.
+# THE CHANGE HISTORY OF THE BASELINE: docs/baseline-changes.md.
 F.F2.B.lambda.n16.base	1.4095544249359548e-05	portable
 F.F2.B.lambda.n16.iterKulkarni	3.9745984281580604e-13	portable
 F.F2.B.lambda.n16.iterNystrom	2.2727909108066770e-06	portable

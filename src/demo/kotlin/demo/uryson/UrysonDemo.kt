@@ -19,56 +19,56 @@ import solvers.uryson.UrysohnOperator
 import solvers.uryson.UrysonSecondKindSolver
 
 /**
- * Демонстрационная печать таблиц сходимости для нелинейного уравнения Урысона.
+ * Demonstration printout of convergence tables for the nonlinear Uryson equation.
  *
- * Это не часть библиотеки, а иллюстрация её применения: код строит решатели на
- * последовательности сгущающихся сеток, вычисляет погрешность `E_h`, наблюдаемый
- * порядок `p_h` и печатает результат в консоль и в виде строк LaTeX в формате
- * таблиц статьи new-01 (`booktabs` + `siunitx`, столбцы `S[table-format=1.3e-2]`).
+ * This is not part of the library but an illustration of its use: the code builds solvers on
+ * a sequence of refined grids, computes the error `E_h`, the observed
+ * order `p_h`, and prints the result to the console and as LaTeX lines in the format
+ * of the tables of the new-01 paper (`booktabs` + `siunitx`, columns `S[table-format=1.3e-2]`).
  *
- * Правило достоверности (как в new-01): значения `E_h < 1e-12` определяются
- * округлением и печатаются прочерком, как и порядки `p_h`, у которых хотя бы одна
- * из двух соседних погрешностей ниже порога или следующей сетки нет.
+ * Reliability rule (as in new-01): values `E_h < 1e-12` are determined by
+ * round-off and are printed as a dash, as are the orders `p_h` for which at least one
+ * of the two neighbouring errors is below the threshold or the next grid is missing.
  */
 object Tables {
-    /** Последовательность сеток: каждая следующая вдвое мельче предыдущей. */
+    /** Sequence of grids: each next one is twice as fine as the previous one. */
     private val GRID_SIZES = listOf(8, 16, 32, 64, 128)
 
     /**
-     * Фиксированное зерно генератора шума для задач первого рода.
+     * Fixed seed of the noise generator for the problems of the first kind.
      *
-     * Явная константа делает численный эксперимент полностью воспроизводимым:
-     * повторный запуск даёт те же зашумлённые данные и те же таблицы.
+     * An explicit constant makes the numerical experiment fully reproducible:
+     * a repeated run yields the same noisy data and the same tables.
      */
     const val SEED = 20240517L
 
-    /** Квадратура для всех демонстраций: порядок заведомо выше порядка аппроксимации. */
+    /** Quadrature for all demonstrations: the order is deliberately above the approximation order. */
     private val quad = GaussLegendre(8)
 
-    /** Ожидаемый порядок сходимости базовой схемы — используется для оценки константы `C_h`. */
+    /** Expected convergence order of the base scheme — used to estimate the constant `C_h`. */
     private const val EXPECTED_ORDER = 3.0
 
-    /** Порог достоверности: ниже него погрешность определяется округлением (new-01, sec:protocol). */
+    /** Reliability threshold: below it the error is determined by round-off (new-01, sec:protocol). */
     private const val RELIABILITY_FLOOR = 1e-12
 
-    /** Отношение соседних шагов неравномерной сетки (new-01, eq:alt-mesh: mu = 2). */
+    /** Ratio of neighbouring steps of the non-uniform grid (new-01, eq:alt-mesh: mu = 2). */
     private const val GRADED_RATIO = 2.0
 
-    /** Нормировка шума для задач первого рода: в `C[a,b]`, согласованно с условием (VII). */
+    /** Noise normalization for the problems of the first kind: in `C[a,b]`, consistent with condition (VII). */
     private val NOISE_NORM = NoiseNorm.SUP
 
-    // ------------------------------------------------------------------ формат LaTeX
+    // ------------------------------------------------------------------ LaTeX format
 
-    /** Прочерк в ячейке `S`-столбца. */
+    /** Dash in a cell of an `S` column. */
     private const val DASH = "\\multicolumn{1}{c}{---}"
 
-    /** Погрешность в формате `1.014e-4` либо прочерк ниже порога. */
+    /** Error in the format `1.014e-4`, or a dash below the threshold. */
     private fun texE(x: Double): String =
         if (x.isNaN() || x < RELIABILITY_FLOOR) DASH else "%.3e".format(x).replace("e-0", "e-").replace("e+0", "e")
 
     /**
-     * Порядок `p_h` по паре соседних погрешностей: прочерк, если следующей сетки нет
-     * либо одна из погрешностей ниже порога.
+     * Order `p_h` from a pair of neighbouring errors: a dash if the next grid is missing
+     * or one of the errors is below the threshold.
      */
     private fun texP(errs: List<Double>, i: Int): String {
         if (i + 1 >= errs.size) return DASH
@@ -79,7 +79,7 @@ object Tables {
     private fun gridOf(kind: String, n: Int): Grid =
         if (kind == "uniform") Grid.uniform(n) else Grid.graded(n, ratio = GRADED_RATIO)
 
-    /** Собирает решатель второго рода для заданной задачи, базиса и сетки. */
+    /** Builds a second-kind solver for the given problem, basis and grid. */
     private fun makeSolver(problem: UrysonProblem, system: GeneratingSystem, grid: Grid): UrysonSecondKindSolver {
         val basis = MinimalSplineBasis(system, grid)
         val funcs = ProjFunctionals(basis)
@@ -88,12 +88,12 @@ object Tables {
         return secondKindSolver(problem, basis, funcs, space, op)
     }
 
-    // ------------------------------------------------------------------ второй род
+    // ------------------------------------------------------------------ second kind
 
-    /** Сходимость базовой схемы для задачи A на базисах B и H, равномерная и неравномерная сетки. */
+    /** Convergence of the base scheme for problem A on the bases B and H, uniform and non-uniform grids. */
     fun tableSecondKindOrder() {
         for (kind in listOf("uniform", "graded")) {
-            println("\n--- Задача A (второго рода): базовая схема, сетка $kind ---")
+            println("\n--- Problem A (second kind): base scheme, $kind grid ---")
             val errorsB = ArrayList<Double>()
             val errorsH = ArrayList<Double>()
             for (n in GRID_SIZES) {
@@ -112,16 +112,16 @@ object Tables {
                     ),
                 )
             }
-            println("   LaTeX (S-столбцы):")
+            println("   LaTeX (S columns):")
             for (i in GRID_SIZES.indices) {
                 println("    ${GRID_SIZES[i]} & ${texE(errorsB[i])} & ${texP(errorsB, i)} & ${texE(errorsH[i])} & ${texP(errorsH, i)} \\\\")
             }
         }
     }
 
-    /** Сравнение трёх порождающих систем на задаче B (базовая схема). */
+    /** Comparison of the three generating systems on problem B (base scheme). */
     fun tableGeneratingSystems() {
-        println("\n--- Задача B (второго рода): три порождающие системы, равномерная сетка ---")
+        println("\n--- Problem B (second kind): three generating systems, uniform grid ---")
         val systems = listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)
         val errors = systems.map { ArrayList<Double>() }
         val steps = ArrayList<Double>()
@@ -144,7 +144,7 @@ object Tables {
             }
             println("%4d | %s | %s".format(GRID_SIZES[i], Fmt.h(steps[i]), columns))
         }
-        println("   LaTeX (S-столбцы: n, [Eh ph Ch] x3):")
+        println("   LaTeX (S columns: n, [Eh ph Ch] x3):")
         for (i in GRID_SIZES.indices) {
             val cells = systems.indices.joinToString(" & ") { si ->
                 val e = errors[si][i]
@@ -155,11 +155,11 @@ object Tables {
         }
     }
 
-    /** Все схемы второго рода на задаче B для базисов B и H. */
+    /** All second-kind schemes on problem B for the bases B and H. */
     fun tableSchemes() {
-        val names = listOf("база", "Слоан", "Кулкарни", "итер. Кулкарни", "Nyström", "комб. Nyström", "итер. Nyström")
+        val names = listOf("base", "Sloan", "Kulkarni", "iter. Kulkarni", "Nyström", "comb. Nyström", "iter. Nyström")
         for (system in listOf(GeneratingSystem.B, GeneratingSystem.H)) {
-            println("\n--- Задача B: сравнение схем, базис ${system.name}, равномерная сетка ---")
+            println("\n--- Problem B: comparison of schemes, basis ${system.name}, uniform grid ---")
             val errors = names.map { ArrayList<Double>() }
             for (n in GRID_SIZES) {
                 val grid = Grid.uniform(n)
@@ -179,7 +179,7 @@ object Tables {
                 val columns = names.indices.joinToString(" | ") { mi -> "%s %5s".format(Fmt.e(errors[mi][i]), Fmt.p(observedOrders[mi][i])) }
                 println("%4d | %s".format(GRID_SIZES[i], columns))
             }
-            println("   LaTeX (S-столбцы: n, [Eh ph] x7 в порядке: ${names.joinToString(", ")}):")
+            println("   LaTeX (S columns: n, [Eh ph] x7 in the order: ${names.joinToString(", ")}):")
             for (i in GRID_SIZES.indices) {
                 val cells = names.indices.joinToString(" & ") { mi -> "${texE(errors[mi][i])} & ${texP(errors[mi], i)}" }
                 println("    ${GRID_SIZES[i]} & $cells \\\\")
@@ -187,7 +187,7 @@ object Tables {
         }
     }
 
-    // ------------------------------------------------------------------ первый род
+    // ------------------------------------------------------------------ first kind
 
     private fun solveFirstKind(problem: UrysonProblem, system: GeneratingSystem, grid: Grid, delta: Double): FirstKindSolution {
         val basis = MinimalSplineBasis(system, grid)
@@ -200,12 +200,12 @@ object Tables {
     }
 
     /**
-     * Регуляризованное решение задачи C первого рода при согласованном убывании уровня
-     * шума и шага. Сетка — неравномерная с чередующимися шагами (new-01, eq:alt-mesh);
-     * шум задан в `C[a,b]` (`||xi||_infty = delta`).
+     * Regularized solution of problem C of the first kind with consistently decreasing noise
+     * level and grid step. The grid is non-uniform with alternating steps (new-01, eq:alt-mesh);
+     * the noise is given in `C[a,b]` (`||xi||_infty = delta`).
      */
     fun tableFirstKindNoiseLevels() {
-        println("\n--- Задача C (первого рода, регуляризация): базис H, сетка graded(2), шум SUP ---")
+        println("\n--- Problem C (first kind, regularization): basis H, graded(2) grid, SUP noise ---")
         val deltas = listOf(1e-1, 1e-2, 1e-3, 1e-4, 1e-5)
         println("  delta |  n  |   alpha   |    Eh     |   res     |   Omega")
         val rows = ArrayList<String>()
@@ -222,13 +222,13 @@ object Tables {
             )
             rows.add("    ${texE(delta)} & $n & ${texE(solution.alpha)} & ${texE(error)} & ${texE(solution.residual)} & ${"%.3f".format(solution.omega)} \\\\")
         }
-        println("   LaTeX (S-столбцы: delta, n, alpha, Eh, res, Omega):")
+        println("   LaTeX (S columns: delta, n, alpha, Eh, res, Omega):")
         rows.forEach { println(it) }
     }
 
-    /** Сравнение базисов B и H на задаче D первого рода при фиксированном уровне шума. */
+    /** Comparison of the bases B and H on problem D of the first kind at a fixed noise level. */
     fun tableFirstKindBasisComparison() {
-        println("\n--- Задача D (первого рода): базис B против H, delta = 1e-3 (SUP), сетка graded(2) ---")
+        println("\n--- Problem D (first kind): basis B versus H, delta = 1e-3 (SUP), graded(2) grid ---")
         val delta = 1e-3
         println("   n  |   alpha   |  Eh(B)   |  res(B)   |  Eh(H)   |  res(H)")
         val rows = ArrayList<String>()
@@ -246,22 +246,22 @@ object Tables {
             )
             rows.add("    $n & ${texE(solutionB.alpha)} & ${texE(errorB)} & ${texE(solutionB.residual)} & ${texE(solutionH.alpha)} & ${texE(errorH)} & ${texE(solutionH.residual)} \\\\")
         }
-        println("   LaTeX (S-столбцы: n, alpha(B), Eh(B), res(B), alpha(H), Eh(H), res(H)):")
+        println("   LaTeX (S columns: n, alpha(B), Eh(B), res(B), alpha(H), Eh(H), res(H)):")
         rows.forEach { println(it) }
     }
 }
 
-/** Точка входа демонстрации: печатает таблицы сходимости для уравнения Урысона. */
+/** Entry point of the demonstration: prints convergence tables for the Uryson equation. */
 fun main() {
     println("=".repeat(72))
-    println("Нелинейное уравнение Урысона: таблицы сходимости")
-    println("Зерно генератора шума (задачи первого рода): ${Tables.SEED}; нормировка шума: SUP")
-    println("Квадратура: Гаусс--Лежандр, 8 узлов на ячейку; порог достоверности 1e-12")
+    println("Nonlinear Uryson equation: convergence tables")
+    println("Noise generator seed (problems of the first kind): ${Tables.SEED}; noise normalization: SUP")
+    println("Quadrature: Gauss--Legendre, 8 nodes per cell; reliability threshold 1e-12")
     println("=".repeat(72))
     Tables.tableSecondKindOrder()
     Tables.tableGeneratingSystems()
     Tables.tableSchemes()
     Tables.tableFirstKindNoiseLevels()
     Tables.tableFirstKindBasisComparison()
-    println("\nРасчёт завершён.")
+    println("\nComputation finished.")
 }

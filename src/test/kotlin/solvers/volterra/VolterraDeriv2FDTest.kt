@@ -12,20 +12,20 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * FD-сверка второй производной образа Вольтерра (V u)''(t) по формуле (V2'')
- * с центральной конечной разностью первой производной
- * (V u)'(t) (Лейбниц). Точки берутся ВНУТРИ гладких кусков сплайна (не в узлах),
- * т.к. omega_i'' разрывна в узлах.
+ * An FD cross-check of the second derivative of the Volterra image (V u)''(t) by the formula (V2'')
+ * against a central finite difference of the first derivative
+ * (V u)'(t) (Leibniz). The points are taken INSIDE the smooth pieces of the spline (not at the knots),
+ * since omega_i'' is discontinuous at the knots.
  *
- * КРИТИЧНО: включены V2-ядра с K(t,t)!=0 (V2: K=1/(1+t+s), V2exp: e^{-(t-s)^2}),
- * где проявляется член K(t,t) u'(t): без него FD-сверка провалится.
+ * CRITICAL: the V2 kernels with K(t,t)!=0 are included (V2: K=1/(1+t+s), V2exp: e^{-(t-s)^2}),
+ * where the term K(t,t) u'(t) shows up: without it the FD cross-check would fail.
  */
 @Tag("fast")
 class VolterraDeriv2FDTest {
     private val quad = GaussLegendre(8)
 
     @Test fun secondDerivOfImageMatchesFiniteDifference() {
-        // V2, V2exp: K(t,t)!=0 (проверяют член K(t,t)u'); V2win: K(t,t)=0 (полнота диагонали).
+        // V2, V2exp: K(t,t)!=0 (they check the term K(t,t)u'); V2win: K(t,t)=0 (the completeness of the diagonal).
         val problems = listOf(VolterraProblem.V2, VolterraProblem.V2exp, VolterraProblem.V2win)
         val h = 1e-5
         for (p in problems) {
@@ -39,7 +39,7 @@ class VolterraDeriv2FDTest {
                 for (t in innerTs) {
                     if (t - h < grid.a || t + h > grid.b) continue
                     val analytic = op.applyDeriv2(t, u, uD)
-                    // Центральная разность ПЕРВОЙ производной (Лейбниц), гладкой в t внутри куска.
+                    // A central difference of the FIRST derivative (Leibniz), smooth in t inside a piece.
                     val fd = (op.applyDeriv(t + h, u) - op.applyDeriv(t - h, u)) / (2.0 * h)
                     val err = kotlin.math.abs(analytic - fd)
                     assertTrue(
@@ -52,8 +52,8 @@ class VolterraDeriv2FDTest {
     }
 
     /**
-     * Прямой контроль важности члена K(t,t)u'(t): на V2exp (K(t,t)=1) убираем этот член
-     * вручную и убеждаемся, что расхождение с FD становится значимым хотя бы где-то.
+     * A direct control of the importance of the term K(t,t)u'(t): on V2exp (K(t,t)=1) we remove this term
+     * by hand and make sure that the discrepancy with the FD becomes significant at least somewhere.
      */
     @Test fun boundaryTermIsNecessaryForKttNonzero() {
         val p = VolterraProblem.V2exp
@@ -69,14 +69,14 @@ class VolterraDeriv2FDTest {
             for (t in innerTs) {
                 if (t - h < grid.a || t + h > grid.b) continue
                 val fd = (op.applyDeriv(t + h, u) - op.applyDeriv(t - h, u)) / (2.0 * h)
-                // "Неправильная" версия: без члена K(t,t) u'(t).
+                // The "wrong" version: without the term K(t,t) u'(t).
                 val withoutTerm = op.applyDeriv2(t, u, uD) - p.kernel.k(t, t) * uD(t)
                 maxMismatchWithout = maxOf(maxMismatchWithout, kotlin.math.abs(withoutTerm - fd))
             }
         }
         assertTrue(
             maxMismatchWithout > 1e-3,
-            "Ожидалось заметное расхождение без члена K(t,t)u', получено $maxMismatchWithout",
+            "A noticeable discrepancy without the term K(t,t)u' was expected, got $maxMismatchWithout",
         )
     }
 }

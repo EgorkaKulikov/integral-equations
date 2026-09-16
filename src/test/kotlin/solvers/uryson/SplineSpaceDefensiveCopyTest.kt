@@ -10,21 +10,21 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Инкапсуляция ХОЛОДНЫХ массивов: геттер обязан отдавать КОПИЮ, чтобы мутация у
- * вызывающего не портила источник.
+ * The encapsulation of the COLD arrays: a getter must return a COPY, so that a mutation by
+ * the caller does not corrupt the source.
  *
- * Раньше `GaussLegendre.refNodesWeights()` и поля `SplineSpace.weights/wInt/gramR`
- * отдавали наружу сами внутренние массивы. Любой вызывающий мог одной записью тихо
- * изменить квадратуру или веса СРАЗУ ДЛЯ ВСЕХ пользователей объекта, причём без
- * исключения — просто получались другие числа.
+ * Previously `GaussLegendre.refNodesWeights()` and the fields `SplineSpace.weights/wInt/gramR`
+ * returned the internal arrays themselves. Any caller could silently change the quadrature
+ * or the weights with one write AT ONCE FOR ALL the users of the object, and without
+ * an exception — one simply got different numbers.
  *
- * ГРАНИЦА ПОЛИТИКИ (важно для чтения теста): копируются только холодные поля, которые
- * читаются однократно. Горячие массивы (`Grid.breakpoints`, `gNode`/`gW` операторов,
- * `ValueFunctional.nodes/coeffs`) читаются в горячих циклах десятки тысяч раз за запуск
- * и остаются read-only ПО СОГЛАШЕНИЮ — копирование на каждом обращении откатило бы
- * оптимизации горячего пути. Поэтому здесь их нет намеренно.
+ * THE BOUNDARY OF THE POLICY (important for reading the test): only the cold fields, read
+ * once, are copied. The hot arrays (`Grid.breakpoints`, the `gNode`/`gW` of the operators,
+ * `ValueFunctional.nodes/coeffs`) are read in hot loops tens of thousands of times per run
+ * and stay read-only BY CONVENTION — copying on every access would roll back
+ * the optimizations of the hot path. Therefore they are deliberately absent here.
  *
- * Та же гарантия для `GaussLegendre.refNodesWeights()` проверяется в библиотеке
+ * The same guarantee for `GaussLegendre.refNodesWeights()` is checked in the library
  * `numerical-core` (`QuadratureDefensiveCopyTest`).
  */
 @Tag("fast")
@@ -36,14 +36,14 @@ class SplineSpaceDefensiveCopyTest {
         return SplineSpace(basis, GaussLegendre(8))
     }
 
-    /** Мутация узлов/весов, полученных из квадратуры, не меняет саму квадратуру. */
+    /** A mutation of the nodes/weights obtained from the quadrature does not change the quadrature itself. */
 
     /**
-     * Мутация не должна доходить и до РЕЗУЛЬТАТА квадратуры: проверка не на равенство
-     * массивов, а на само вычисляемое число (порча узлов проявилась бы именно здесь).
+     * The mutation must not reach the RESULT of the quadrature either: the check is not on the equality
+     * of the arrays but on the computed number itself (a corruption of the nodes would show up exactly here).
      */
 
-    /** `SplineSpace.weights` — копия: запись в неё не меняет ни поле, ни `weightsSum()`. */
+    /** `SplineSpace.weights` is a copy: a write into it changes neither the field nor `weightsSum()`. */
     @Test fun spaceWeightsReturnsCopy() {
         val space = space()
         val sumBefore = space.weightsSum()
@@ -52,11 +52,11 @@ class SplineSpaceDefensiveCopyTest {
 
         w[0] = 1e9
 
-        assertTrue(snapshot.contentEquals(space.weights), "space.weights изменились после мутации копии")
-        assertEquals(sumBefore, space.weightsSum(), 0.0, "weightsSum() изменилась после мутации копии")
+        assertTrue(snapshot.contentEquals(space.weights), "space.weights changed after a mutation of the copy")
+        assertEquals(sumBefore, space.weightsSum(), 0.0, "weightsSum() changed after a mutation of the copy")
     }
 
-    /** `SplineSpace.wInt` — копия. */
+    /** `SplineSpace.wInt` is a copy. */
     @Test fun spaceWIntReturnsCopy() {
         val space = space()
         val w = space.wInt
@@ -64,15 +64,15 @@ class SplineSpaceDefensiveCopyTest {
 
         w[0] = 1e9
 
-        assertTrue(snapshot.contentEquals(space.wInt), "space.wInt изменились после мутации копии")
+        assertTrue(snapshot.contentEquals(space.wInt), "space.wInt changed after a mutation of the copy")
     }
 
     /**
-     * `SplineSpace.gramR` — ГЛУБОКАЯ копия.
+     * `SplineSpace.gramR` is a DEEP copy.
      *
-     * После перехода на [DenseMatrix] строк-массивов нет: значения лежат в одном
-     * плоском буфере, и `copy()` копирует их целиком. Проверка сохранена дословно —
-     * запись в элемент копии не должна быть видна ни через геттер, ни через omegaReg.
+     * After the move to [DenseMatrix] there are no row arrays: the values lie in one
+     * flat buffer, and `copy()` copies them entirely. The check is kept verbatim —
+     * a write into an element of the copy must be visible neither through the getter nor through omegaReg.
      */
     @Test fun spaceGramRReturnsDeepCopy() {
         val space = space()
@@ -82,37 +82,37 @@ class SplineSpaceDefensiveCopyTest {
 
         g[0, 0] = original + 1e9
 
-        assertEquals(original, space.gramR[0, 0], 0.0, "gramR изменилась: копия оказалась поверхностной")
+        assertEquals(original, space.gramR[0, 0], 0.0, "gramR changed: the copy turned out to be shallow")
         assertEquals(
             regBefore, space.omegaReg(DoubleArray(space.dim) { 1.0 }), 0.0,
-            "omegaReg изменилась после мутации копии gramR",
+            "omegaReg changed after a mutation of the copy of gramR",
         )
     }
 
-    /** Разные обращения к геттеру возвращают РАЗНЫЕ объекты (иначе копии нет). */
+    /** Different accesses to the getter return DIFFERENT objects (otherwise there is no copy). */
     @Test fun coldGettersReturnDistinctInstances() {
         val space = space()
-        assertTrue(space.weights !== space.weights, "weights: возвращается один и тот же массив")
-        assertTrue(space.wInt !== space.wInt, "wInt: возвращается один и тот же массив")
-        assertTrue(space.gramR !== space.gramR, "gramR: возвращается одна и та же матрица")
-        assertTrue(space.gramR.data !== space.gramR.data, "gramR: буфер значений не копируется")
+        assertTrue(space.weights !== space.weights, "weights: one and the same array is returned")
+        assertTrue(space.wInt !== space.wInt, "wInt: one and the same array is returned")
+        assertTrue(space.gramR !== space.gramR, "gramR: one and the same matrix is returned")
+        assertTrue(space.gramR.data !== space.gramR.data, "gramR: the value buffer is not copied")
 
         val quad = GaussLegendre(8)
-        assertTrue(quad.refNodesWeights().first !== quad.refNodesWeights().first, "refNodes: массив не копируется")
-        assertTrue(quad.refNodesWeights().second !== quad.refNodesWeights().second, "refWeights: массив не копируется")
+        assertTrue(quad.refNodesWeights().first !== quad.refNodesWeights().first, "refNodes: the array is not copied")
+        assertTrue(quad.refNodesWeights().second !== quad.refNodesWeights().second, "refWeights: the array is not copied")
     }
 
-    /** Значения копий совпадают с источником — копирование не исказило числа. */
+    /** The values of the copies coincide with the source — the copying did not distort the numbers. */
     @Test fun copiesCarryIdenticalValues() {
         val space = space()
         assertEquals(space.dim, space.weights.size)
         assertEquals(space.dim, space.wInt.size)
         assertEquals(space.dim, space.gramR.rows)
-        // Сумма весов = длина отрезка: содержательный инвариант, а не только размер.
+        // The sum of the weights = the length of the interval: a substantial invariant, not only the size.
         assertEquals(1.0, space.weights.sum(), 1e-12)
         assertEquals(space.weightsSum(), space.weights.sum(), 0.0)
-        // Симметрия матрицы Грама сохраняется в копии. Копия берётся один раз ДО циклов:
-        // геттер глубоко копирует, и вызов внутри цикла давал бы dim^2 копий матрицы.
+        // The symmetry of the Gram matrix is preserved in the copy. The copy is taken once BEFORE the loops:
+        // the getter copies deeply, and a call inside the loop would give dim^2 copies of the matrix.
         val gram = space.gramR
         for (i in 0 until space.dim) for (j in 0 until space.dim) {
             assertEquals(gram[i, j], gram[j, i], 1e-12)

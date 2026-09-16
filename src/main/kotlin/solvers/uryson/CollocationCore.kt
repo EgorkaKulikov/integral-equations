@@ -10,11 +10,11 @@ import splines.functionals.ProjFunctionals
 import solvers.core.SupportPoints
 
 /**
- * Ядро коллокационных вычислений: вектор `Xi(c) = Theta_h(U x_h)` и якобиан
+ * Core of the collocation computations: the vector `Xi(c) = Theta_h(U x_h)` and the Jacobian
  * `B(c)_{j,i} = theta_j(U'(x_h) omega_i)`.
  *
- * Используется и схемами второго рода (метод Ньютона), и регуляризованной схемой
- * первого рода (метод Гаусса–Ньютона).
+ * Used both by the second-kind schemes (Newton's method) and by the regularized first-kind
+ * scheme (Gauss–Newton method).
  */
 public class CollocationCore(
     public val basis: MinimalSplineBasis,
@@ -28,33 +28,33 @@ public class CollocationCore(
     private val kernel = op.kernel
 
     /**
-     * Эталонные узлы и веса квадратуры на [-1,1], полученные ОДИН РАЗ.
+     * Reference quadrature nodes and weights on [-1,1], obtained ONCE.
      *
-     * [GaussLegendre.refNodesWeights] возвращает КОПИИ массивов, а [bMatrix] вызывается
-     * НА КАЖДОЙ итерации Ньютона (`UrysonSecondKindSolver.newtonStep`) и Гаусса–Ньютона
-     * (`TikhonovSolver.solveFixedAlpha`). Получение узлов внутри [bMatrix] давало бы две
-     * аллокации на итерацию на ровном месте; здесь копия делается однократно.
+     * [GaussLegendre.refNodesWeights] returns COPIES of the arrays, while [bMatrix] is called
+     * ON EVERY Newton iteration (`UrysonSecondKindSolver.newtonStep`) and Gauss–Newton iteration
+     * (`TikhonovSolver.solveFixedAlpha`). Fetching the nodes inside [bMatrix] would cost two
+     * allocations per iteration for nothing; here the copy is made once.
      *
-     * Значения и порядок арифметики те же: массивы неизменны и читаются только на чтение.
+     * The values and the order of arithmetic are the same: the arrays are immutable and read-only.
      */
     private val refNodes: DoubleArray
     private val refWeights: DoubleArray
 
     /**
-     * Различные опорные точки всех функционалов `theta_j` (узлы и середины интервалов)
-     * в ПОРЯДКЕ ПЕРВОГО ВХОЖДЕНИЯ при обходе `j = -2..n-1`.
+     * Distinct support points of all functionals `theta_j` (nodes and interval midpoints)
+     * in the ORDER OF FIRST OCCURRENCE while traversing `j = -2..n-1`.
      *
-     * Порядок — часть контракта, а не деталь реализации: от него зависят нумерация
-     * строк `G` в [bMatrix] и порядок суммирования в [xiVector]. READ-ONLY по соглашению.
+     * The order is part of the contract, not an implementation detail: the numbering of the
+     * rows of `G` in [bMatrix] and the summation order in [xiVector] depend on it. READ-ONLY by convention.
      */
     public val supportPts: DoubleArray
 
     /**
-     * Индексация опорных точек по паре (номер функционала `j+2`, номер узла).
+     * Indexing of the support points by the pair (functional number `j+2`, node number).
      *
-     * Раньше здесь была `HashMap<Double, Int>` с поиском по ЗНАЧЕНИЮ точки: она требовала
-     * побитового совпадения Double и работала лишь потому, что и заполнение, и чтение
-     * шли из одного и того же массива `nodes` кэшированного функционала.
+     * This used to be a `HashMap<Double, Int>` keyed by the point VALUE: it required bitwise
+     * equality of Doubles and worked only because both the filling and the reading came from
+     * one and the same `nodes` array of the cached functional.
      */
     private val support: SupportPoints
 
@@ -67,11 +67,11 @@ public class CollocationCore(
         supportPts = support.points
     }
 
-    /** Значения `(U x_h)` в опорных точках (по одному интегралу на точку). */
+    /** Values of `(U x_h)` at the support points (one integral per point). */
     public fun uAtSupport(c: DoubleArray): DoubleArray =
         DoubleArray(supportPts.size) { p -> op.apply(supportPts[p]) { s -> basis.evalSpline(c, s) } }
 
-    /** Вектор `Xi(c)_j = theta_j(U x_h)`, `j = -2..n-1` (индекс массива `j+2`). */
+    /** Vector `Xi(c)_j = theta_j(U x_h)`, `j = -2..n-1` (array index `j+2`). */
     public fun xiVector(c: DoubleArray): DoubleArray {
         val uVals = uAtSupport(c)
         return DoubleArray(n + 2) { k ->
@@ -83,18 +83,18 @@ public class CollocationCore(
     }
 
     /**
-     * Якобиан `B(c)_{j,i} = theta_j(U'(x_h) omega_i)`.
+     * Jacobian `B(c)_{j,i} = theta_j(U'(x_h) omega_i)`.
      *
-     * Вычисляется в два прохода: сначала `G[p][i] = \int dK/du(tau_p, s, x_h(s)) omega_i(s) ds`
-     * для всех опорных точек `tau_p` за один обход узлов квадратуры (на каждом интервале
-     * ненулевыми являются лишь три базисных сплайна), затем строки `B` собираются как
-     * линейные комбинации строк `G` с коэффициентами функционалов.
+     * Computed in two passes: first `G[p][i] = \int dK/du(tau_p, s, x_h(s)) omega_i(s) ds`
+     * for all support points `tau_p` in a single sweep over the quadrature nodes (on each interval
+     * only three basis splines are nonzero), then the rows of `B` are assembled as linear
+     * combinations of the rows of `G` with the coefficients of the functionals.
      */
     public fun bMatrix(c: DoubleArray): DenseMatrix {
         val np = supportPts.size
         val g = DenseMatrix.zeros(np, n + 2)
-        // Узлы/веса получены однократно в init: [refNodesWeights] отдаёт копии, а этот
-        // метод вызывается на каждой итерации Ньютона / Гаусса–Ньютона.
+        // Nodes/weights were obtained once in init: [refNodesWeights] hands out copies, and this
+        // method is called on every Newton / Gauss–Newton iteration.
         val nodes = refNodes
         val weights = refWeights
         for (m in 0 until n) {
@@ -117,8 +117,8 @@ public class CollocationCore(
                 }
             }
         }
-        // Элементы B независимы: каждая задача пишет в свою ячейку, g только читается.
-        // Порядок сложений сохранён дословно (по q возрастающе), поэтому числа те же.
+        // The entries of B are independent: each task writes its own cell, g is only read.
+        // The order of additions is preserved verbatim (increasing q), so the numbers are the same.
         return ParallelAssembly.assembleDense(n + 2, n + 2, ctx.parallel) { k, i ->
             val th = funcs.valueFunctional(k - 2)
             var acc = 0.0

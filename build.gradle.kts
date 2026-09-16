@@ -4,13 +4,13 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
 
-// Версии инструментов — в `gradle/libs.versions.toml`; версии numerical-core и
-// minimal-splines остаются в `gradle.properties` (их правит поток выпуска).
+// Tool versions live in `gradle/libs.versions.toml`; the numerical-core and
+// minimal-splines versions stay in `gradle.properties` (the release flow edits them).
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    // `java-library` — ради конфигурации `api`: типы обеих библиотек
+    // `java-library` — for the sake of the `api` configuration: the types of both libraries
     // (MinimalSplineBasis, Grid, GaussLegendre, NumericsContext, DenseMatrix)
-    // стоят в сигнатурах публичных классов этого проекта.
+    // appear in the signatures of the public classes of this project.
     `java-library`
     application
     // Coverage measurement (JetBrains Kover, Kotlin-native).
@@ -18,16 +18,16 @@ plugins {
 }
 
 repositories {
-    // Библиотеки numerical-core и minimal-splines подключаются как ОПУБЛИКОВАННЫЕ
-    // артефакты Maven, а не как исходники соседних репозиториев (никаких
-    // `project(":...")` и `../other-repo/src`). Порядок: mavenLocal первым — локальная
-    // сборка (`./gradlew publishToMavenLocal` в каждой библиотеке) имеет приоритет; затем
-    // GitHub Packages — по одному реестру на библиотеку (numerical-core и minimal-splines
-    // публикуются в реестры своих репозиториев). GitHub Packages требует
-    // аутентификацию даже на чтение: GITHUB_ACTOR/GITHUB_TOKEN в окружении (в GitHub
-    // Actions — встроенный токен) или gpr.user/gpr.token в ~/.gradle/gradle.properties
-    // (токен с read:packages). Фильтр content ограничивает репозиторий группой библиотек,
-    // чтобы Gradle не ходил в GitHub Packages за остальными зависимостями.
+    // The libraries numerical-core and minimal-splines are consumed as PUBLISHED
+    // Maven artifacts rather than as the sources of neighbouring repositories (no
+    // `project(":...")` and no `../other-repo/src`). The order: mavenLocal first — a local
+    // build (`./gradlew publishToMavenLocal` in each library) takes priority; then
+    // GitHub Packages — one registry per library (numerical-core and minimal-splines
+    // are published into the registries of their own repositories). GitHub Packages requires
+    // authentication even for reading: GITHUB_ACTOR/GITHUB_TOKEN in the environment (in GitHub
+    // Actions the built-in token) or gpr.user/gpr.token in ~/.gradle/gradle.properties
+    // (a token with read:packages). The content filter restricts the repository to the group of the
+    // libraries, so that Gradle does not go to GitHub Packages for the other dependencies.
     mavenLocal()
     maven {
         name = "GitHubPackagesNumericalCore"
@@ -48,15 +48,15 @@ repositories {
         content { includeGroup("io.github.egorkakulikov") }
     }
     mavenCentral()
-    // Дополнительный реестр — через свойство `numericsRepositoryUrl`.
+    // An additional registry is supplied through the property `numericsRepositoryUrl`.
     providers.gradleProperty("numericsRepositoryUrl").orNull?.let { maven(url = uri(it)) }
 }
 
-// --- Разделение исходных кодов по назначению -------------------------------
-// main     — решатели интегральных уравнений (Фредгольм, Вольтерра, Урысон) и их
-//            общее ядро; без ввода-вывода, без модельных задач и без точек входа.
-// problems — каталог модельных задач (фикстуры): нужен и демонстрациям, и тестам.
-// demo     — печать таблиц сходимости, точки входа main(), бенчмарк.
+// --- Separation of the sources by purpose ----------------------------------
+// main     — the solvers of the integral equations (Fredholm, Volterra, Uryson) and their
+//            common core; no input/output, no model problems and no entry points.
+// problems — the catalogue of model problems (fixtures): needed both by the demonstrations and by the tests.
+// demo     — printing of the convergence tables, the main() entry points, the benchmark.
 sourceSets {
     val main by getting
     val problems by creating {
@@ -67,9 +67,9 @@ sourceSets {
         compileClasspath += main.output + problems.output
         runtimeClasspath += main.output + problems.output
     }
-    // benchmark — замеры производительности: не часть демонстраций (у тех нет
-    // прогрева, повторов и агрегации) и не часть тестов (нет критерия PASS/FAIL).
-    // Отдельный набор, как в minimal-splines, и исключён из покрытия.
+    // benchmark — performance measurements: not a part of the demonstrations (those have no
+    // warm-up, repetitions or aggregation) and not a part of the tests (no PASS/FAIL criterion).
+    // A separate source set, as in minimal-splines, and excluded from the coverage.
     val benchmark by creating {
         compileClasspath += main.output + problems.output
         runtimeClasspath += main.output + problems.output
@@ -97,17 +97,17 @@ val numericalCoreVersion: String by project
 val minimalSplinesVersion: String by project
 
 dependencies {
-    // Обе библиотеки — прямые зависимости: решатели используют и сплайны, и
-    // квадратуру/линейную алгебру напрямую. minimal-splines тянет numerical-core
-    // транзитивно (api), но явное объявление фиксирует версию и намерение.
+    // Both libraries are direct dependencies: the solvers use the splines and the
+    // quadrature/linear algebra directly. minimal-splines pulls in numerical-core
+    // transitively (api), but an explicit declaration pins the version and the intent.
     //
-    // `api`, а не `implementation`: типы обеих библиотек стоят в СИГНАТУРАХ
-    // публичного кода этого проекта (Grid и MinimalSplineBasis — в конструкторах
-    // решателей, GaussLegendre/NumericsContext — в их полях, DenseMatrix — в
-    // возвращаемых значениях), то есть потребитель обязан видеть их транзитивно.
+    // `api` rather than `implementation`: the types of both libraries appear in the SIGNATURES
+    // of the public code of this project (Grid and MinimalSplineBasis in the constructors
+    // of the solvers, GaussLegendre/NumericsContext in their fields, DenseMatrix in the
+    // return values), that is, a consumer must see them transitively.
     //
-    // Координаты — из каталога версий, версии — из gradle.properties: их правит
-    // поток выпуска библиотек, и каталог их бы от него спрятал.
+    // The coordinates come from the version catalog and the versions from gradle.properties: they are edited by
+    // the library release flow, and the catalog would have hidden them from it.
     api("${libs.numerical.core.get().module}:$numericalCoreVersion")
     api("${libs.minimal.splines.get().module}:$minimalSplinesVersion")
 
@@ -118,20 +118,20 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
-    // Явная видимость обязательна у КАЖДОГО объявления невнутренних наборов
-    // (main, problems, demo, benchmark): компилятор перестаёт додумывать `public`
-    // за автора, поэтому попадание вспомогательного класса в публичный API
-    // становится решением, а не умолчанием. Тестовые наборы режим не затрагивает.
+    // An explicit visibility is mandatory on EVERY declaration of the non-internal source sets
+    // (main, problems, demo, benchmark): the compiler stops inferring `public`
+    // for the author, so the appearance of an auxiliary class in the public API
+    // becomes a decision rather than a default. The mode does not affect the test source sets.
     explicitApi()
 }
 
-// --- Проверка независимости от исходников соседних репозиториев -----------------
-// Обе библиотеки обязаны присутствовать на classpath компиляции ТОЛЬКО как jar-артефакты.
-// Случайная `project(":...")`/`files("../minimal-splines/build/...")` зависимость
-// провалит задачу. Входит в `check`.
+// --- Check of the independence from the sources of neighbouring repositories ----
+// Both libraries must be present on the compile classpath ONLY as jar artifacts.
+// An accidental `project(":...")`/`files("../minimal-splines/build/...")` dependency
+// will fail the task. It is part of `check`.
 tasks.register("verifyArtifactDependencies") {
     group = "verification"
-    description = "Убедиться, что numerical-core и minimal-splines подключены как артефакты"
+    description = "Verify that numerical-core and minimal-splines are consumed as artifacts"
     val classpath = configurations.compileClasspath
     doLast {
         val files = classpath.get().files
@@ -140,123 +140,123 @@ tasks.register("verifyArtifactDependencies") {
                 f.path.contains("${File.separator}numerical-core${File.separator}build${File.separator}") ||
                 f.path.contains("${File.separator}minimal-splines${File.separator}build${File.separator}")
         }
-        check(offenders.isEmpty()) { "Зависимости обязаны быть jar-артефактами из репозитория Maven, найдено: $offenders" }
+        check(offenders.isEmpty()) { "Dependencies must be jar artifacts from a Maven repository, found: $offenders" }
         for (lib in listOf("numerical-core", "minimal-splines")) {
             val hits = files.filter { it.name.startsWith("$lib-") && it.name.endsWith(".jar") }
-            check(hits.size == 1) { "Ожидался ровно один артефакт $lib на classpath, найдено: $hits" }
-            logger.lifecycle("$lib подключён как артефакт: ${hits.single().name}")
+            check(hits.size == 1) { "Exactly one artifact of $lib was expected on the classpath, found: $hits" }
+            logger.lifecycle("$lib is consumed as an artifact: ${hits.single().name}")
         }
     }
 }
 
 application {
-    // Точка входа по умолчанию; отдельные задачи на каждый решатель описаны ниже.
+    // The default entry point; separate tasks for each solver are described below.
     mainClass.set("demo.fredholm.FredholmDemoKt")
 }
 
 /*
- * ПОЧЕМУ `run` НУЖДАЕТСЯ В ПРАВКЕ CLASSPATH.
+ * WHY `run` NEEDS ITS CLASSPATH FIXED.
  *
- * Плагин `application` строит задачу `run` по classpath исходного набора `main`,
- * а точка входа `demo.fredholm.FredholmDemoKt` живёт в `src/demo` — отдельном наборе,
- * созданном ради того, чтобы вычислительное ядро не зависело от демонстраций.
- * В результате `./gradlew run` падал:
+ * The `application` plugin builds the `run` task over the classpath of the `main` source set,
+ * while the entry point `demo.fredholm.FredholmDemoKt` lives in `src/demo` — a separate source set
+ * created so that the computational core does not depend on the demonstrations.
+ * As a result `./gradlew run` failed:
  *
  *     Error: Could not find or load main class demo.fredholm.FredholmDemoKt
  *     Caused by: java.lang.ClassNotFoundException
  *
- * Почему не замечали: все демонстрации запускаются через собственные задачи
- * (`runFredholm`, `runVolterra`, `runUryson`, `runBenchmark`), где classpath задан явно,
- * а `run` в документации не упоминается. Но задача всё равно видна в `tasks`
- * и в IDE, а первое, что пробует новый человек в Gradle-проекте, — именно `run`.
+ * Why it went unnoticed: all the demonstrations are launched through tasks of their own
+ * (`runFredholm`, `runVolterra`, `runUryson`, `runBenchmark`), where the classpath is set explicitly,
+ * and `run` is not mentioned in the documentation. Yet the task is still visible in `tasks`
+ * and in the IDE, and the first thing a newcomer to a Gradle project tries is precisely `run`.
  *
- * Альтернатива «убрать плагин `application`» отвергнута: он даёт ещё и `distZip`/
- * `installDist`, а сломанная задача починена одной строкой.
+ * The alternative of "removing the `application` plugin" was rejected: it also provides `distZip`/
+ * `installDist`, while the broken task was fixed with a single line.
  */
 tasks.named<JavaExec>("run") {
     classpath = sourceSets["demo"].runtimeClasspath
 }
 
-// --- Внешняя сверка со SciPy: подготовка окружения ---------------------------
-// Сверка со SciPy/NumPy — единственная проверка, не замкнутая на код проекта.
-// Она вынесена в отдельную задачу `scipyVerify` (тег `scipy`), а не входит в
-// обычный прогон: повседневная работа не должна требовать интерпретатора Python
-// и сети. Постоянной гарантией сверку делает CI, где `scipyVerify` — отдельный job.
+// --- External cross-check against SciPy: preparation of the environment ------
+// The cross-check against SciPy/NumPy is the only verification not closed over the project code.
+// It is placed in a separate task `scipyVerify` (tag `scipy`) and is not part of
+// an ordinary run: everyday work must not require a Python interpreter
+// and network access. What makes the cross-check a permanent guarantee is CI, where `scipyVerify` is a separate job.
 
-/** Каталог виртуального окружения со SciPy (вне репозитория, см. .gitignore). */
+/** The directory of the virtual environment with SciPy (outside the repository, see .gitignore). */
 val scipyVenvDir = layout.projectDirectory.dir(".venv-verify")
 
-/** Интерпретатор внутри venv; на Windows структура каталогов иная. */
+/** The interpreter inside the venv; on Windows the directory structure is different. */
 val scipyPython: String = if (System.getProperty("os.name").startsWith("Windows")) {
     scipyVenvDir.file("Scripts/python.exe").asFile.absolutePath
 } else {
     scipyVenvDir.file("bin/python").asFile.absolutePath
 }
 
-// --- Фиксация бэкенда линейной алгебры в тестах -----------------------------
-// Обоснование (по факту, не по осторожности). Эталон `baseline-eh.tsv` снят на
-// бэкенде multik/OpenBLAS, и он К НЕМУ ПРИВЯЗАН: прогон
-// `-Dnumerics.backend=java` даёт 4/4 падения `EhCharacterizationTest` с
-// расхождением до 5.7e-2 (худший ключ `F1.B.theta.n8.sloan`) при допуске 1e-9 —
-// в 5·10^7 раз больше. Причина: F1 — уравнение первого рода, плохо
-// обусловленное, и разные реализации LU расходятся на нём закономерно.
+// --- Pinning of the linear-algebra backend in the tests ---------------------
+// The justification (by fact, not by caution). The baseline `baseline-eh.tsv` was captured on the
+// multik/OpenBLAS backend and IS BOUND TO IT: a run with
+// `-Dnumerics.backend=java` gives 4/4 failures of `EhCharacterizationTest` with a
+// divergence of up to 5.7e-2 (the worst key being `F1.B.theta.n8.sloan`) against a tolerance of 1e-9 —
+// 5e7 times larger. The reason: F1 is an equation of the first kind, ill
+// conditioned, and different LU implementations diverge on it as a matter of course.
 //
-// Одновременно `Backends.select` при недоступности нативной библиотеки МОЛЧА
-// откатывается на чистый Java-бэкенд (`java`). Без явного выбора такой откат на другой
-// машине или в CI выглядел бы как «рефакторинг испортил числа».
+// At the same time `Backends.select`, when the native library is unavailable, SILENTLY
+// falls back to the pure Java backend (`java`). Without an explicit selection such a fallback on another
+// machine or in CI would look like "a refactoring spoilt the numbers".
 //
-// Внешнее `-Dnumerics.backend=...` УВАЖАЕТСЯ и перекрывает значение по умолчанию:
-// этап 2.2 спека требует гонять `fastTest` НА ОБОИХ бэкендах.
+// An external `-Dnumerics.backend=...` IS RESPECTED and overrides the default value:
+// stage 2.2 of the specification requires running `fastTest` ON BOTH backends.
 val numericsBackend: String = System.getProperty("numerics.backend") ?: "auto"
 
-// --- Машинно-зависимый гейт (тег `machine`) ---------------------------------
+// --- The machine-dependent gate (tag `machine`) -----------------------------
 //
-// ОДНА ПРОВЕРКА ОСМЫСЛЕННА ТОЛЬКО НА МАШИНЕ СНЯТИЯ ЭТАЛОНА — сверка F1 с числами
-// из статьи (`PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`).
-// На другой архитектуре CPU нативный BLAS выбирает другие ядра (NEON против AVX),
-// то есть другой порядок блочного суммирования; на плохо обусловленных задачах F1
-// это выходит за допуск сверки — и проверка закономерно красная.
+// ONE CHECK IS MEANINGFUL ONLY ON THE MACHINE ON WHICH THE BASELINE WAS CAPTURED — the cross-check of F1 against the numbers
+// from the article (`PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`).
+// On another CPU architecture the native BLAS selects other kernels (NEON against AVX),
+// that is, another order of block summation; on the ill-conditioned problems F1
+// this goes beyond the tolerance of the cross-check — and the check is red as a matter of course.
 //
-// ИСТОРИЯ ВОПРОСА (чтобы не возвращаться к отвергнутому). Прежде тег `machine`
-// несли и оба характеризационных класса: их эталоны сверялись с единым допуском
-// 1e-9, и CI на `ubuntu-latest`
-// (x86_64) был КРАСНЫМ С ПЕРВОГО ПРОГОНА именно на них, хотя локально
-// все они зелᄅные. Рассмотрены и отвергнуты два варианта:
-//  - ВТОРОЙ ЭТАЛОН под linux-x86_64: его нельзя снять локально (только через CI),
-//    а `captureBaseline` — центральная рутина проекта (см. `docs/baseline-changes.md`):
-//    каждая правка алгоритма требовала бы двойного пересъёма с раундтрипом через CI.
-//    Кроме того, это НЕ чинит `PublishedValuesTest` (см. ниже).
-//  - ПЕРЕНОС ГЕЙТОВ НА `macos-latest`: меньше раннеров (очередь), 3 ядра против 4,
-//    то есть `slowTest` вырос бы с 8.5 мин до 15-25; и всё равно ломалось бы при смене
-//    образа раннера.
+// THE HISTORY OF THE QUESTION (so as not to return to what was rejected). Formerly the tag `machine`
+// was carried by both characterization classes as well: their baselines were compared with a single tolerance of
+// 1e-9, and CI on `ubuntu-latest`
+// (x86_64) was RED FROM THE VERY FIRST RUN precisely on them, although locally
+// they were all green. Two options were considered and rejected:
+//  - A SECOND BASELINE for linux-x86_64: it cannot be captured locally (only through CI),
+//    while `captureBaseline` is a central routine of the project (see `docs/baseline-changes.md`):
+//    every edit of an algorithm would require a double recapture with a round trip through CI.
+//    Besides, this does NOT fix `PublishedValuesTest` (see below).
+//  - MOVING THE GATES TO `macos-latest`: fewer runners (a queue), 3 cores against 4,
+//    that is, `slowTest` would grow from 8.5 min to 15-25; and it would still break on a change of
+//    the runner image.
 //
-// РЕШЕНИЕ: разделение ПО ПЕРЕНОСИМОСТИ. Измерено, что машинно-зависимая
-// поверхность УЗКАЯ, и с 2026-09-16 она сузилась до ОДНОГО метода. Оба
-// характеризационных класса тег `machine` ПОТЕРЯЛИ: эталоны получили колонку
-// `класс`, вычисленную сравнением снимков двух путей LU, и оба гейта зелёные
-// и на `-Dnumerics.backend=native`, и на `java` (см. docs/baseline-changes.md,
-// запись от 2026-09-16). Осталось непереносимым только
-// `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (F1, 11 расхождений
-// до 11.49 % при допуске 2 %) — и вылечить его тем же приёмом НЕЛЬЗЯ: сверка идёт
-// с числами ИЗ СТАТЬИ, а их нельзя «переснять» под платформу.
+// THE DECISION: a separation BY PORTABILITY. It was measured that the machine-dependent
+// surface is NARROW, and since 2026-09-16 it has narrowed to a SINGLE method. Both
+// characterization classes LOST the tag `machine`: the baselines received a column
+// `class`, computed by comparing the snapshots of two LU routes, and both gates are green
+// on `-Dnumerics.backend=native` and on `java` alike (see docs/baseline-changes.md,
+// the entry of 2026-09-16). The only thing that remained non-portable is
+// `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (F1, 11 discrepancies
+// of up to 11.49 % against a tolerance of 2 %) — and it CANNOT be cured by the same technique: the cross-check is made
+// against the numbers FROM THE ARTICLE, and they cannot be "recaptured" for a platform.
 //
-// ЛОКАЛЬНО ФЛАГ ВКЛЮЧЁН ПО УМОЛЧАНИЮ; в CI тег `machine` исключает ЕДИНСТВЕННЫЙ
-// шаг — `slowTest` в job `full`, который передаёт `-PmachineDependentGates=false`.
-// Характеризационные гейты этим флагом больше не управляются и гоняются в CI
-// безусловно (job `characterization`). Отдельной функции «пропустить задачу целиком»
-// больше нет: задач, у которых машинно-зависимы ВСЕ тесты, не осталось,
-// а исключения по тегу для одного метода достаточно.
+// LOCALLY THE FLAG IS ENABLED BY DEFAULT; in CI the tag `machine` excludes a SINGLE
+// step — `slowTest` in the job `full`, which passes `-PmachineDependentGates=false`.
+// The characterization gates are no longer governed by this flag and are run in CI
+// unconditionally (the job `characterization`). There is no separate "skip the whole task" function
+// any more: no task is left in which ALL the tests are machine-dependent,
+// and an exclusion by tag for a single method suffices.
 val machineDependentGates: Boolean =
     (findProperty("machineDependentGates") as String?)?.toBoolean() ?: true
 
-// --- Генераторы данных среди тестовых классов --------------------------------
-// Эти четыре класса живут в `src/test`, но проверок не содержат: они СНИМАЮТ
-// эталоны и ВЫГРУЖАЮТ артефакты (критериев PASS/FAIL нет). Их запускают только
-// адресные задачи `captureBaseline`, `captureExtraBaseline`,
-// `dumpVerificationArtifacts`, `sec4Tables`; из всех остальных наборов они
-// исключаются по имени. Список ОДИН на весь скрипт: раньше те же четыре строки
-// стояли в четырёх задачах, и добавление пятого генератора требовало не забыть
-// про все четыре места.
+// --- Data generators among the test classes ----------------------------------
+// These four classes live in `src/test` but contain no checks: they CAPTURE
+// baselines and EXPORT artifacts (there are no PASS/FAIL criteria). They are run only by the
+// dedicated tasks `captureBaseline`, `captureExtraBaseline`,
+// `dumpVerificationArtifacts`, `sec4Tables`; from all the other sets they are
+// excluded by name. The list is a SINGLE one for the whole script: formerly the same four lines
+// stood in four tasks, and adding a fifth generator required remembering
+// all four places.
 val generatorTestClasses = listOf(
     "characterization.BaselineSnapshotTool",
     "characterization.ExtraBaselineSnapshotTool",
@@ -265,26 +265,26 @@ val generatorTestClasses = listOf(
 )
 
 /**
- * Убирает генераторы данных из набора.
+ * Removes the data generators from a set.
  *
- * ПОБОЧНЫЙ ЭФФЕКТ, НА КОТОРЫЙ ОПИРАЕТСЯ ВСЯ СБОРКА: любой вызов
- * `excludeTestsMatching` включает флаг `patternFiltersSpecified`, и Gradle 8.9
- * тогда падает с `No tests found for given includes`, если не отобралось ни
- * одного теста. Это единственная защита от вырождения «ноль тестов — зелёная
- * сборка» (опции `failOnNoDiscoveredTests` в Gradle 8.9 нет).
+ * THE SIDE EFFECT ON WHICH THE WHOLE BUILD RELIES: any call of
+ * `excludeTestsMatching` turns on the flag `patternFiltersSpecified`, and Gradle 8.9
+ * then fails with `No tests found for given includes` if not a single test
+ * was selected. This is the only protection against the degenerate case "zero tests — a green
+ * build" (there is no `failOnNoDiscoveredTests` option in Gradle 8.9).
  */
 fun Test.excludeGeneratorTools() {
     filter { generatorTestClasses.forEach { excludeTestsMatching(it) } }
 }
 
 /**
- * Общая настройка ЦЕЛЕВЫХ ЧИСЛЕННЫХ ГЕЙТОВ — задач, которые отбирают ОДИН класс,
- * уже входящий в `slowTest`, и существуют ради быстрого адресного сигнала
+ * The common configuration of the TARGETED NUMERICAL GATES — the tasks that select ONE class
+ * already part of `slowTest` and exist for the sake of a fast targeted signal
  * (`characterizationTest`, `extraCharacterizationTest`, `convergenceOrderTest`).
  *
- * Отличаются они ровно одним — именем класса, поэтому тело задачи сведено к
- * одной строке. Бэкенд фиксируется во всех трёх: каждая сверяет числа с
- * эталоном, снятым на конкретной реализации LU.
+ * They differ in exactly one thing — the name of the class — so the body of the task is reduced to
+ * a single line. The backend is pinned in all three: each of them compares numbers against a
+ * baseline captured on a particular LU implementation.
  */
 fun Test.gateOverTestClass(testClass: String) {
     testClassesDirs = sourceSets["test"].output.classesDirs
@@ -296,32 +296,32 @@ fun Test.gateOverTestClass(testClass: String) {
 }
 
 /**
- * Подготовка venv со SciPy/NumPy.
+ * Preparation of the venv with SciPy/NumPy.
  *
- * Почему отдельный класс задачи, а не `doLast { exec { ... } }`: метод `Project.exec`
- * объявлен устаревшим в Gradle 8 и удалён в Gradle 9, а его замена — сервис
- * [ExecOperations], который доступен только через инъекцию в конструктор задачи.
+ * Why a separate task class rather than `doLast { exec { ... } }`: the method `Project.exec`
+ * was deprecated in Gradle 8 and removed in Gradle 9, and its replacement is the service
+ * [ExecOperations], which is available only through injection into the constructor of a task.
  *
- * Версии зависимостей задаются файлом требований (входом задачи), поэтому смена
- * пиннинга автоматически приводит к переустановке окружения.
+ * The versions of the dependencies are set by the requirements file (an input of the task), so a change of the
+ * pinning automatically leads to a reinstallation of the environment.
  */
 abstract class SetupScipyEnvironment @Inject constructor(
     private val execOperations: ExecOperations,
 ) : DefaultTask() {
 
-    /** Путь к интерпретатору внутри venv. */
+    /** The path to the interpreter inside the venv. */
     @get:Input
     abstract val pythonPath: Property<String>
 
-    /** Каталог venv (создаётся, если интерпретатора нет). */
+    /** The venv directory (it is created if the interpreter is absent). */
     @get:Input
     abstract val venvPath: Property<String>
 
-    /** Файл с закреплёнными версиями SciPy/NumPy. */
+    /** The file with the pinned versions of SciPy/NumPy. */
     @get:InputFile
     abstract val requirements: RegularFileProperty
 
-    /** Файл-отметка о готовности окружения (для наглядности в build/). */
+    /** A marker file signalling that the environment is ready (for visibility in build/). */
     @get:OutputFile
     abstract val marker: RegularFileProperty
 
@@ -329,40 +329,40 @@ abstract class SetupScipyEnvironment @Inject constructor(
     fun prepare() {
         val python = File(pythonPath.get())
         if (!python.exists()) {
-            logger.lifecycle("Создаётся виртуальное окружение ${venvPath.get()}")
+            logger.lifecycle("Creating the virtual environment ${venvPath.get()}")
             execOperations.exec { commandLine("python3", "-m", "venv", venvPath.get()) }
-            // pip из состава свежего venv обычно устарел и спотыкается на колёсах SciPy.
+            // The pip shipped with a fresh venv is usually outdated and stumbles on the SciPy wheels.
             execOperations.exec {
                 commandLine(python.absolutePath, "-m", "pip", "install", "--quiet", "--upgrade", "pip")
             }
         }
         val requirementsFile = requirements.get().asFile
-        // Проба С ПРОВЕРКОЙ ВЕРСИЙ, а не «просто импортируется». Зачем она нужна,
-        // если всё равно есть `pip install -r`: проба даёт ВНЯТНУЮ ДИАГНОСТИКУ
-        // сценария «venv есть, пакетов нет/версии не те»: без неё в журнале не видно,
-        // что именно было не так и почему сеть внезапно потребовалась.
-        // Сравнение идёт именно с закреплёнными версиями: сверка обязана быть
-        // воспроизводимой, иначе расхождение не отличить от смены поведения SciPy.
+        // A probe WITH A VERSION CHECK rather than "it merely imports". Why it is needed
+        // when there is a `pip install -r` anyway: the probe gives CLEAR DIAGNOSTICS for the
+        // scenario "the venv exists, the packages are missing or the versions are wrong": without it the log does not show
+        // what exactly went wrong and why network access was suddenly required.
+        // The comparison is made precisely against the pinned versions: the cross-check must be
+        // reproducible, otherwise a discrepancy could not be told apart from a change of the behaviour of SciPy.
         //
-        // КОНТРАКТ ФОРМАТА файла требований (важно при добавлении новых пакетов):
-        // поддерживается только формат `name==version`, и имя пакета обязано совпадать
-        // с именем МОДУЛЯ (проба делает `import <name>`). Для `scipy`/`numpy` это верно,
-        // но, например, `pyyaml` импортируется как `yaml` — такой пакет потребует
-        // явного отображения «пакет -> модуль». Строки без `==` (комментарии, пустые,
-        // ограничения вида `>=`) игнорируются пробой — их проверяет только pip.
+        // THE FORMAT CONTRACT of the requirements file (important when adding new packages):
+        // only the format `name==version` is supported, and the name of the package must coincide
+        // with the name of the MODULE (the probe performs `import <name>`). For `scipy`/`numpy` this holds,
+        // but `pyyaml`, for example, is imported as `yaml` — such a package would require
+        // an explicit mapping "package -> module". Lines without `==` (comments, empty ones,
+        // constraints of the form `>=`) are ignored by the probe — they are checked by pip only.
         val pinned: Map<String, String> = requirementsFile.readLines()
             .map { it.substringBefore('#').trim() }
             .filter { it.contains("==") }
             .associate { it.substringBefore("==").trim() to it.substringAfter("==").trim() }
-        // Каждый пакет — СВОЙ `import`. Общий префикс `import a; b` импортировал бы
-        // только первый, а остальные стали бы голыми выражениями и давали NameError:
-        // проба всегда падала бы, ветка «версии совпали» стала бы мёртвым кодом,
-        // а `pip install` запускался бы каждый раз.
+        // Every package gets its OWN `import`. A common prefix `import a; b` would import
+        // only the first one, while the rest would become bare expressions and would give a NameError:
+        // the probe would always fail, the branch "the versions matched" would become dead code,
+        // and `pip install` would be run every time.
         val probeScript = pinned.keys.joinToString("; ") { "import $it" } +
             "; print(" + pinned.keys.joinToString(" + ' ' + ") { "$it.__version__" } + ")"
-        // Потоки РАЗВЕДЕНЫ: любой DeprecationWarning от Python идёт в stderr и, будь
-        // потоки слиты, попал бы в строку версий и сломал сравнение → лишняя
-        // переустановка на исправном окружении. stderr используется только для диагностики.
+        // THE STREAMS ARE SEPARATED: any DeprecationWarning from Python goes to stderr and, were the
+        // streams merged, would land in the line of versions and break the comparison → an unnecessary
+        // reinstallation on a healthy environment. stderr is used for diagnostics only.
         val probeOut = ByteArrayOutputStream()
         val probeErr = ByteArrayOutputStream()
         val probe = execOperations.exec {
@@ -376,20 +376,20 @@ abstract class SetupScipyEnvironment @Inject constructor(
         val matches = probe.exitValue == 0 && installed == pinned.values.toList()
         if (matches) {
             logger.lifecycle(
-                "Окружение SciPy соответствует ${requirementsFile.name}: " +
+                "The SciPy environment matches ${requirementsFile.name}: " +
                     pinned.entries.joinToString { "${it.key} ${it.value}" } +
-                    " — установка не требуется",
+                    " — no installation is required",
             )
         } else {
             val reason = if (probe.exitValue != 0) {
-                "пакеты не импортируются (код ${probe.exitValue}): " +
+                "the packages do not import (code ${probe.exitValue}): " +
                     probeErr.toString("UTF-8").trim().lines().lastOrNull()?.take(300).orEmpty()
             } else {
-                "версии не совпали: установлено " +
+                "the versions did not match: installed " +
                     pinned.keys.zip(installed) { name, v -> "$name $v" }.joinToString() +
-                    ", требуется " + pinned.entries.joinToString { "${it.key} ${it.value}" }
+                    ", required " + pinned.entries.joinToString { "${it.key} ${it.value}" }
             }
-            logger.lifecycle("Окружение SciPy приводится к ${requirementsFile.name} — $reason")
+            logger.lifecycle("The SciPy environment is being brought to ${requirementsFile.name} — $reason")
             execOperations.exec {
                 commandLine(
                     python.absolutePath, "-m", "pip", "install", "--quiet",
@@ -400,7 +400,7 @@ abstract class SetupScipyEnvironment @Inject constructor(
         val markerFile = marker.get().asFile
         markerFile.parentFile.mkdirs()
         markerFile.writeText(
-            "Окружение SciPy готово: ${python.absolutePath}\n" +
+            "The SciPy environment is ready: ${python.absolutePath}\n" +
                 requirementsFile.readLines().filterNot { it.trimStart().startsWith("#") }
                     .filter { it.isNotBlank() }.joinToString("\n", postfix = "\n"),
         )
@@ -409,170 +409,170 @@ abstract class SetupScipyEnvironment @Inject constructor(
 
 tasks.register<SetupScipyEnvironment>("setupScipyVerification") {
     group = "verification"
-    description = "Подготовить окружение Python со SciPy для внешней сверки"
+    description = "Prepare the Python environment with SciPy for the external cross-check"
     pythonPath.set(scipyPython)
     venvPath.set(scipyVenvDir.asFile.absolutePath)
     requirements.set(layout.projectDirectory.file("tools/requirements-verify.txt"))
     marker.set(layout.buildDirectory.file("verification/scipy-env.ok"))
-    // Актуальность определяется НАЛИЧИЕМ ИНТЕРПРЕТАТОРА, а не файлом-маркером:
-    // маркер лежит в build/ и переживал удаление .venv-verify, после чего задача
-    // считалась выполненной, а сверка падала невнятным сообщением.
+    // Up-to-dateness is determined by THE PRESENCE OF THE INTERPRETER rather than by a marker file:
+    // the marker lies in build/ and survived a removal of .venv-verify, after which the task
+    // was considered executed while the cross-check failed with an obscure message.
     val pythonFile = File(scipyPython)
     outputs.upToDateWhen { pythonFile.exists() }
 }
 
-// --- Разделение тестов по назначению ------------------------------------------
-// Единственная задача `test` гоняла ВСЁ и не завершалась за десятки минут, что
-// делало невозможной проверку после каждой правки. Поэтому тесты размечены
-// тегами на уровне класса, а на каждый тег есть своя задача:
+// --- Separation of the tests by purpose ---------------------------------------
+// A single `test` task ran EVERYTHING and did not finish within tens of minutes, which
+// made a check after every edit impossible. For that reason the tests are marked
+// with tags at the class level, and every tag has a task of its own:
 //
-//   fast   (141 тест)   — единицы секунд, набор для повседневной работы и каждого PR;
-//   slow   (23 теста)  — прогон по сеткам до n=64: замер 8 мин 39 с; входит в `check`
-//                         (через источники Kover) и в job `full` в CI;
-//   scipy  (9 тестов)   — быстрые сами по себе, но требуют venv с Python и
-//                         выгруженных артефактов, поэтому вынесены отдельно.
+//   fast   (141 tests)  — a few seconds, the set for everyday work and for every PR;
+//   slow   (23 tests)   — a run over grids up to n=64: measured at 8 min 39 s; part of `check`
+//                         (through the Kover sources) and of the job `full` in CI;
+//   scipy  (9 tests)    — fast in themselves, but they require a venv with Python and
+//                         exported artifacts, and are therefore kept separate.
 //
-// Разметка сделана ПО ЗАМЕРАМ, а не по именам классов: например, `*GoldenTest`
-// и `*CoverageTest` решателей укладываются в единицы секунд и попали в fast.
+// The marking was made BY MEASUREMENT rather than by class names: for example, the `*GoldenTest`
+// and `*CoverageTest` of the solvers fit within a few seconds and ended up in fast.
 //
-// Задача `test` сохранена как полный прогон (все теги) и из `check` ИСКЛЮЧЕНА
-// — см. её KDoc ниже. Из неё, как и из наборов по тегам, исключены генераторы
-// данных: это не проверки, а инструменты (см. ниже).
+// The `test` task is kept as a full run (all the tags) and is EXCLUDED from `check`
+// — see its KDoc below. Like the tag-based sets, it excludes the data
+// generators: those are not checks but tools (see below).
 //
-// НЕОЧЕВИДНЫЙ МЕХАНИЗМ, который важно не потерять при правках. Любой вызов
-// `excludeTestsMatching` включает внутренний флаг `patternFiltersSpecified`, и Gradle 8.9
-// тогда бросает `No tests found for given includes`, если не отобралось ни одного
-// теста. Именно это защищает все наборы от вырожденного прогона «ноль тестов —
-// зелёная сборка» (опции `failOnNoDiscoveredTests` в Gradle 8.9 нет). Защита —
-// побочный эффект exclude-фильтров: уберёте их — исчезнет и она.
+// A NON-OBVIOUS MECHANISM that must not be lost in edits. Any call of
+// `excludeTestsMatching` turns on the internal flag `patternFiltersSpecified`, and Gradle 8.9
+// then throws `No tests found for given includes` if not a single test
+// was selected. It is precisely this that protects all the sets from the degenerate run "zero tests —
+// a green build" (there is no `failOnNoDiscoveredTests` option in Gradle 8.9). The protection is a
+// side effect of the exclude filters: remove them and it disappears too.
 /**
- * Полный прогон всех тестов (fast + slow + scipy) — только для ручного запуска.
+ * A full run of all the tests (fast + slow + scipy) — for a manual invocation only.
  *
- * Задача ЗЕЛЁНАЯ (этап 8.6 закрыл расхождение F1 с публикацией), но из `check`
- * выведена ПО ВРЕМЕНИ, а не по результату: она дублирует `fastTest` и `slowTest`
- * вместе, то есть гоняет самые дорогие классы повторно. Гейтом служат НАБОРЫ
- * ПО ТЕГАМ: `fastTest` (в `check`, единицы секунд) и `slowTest` (отдельный job CI
- * `full`, запуск на каждый push и PR).
+ * The task is GREEN (stage 8.6 closed the F1 discrepancy with the publication), but it is kept out of `check`
+ * BY TIME rather than by result: it duplicates `fastTest` and `slowTest`
+ * together, that is, it runs the most expensive classes again. The gate is provided by the TAG-BASED
+ * SETS: `fastTest` (in `check`, a few seconds) and `slowTest` (the separate CI job
+ * `full`, run on every push and PR).
  *
- * ИСТОРИЯ (чтобы не возвращаться к отвергнутому). До этапа 8.6 `slowTest` был
- * КРАСНЫМ: `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` давал 4
- * расхождения на ключах `F.F1.H.theta.*` при допуске 2 %. Закрыто НЕ
- * ослаблением общего допуска (он по-прежнему 2 %), а узким классом допуска 8 %
- * для шести ключей таблицы `table-f1.tex`, выведенным из измеренного разброса
- * между реализациями LU на этих же ключах (7.267 %); потеря строгости
- * компенсирована расширением покрытия F1 в `baseline-eh.tsv` с 4 до 54 ключей
- * (допуск 1e-9). Подробности — KDoc `PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE`
- * и `docs/baseline-changes.md`.
+ * HISTORY (so as not to return to what was rejected). Before stage 8.6 `slowTest` was
+ * RED: `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` gave 4
+ * discrepancies on the keys `F.F1.H.theta.*` against a tolerance of 2 %. It was closed NOT
+ * by relaxing the common tolerance (it is still 2 %) but by a narrow tolerance class of 8 %
+ * for the six keys of the table `table-f1.tex`, derived from the measured spread
+ * between the LU implementations on those very keys (7.267 %); the loss of strictness is
+ * compensated by the extension of the F1 coverage in `baseline-eh.tsv` from 4 to 54 keys
+ * (tolerance 1e-9). The details are in the KDoc of `PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE`
+ * and in `docs/baseline-changes.md`.
  */
 tasks.test {
     useJUnitPlatform()
     excludeGeneratorTools()
-    // Путь к интерпретатору передаётся тесту явно: искать его самостоятельно тест
-    // не должен — иначе на разных машинах он находил бы разные интерпретаторы.
-    // Зависимости от `setupScipyVerification` здесь НЕТ намеренно: обычный прогон
-    // не должен требовать Python и сети. Свойство `scipy.required` здесь НЕ задано:
-    // без окружения сверка сообщает о пропуске (мягкое поведение).
+    // The path to the interpreter is passed to the test explicitly: the test must not look for it
+    // on its own — otherwise it would find different interpreters on different machines.
+    // There is deliberately NO dependency on `setupScipyVerification` here: an ordinary run
+    // must not require Python and network access. The property `scipy.required` is NOT set here:
+    // without an environment the cross-check reports a skip (the soft behaviour).
     systemProperty("scipy.python", scipyPython)
     systemProperty("numerics.backend", numericsBackend)
 }
 
-// Стек тестовой JVM. Нативный LAPACK (OpenBLAS в CI на ubuntu) в многопоточном dgetrf
-// кладёт на стек вызывающего потока большие рабочие массивы; при стандартном -Xss
-// это SIGSEGV/SIGBUS без stack trace (exit 139). В CI дополнительно OPENBLAS_NUM_THREADS=4.
+// The stack of the test JVM. The native LAPACK (OpenBLAS in CI on ubuntu) in a multi-threaded dgetrf
+// puts large working arrays on the stack of the calling thread; with the standard -Xss
+// this is a SIGSEGV/SIGBUS without a stack trace (exit 139). In CI there is additionally OPENBLAS_NUM_THREADS=4.
 tasks.withType<Test>().configureEach {
     jvmArgs("-Xss8m")
 }
 
 /**
- * СОСТАВ `check` (и следом — `build`): `fastTest` + `characterizationTest` +
- * `extraCharacterizationTest` + `slowTest` (плюс `koverVerify`, добавленный плагином).
+ * THE COMPOSITION OF `check` (and, following it, of `build`): `fastTest` + `characterizationTest` +
+ * `extraCharacterizationTest` + `slowTest` (plus `koverVerify`, added by the plugin).
  *
- * Почему `test` из `check` исключён. Он дублирует `fastTest` и `slowTest` вместе:
- * самые дорогие классы гонялись бы дважды, а состав гейта стал бы неявным.
+ * Why `test` is excluded from `check`. It duplicates `fastTest` and `slowTest` together:
+ * the most expensive classes would be run twice and the composition of the gate would become implicit.
  *
- * ПОЧЕМУ `slowTest` ТЕПЕРЬ ВХОДИТ В `check` (изменение этапа 8.6).
- * До этапа 8.6 он был КРАСНЫМ (расхождение F1 с публикацией) и потому выведен из
- * `check`, из CI и из источников Kover. Следствие было хуже красного теста: сверка с
- * публикацией не исполнялась НИ В ОДНОЙ автоматической проверке, то есть
- * ограничитель ширины послабления можно было молча расширить. Зелёный, но нигде
- * не запускаемый набор — не гейт, а декорация.
+ * WHY `slowTest` IS NOW PART OF `check` (a change of stage 8.6).
+ * Before stage 8.6 it was RED (the F1 discrepancy with the publication) and was therefore kept out of
+ * `check`, out of CI and out of the Kover sources. The consequence was worse than a red test: the cross-check against
+ * the publication was executed in NO automatic check, that is, the
+ * limiter of the width of the relaxation could be widened silently. A set that is green but is run
+ * nowhere is not a gate but a decoration.
  *
- * МЕХАНИЗМ включения — ЯВНЫЙ `dependsOn("slowTest")` ниже. Альтернатива через
- * `disabledForTestTasks` блока `kover` (убрать оттуда `slowTest`, чтобы он стал
- * источником покрытия и тем самым зависимостью `koverVerify`) была проверена и
- * ОТВЕРГНУТА ПО ФАКТУ: `./gradlew check --rerun-tasks` падает через 7 мин 9 с с
- * `Process 'Gradle Test Executor' finished with non-zero exit value 137` (SIGKILL по
- * памяти) — инструментация Kover поверх матриц до n = 64 не укладывается в память,
- * хотя тот же `slowTest` САМ ПО СЕБЕ проходит 23/23. Поэтому `slowTest` ОСТАЛСЯ
- * в `disabledForTestTasks` (то есть без инструментации), а в `check` входит напрямую.
- * Цена выбора: строки, покрытые ТОЛЬКО slow-классами, в отчёт покрытия не попадают —
- * но САМИ ПРОВЕРКИ исполняются, а это главное. Проверено `check --dry-run`:
- * `:slowTest` в графе.
+ * THE MECHANISM of the inclusion is the EXPLICIT `dependsOn("slowTest")` below. The alternative through
+ * `disabledForTestTasks` of the `kover` block (removing `slowTest` from there, so that it becomes a
+ * source of coverage and thereby a dependency of `koverVerify`) was tried and
+ * REJECTED BY FACT: `./gradlew check --rerun-tasks` fails after 7 min 9 s with
+ * `Process 'Gradle Test Executor' finished with non-zero exit value 137` (a SIGKILL on
+ * memory) — the Kover instrumentation on top of matrices up to n = 64 does not fit into memory,
+ * although the same `slowTest` ON ITS OWN passes 23/23. For that reason `slowTest` REMAINED
+ * in `disabledForTestTasks` (that is, without instrumentation), while it enters `check` directly.
+ * The price of the choice: the lines covered ONLY by the slow classes do not appear in the coverage report —
+ * but THE CHECKS THEMSELVES are executed, and that is the main thing. Verified with `check --dry-run`:
+ * `:slowTest` is in the graph.
  *
- * ЦЕНА: `check` вырастает с ~1 мин до ~9 мин (`slowTest` — 8 мин 39 с, из них
- * `PublishedValuesTest` ~190 с). Плата принята сознательно: `check`/`build` — это
- * предкоммитный гейт, а не цикл правка-проверка. Для быстрого цикла есть
- * `./gradlew fastTest` (единицы секунд) и тройка
- * `fastTest characterizationTest extraCharacterizationTest` (~1 мин) — то, что `check`
- * содержал до этого изменения.
+ * THE PRICE: `check` grows from ~1 min to ~9 min (`slowTest` takes 8 min 39 s, of which
+ * `PublishedValuesTest` ~190 s). The price is accepted deliberately: `check`/`build` is a
+ * pre-commit gate rather than an edit-check cycle. For a fast cycle there are
+ * `./gradlew fastTest` (a few seconds) and the triple
+ * `fastTest characterizationTest extraCharacterizationTest` (~1 min) — which is what `check`
+ * contained before this change.
  *
- * ДОПОЛНИТЕЛЬНО СКВОЗЬ CI: job `full` в `.github/workflows/ci.yml` гоняет `slowTest`
- * отдельным job'ом на каждый push и PR — параллельно остальным, так что
- * обратная связь по job'у `fast` остаётся в единицах секунд.
+ * ADDITIONALLY THROUGH CI: the job `full` in `.github/workflows/ci.yml` runs `slowTest`
+ * as a separate job on every push and PR — in parallel with the rest, so that
+ * the feedback of the job `fast` stays within seconds.
  *
- * НЕЗАВИСИМО ОТ ВСЕГО ЭТОГО ресурсные проверки `PublishedValuesTest` —
- * `publishedValuesResourceIsWellFormed` и `luPathDependentToleranceCoversExactlyTheDeclaredKeys`
- * — помечены НА УРОВНЕ МЕТОДА тегом `fast` и потому исполняются ещё и в
- * `fastTest`, то есть в быстром цикле и в job `fast`. Они разбирают только ресурс
- * (единицы миллисекунд) и ловят тихое расширение послабления СРАЗУ, а не через
- * восемь минут.
+ * INDEPENDENTLY OF ALL THIS, the resource checks of `PublishedValuesTest` —
+ * `publishedValuesResourceIsWellFormed` and `luPathDependentToleranceCoversExactlyTheDeclaredKeys`
+ * — are marked AT THE METHOD LEVEL with the tag `fast` and are therefore executed also in
+ * `fastTest`, that is, in the fast cycle and in the job `fast`. They parse only the resource
+ * (a few milliseconds) and catch a silent widening of the relaxation IMMEDIATELY rather than after
+ * eight minutes.
  *
- * `convergenceOrderTest` в `check` НЕ входит (остаётся в `disabledForTestTasks`): его
- * быстрый поднабор уже в `fastTest`, а полная матрица гоняется job'ом
- * `characterization` и входит в `slowTest`. `scipyVerify` — требует Python и сети.
+ * `convergenceOrderTest` is NOT part of `check` (it stays in `disabledForTestTasks`): its
+ * fast subset is already in `fastTest`, while the full matrix is run by the job
+ * `characterization` and is part of `slowTest`. `scipyVerify` requires Python and network access.
  *
- * Замечание о взаимодействии с Kover: `koverVerify` уже входит в `check` и тянет
- * `fastTest` сам — но опираться на это нельзя: состав источников покрытия может
- * меняться, а требование «`check` гоняет fast-набор» от этого не зависит.
- * Поэтому зависимость объявлена явно.
+ * A remark on the interaction with Kover: `koverVerify` is already part of `check` and pulls in
+ * `fastTest` by itself — but this must not be relied upon: the composition of the coverage sources may
+ * change, while the requirement "`check` runs the fast set" does not depend on that.
+ * For that reason the dependency is declared explicitly.
  */
 tasks.named("check") {
-    // Убираем ИМЕННО `test`, сохраняя всё остальное (в том числе `koverVerify`),
-    // что добавили плагины: жёсткий `setDependsOn(listOf("fastTest", ...))` тихо
-    // выкинул бы и будущие проверки.
+    // What is removed is PRECISELY `test`, keeping everything else (including `koverVerify`)
+    // that the plugins added: a rigid `setDependsOn(listOf("fastTest", ...))` would silently
+    // throw out future checks as well.
     //
-    // Фильтр ищет НЕ строку и НЕ `TaskProvider`: плагин `java` в Gradle 8.9 привязывает
-    // к `check` набор тестов как `Provider<JvmTestSuite>` (проверено выводом типов:
-    // `NamedDomainObjectCreatingProvider :: provider(TestSuite 'test', ...)`), и проверка
-    // по имени задачи его не ловит.
+    // The filter looks for NEITHER a string NOR a `TaskProvider`: the `java` plugin in Gradle 8.9 binds
+    // the test suite to `check` as a `Provider<JvmTestSuite>` (verified by type inference:
+    // `NamedDomainObjectCreatingProvider :: provider(TestSuite 'test', ...)`), and a check
+    // by task name does not catch it.
     setDependsOn(
         dependsOn.filterNot { dependency ->
             val resolved = if (dependency is Provider<*>) dependency.orNull else dependency
             resolved is JvmTestSuite && resolved.name == "test"
         },
     )
-    // `characterizationTest` и `extraCharacterizationTest` перечислены ЯВНО, хотя оба
-    // класса теперь гонятся и в составе `slowTest` (он вошёл в `check` через Kover).
-    // Почему не убраны как дублирующие: вхождение `slowTest` держится на списке
-    // `disabledForTestTasks` блока `kover` — неявном механизме стороннего плагина.
-    // Он может измениться с версией Kover либо быть правлен ради покрытия, и тогда
-    // два ГЛАВНЫХ численных гейта тихо выпали бы из `check` вместе с ним. Явная
-    // зависимость гарантирует их исполнение независимо от поведения Kover; повторный
-    // прогон тех же двух классов стоит 46 с на фоне восьмиминутного `slowTest` и
-    // этой страховки стоит.
+    // `characterizationTest` and `extraCharacterizationTest` are listed EXPLICITLY, although both
+    // classes are now run as part of `slowTest` as well (which entered `check` through Kover).
+    // Why they were not removed as duplicates: the inclusion of `slowTest` rests on the list
+    // `disabledForTestTasks` of the `kover` block — an implicit mechanism of a third-party plugin.
+    // It may change with a version of Kover or be edited for the sake of coverage, and then
+    // the two MAIN numerical gates would silently drop out of `check` together with it. An explicit
+    // dependency guarantees their execution independently of the behaviour of Kover; a repeated
+    // run of the same two classes costs 46 s against the background of the eight-minute `slowTest` and
+    // is worth this insurance.
     //
-    // `slowTest` — ГЛАВНОЕ ИЗМЕНЕНИЕ этапа 8.6: без него единственная сверка с ВНЕШНИМ
-    // источником правды (`PublishedValuesTest`, 708 опубликованных чисел) и её
-    // ограничитель ширины послабления не исполнялись НИ В ОДНОЙ автоматической
-    // проверке (исключён из `check`, закомментирован в CI) — то есть были зелёными
-    // только потому, что не запускались. См. KDoc выше о цене (~9 мин) и о том,
-    // почему включение сделано явным `dependsOn`, а не через источники Kover.
+    // `slowTest` is THE MAIN CHANGE of stage 8.6: without it the only cross-check against an EXTERNAL
+    // source of truth (`PublishedValuesTest`, 708 published numbers) and its
+    // limiter of the width of the relaxation were executed in NO automatic
+    // check (excluded from `check`, commented out in CI) — that is, they were green
+    // only because they were not run. See the KDoc above on the price (~9 min) and on
+    // why the inclusion was made by an explicit `dependsOn` rather than through the Kover sources.
     dependsOn("fastTest", "characterizationTest", "extraCharacterizationTest", "slowTest", "verifyArtifactDependencies")
 }
 
 tasks.register<Test>("fastTest") {
     group = "verification"
-    description = "Быстрый набор тестов (тег fast): проверка после каждой правки"
+    description = "The fast test set (tag fast): the check after every edit"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("fast") }
@@ -582,14 +582,14 @@ tasks.register<Test>("fastTest") {
 
 tasks.register<Test>("slowTest") {
     group = "verification"
-    description = "Медленный набор тестов (тег slow): прогон по крупным сеткам перед мержем"
+    description = "The slow test set (tag slow): a run over large grids before a merge"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
-    // Тег `machine` исключается ТОЛЬКО при -PmachineDependentGates=false (CI на чужой
-    // архитектуре). Локально набор полный: выбывает единственный метод F1 из
-    // `PublishedValuesTest` — остальные 613 опубликованных значений того же класса
-    // сверяются в CI как обычно. Характеризационные классы этим флагом не
-    // управляются: у них своя задача, и в CI они гоняются безусловно.
+    // The tag `machine` is excluded ONLY under -PmachineDependentGates=false (CI on a foreign
+    // architecture). Locally the set is complete: the single F1 method from
+    // `PublishedValuesTest` drops out — the remaining 613 published values of the same class
+    // are cross-checked in CI as usual. The characterization classes are not governed by this
+    // flag: they have a task of their own, and in CI they are run unconditionally.
     useJUnitPlatform {
         includeTags("slow")
         if (!machineDependentGates) excludeTags("machine")
@@ -599,79 +599,79 @@ tasks.register<Test>("slowTest") {
 }
 
 /**
- * ГЛАВНЫЙ ГЕЙТ ЧИСЛЕННОЙ НЕЙТРАЛЬНОСТИ рефакторинга.
+ * THE MAIN GATE OF THE NUMERICAL NEUTRALITY of a refactoring.
  *
- * Почему отдельная задача, а не только часть `slowTest`. `EhCharacterizationTest` — единственная
- * защита от порчи чисел: 1366 значений против
- * `src/test/resources/characterization/baseline-eh.tsv` с допуском 1e-9. По времени
- * (замер ~27 с) он отнесён к тегу `slow`, а весь `slowTest` идёт 8 мин 39 с. Отдельная
- * задача даёт быстрый сигнал по главному гейту без ожидания всего slow-набора и,
- * главное, не зависит от того, останется ли `slowTest` в `check`: падение именно
- * этого гейта видно по имени задачи, а не тонет в общем прогоне.
- * Тег класса при этом не меняется: он остаётся `slow` и входит в `slowTest` тоже.
+ * Why a separate task rather than merely a part of `slowTest`. `EhCharacterizationTest` is the only
+ * protection against a corruption of the numbers: 1366 values against
+ * `src/test/resources/characterization/baseline-eh.tsv` with a tolerance of 1e-9. By time
+ * (measured at ~27 s) it is assigned to the tag `slow`, while the whole `slowTest` takes 8 min 39 s. A separate
+ * task gives a fast signal on the main gate without waiting for the whole slow set and,
+ * most importantly, does not depend on whether `slowTest` stays in `check`: a failure of precisely
+ * this gate is visible by the name of the task rather than drowning in a common run.
+ * The tag of the class is not changed by this: it stays `slow` and is part of `slowTest` as well.
  */
 tasks.register<Test>("characterizationTest") {
     group = "verification"
-    description = "Гейт численной нейтральности: 1366 значений E_h против эталона (классы portable/sensitive)"
-    // ПЕРЕНОСИМ МЕЖДУ ПУТЯМИ LU: проверено прогоном на `-Dnumerics.backend=java` и `native`.
-    // 52 ключа F1, валившие прежний гейт, выделены в класс `sensitive` и сверяются с
-    // границей `2*cond*max(omega,eps)*||u||inf`, вычисляемой в том же прогоне.
-    // Поэтому `skipEntirelyIfMachineGatesDisabled()` здесь БОЛЬШЕ НЕТ, и задача идёт в CI.
+    description = "The numerical-neutrality gate: 1366 values of E_h against the baseline (classes portable/sensitive)"
+    // PORTABLE BETWEEN LU ROUTES: verified by a run on `-Dnumerics.backend=java` and `native`.
+    // The 52 F1 keys that broke the former gate were separated into the class `sensitive` and are compared against the
+    // bound `2*cond*max(omega,eps)*||u||inf`, computed in the same run.
+    // For that reason `skipEntirelyIfMachineGatesDisabled()` is NO LONGER here, and the task runs in CI.
     gateOverTestClass("characterization.EhCharacterizationTest")
 }
 
 /**
- * ДОПОЛНИТЕЛЬНЫЙ ГЕЙТ численной нейтральности — то, что не покрыто `baseline-eh.tsv`.
+ * AN ADDITIONAL GATE of the numerical neutrality — what is not covered by `baseline-eh.tsv`.
  *
- * Закрывает три дыры основного гейта перед выносом общего кода решателей
- * (этап 4 спека): схемы `combinedNystrom`/`iteratedCombinedNystrom` (у решателей
- * РАЗНЫЕ критерии останова, и слияние тел изменит числа), неравномерные сетки
- * `quasiUniform`/`geometric`/`graded` и отрезок, отличный от `[0,1]`.
+ * It closes three holes of the main gate before the common solver code is extracted
+ * (stage 4 of the specification): the schemes `combinedNystrom`/`iteratedCombinedNystrom` (the solvers have
+ * DIFFERENT stopping criteria, and a merge of the bodies will change the numbers), the non-uniform grids
+ * `quasiUniform`/`geometric`/`graded` and an interval other than `[0,1]`.
  *
- * Почему ОТДЕЛЬНАЯ задача, а не расширение `characterizationTest`. `characterizationTest`
- * — протокол доказательства нейтральности вокруг НЕПРИКОСНОВЕННОГО эталона
- * `baseline-eh.tsv` (5 тестов, 1366 значений); добавление в него теста
- * с другим эталоном смешало бы два независимых гейта, и падение одного нельзя было бы
- * отличить от падения другого по имени задачи. Эталоны и наборы разведены намеренно.
+ * Why a SEPARATE task rather than an extension of `characterizationTest`. `characterizationTest`
+ * is the protocol of the proof of neutrality around the INVIOLABLE baseline
+ * `baseline-eh.tsv` (5 tests, 1366 values); adding a test with another baseline to it
+ * would mix two independent gates, and a failure of one could not be
+ * told from a failure of the other by the name of the task. The baselines and the sets are separated deliberately.
  *
- * Тег класса — `slow` (фактический прогон ~19 с, в бюджет fast-набора не укладывается),
- * поэтому тест входит и в `slowTest`; эта задача делает его исполнимым отдельно, как и
- * `characterizationTest`: весь `slowTest` стоит 8 мин 39 с, а здесь нужен быстрый сигнал
- * по конкретному гейту. В `check` входят ОБЕ задачи: и эта (явно, как страховка),
- * и `slowTest` целиком — см. KDoc `check` выше о причинах этого дублирования.
+ * The tag of the class is `slow` (the actual run takes ~19 s, which does not fit the budget of the fast set),
+ * so the test is part of `slowTest` as well; this task makes it executable separately, as does
+ * `characterizationTest`: the whole `slowTest` costs 8 min 39 s, whereas here a fast signal on a
+ * particular gate is needed. BOTH tasks are part of `check`: this one (explicitly, as insurance)
+ * and `slowTest` in full — see the KDoc of `check` above on the reasons for that duplication.
  */
 tasks.register<Test>("extraCharacterizationTest") {
     group = "verification"
-    description = "Гейт combinedNystrom и неравномерных сеток против baseline-extra.tsv (классы portable/residual/exact)"
-    // Измерение: 0 падений на обоих бэкендах, то есть привязки к машине здесь не было вовсе.
+    description = "The gate of combinedNystrom and of the non-uniform grids against baseline-extra.tsv (classes portable/residual/exact)"
+    // The measurement: 0 failures on both backends, that is, there was no binding to a machine here at all.
     gateOverTestClass("characterization.ExtraCharacterizationTest")
 }
 
 /**
- * КЛАССИФИКАЦИЯ ЭТАЛОНА: третья колонка TSV ВЫЧИСЛЯЕТСЯ, а не пишется рукой.
+ * CLASSIFICATION OF THE BASELINE: the third TSV column is COMPUTED rather than written by hand.
  *
- * Снимает обе матрицы ДВАЖДЫ — на `-Dnumerics.backend=java` (netlib F2J, чистая Java) и на
- * `native` (netlib + системная LAPACK) — и сравнивает снимки: ключ, совпавший в пределах
- * правила `portable`, получает этот класс; разошедшийся получает `sensitive`, НО только
- * если у него есть система `(I-M)c=g` (схемы `base`/`sloan` задачи F1). Разошедшийся ключ
- * любой другой схемы РОНЯЕТ задачу: границы для него не существует, и молчаливое
- * расширение класса означало бы отключение гейта. Результат —
- * `build/baseline/classified/baseline-{eh,extra}.tsv`, который после осмотра копируется
- * в `src/test/resources/characterization/`.
+ * It captures both matrices TWICE — on `-Dnumerics.backend=java` (netlib F2J, pure Java) and on
+ * `native` (netlib + the system LAPACK) — and compares the snapshots: a key that coincides within
+ * the `portable` rule receives that class; a diverging one receives `sensitive`, BUT only
+ * if it has a system `(I-M)c=g` (the schemes `base`/`sloan` of the problem F1). A diverging key
+ * of any other scheme BREAKS the task: no bound exists for it, and a silent
+ * widening of the class would mean switching the gate off. The result is
+ * `build/baseline/classified/baseline-{eh,extra}.tsv`, which after an inspection is copied
+ * into `src/test/resources/characterization/`.
  *
- * ПОЧЕМУ ДВА ОТДЕЛЬНЫХ ПРОГОНА: `numericsBackend` вычисляется один раз на конфигурацию
- * проекта, поэтому разнести бэкенды по задачам внутри одной сборки нельзя — задача
- * запускает `./gradlew` повторно, дважды, с разными значениями `-Dnumerics.backend`.
- * Стоимость обоих снятий — около полутора минут.
+ * WHY TWO SEPARATE RUNS: `numericsBackend` is computed once per configuration of the
+ * project, so the backends cannot be spread over tasks within a single build — the task
+ * invokes `./gradlew` again, twice, with different values of `-Dnumerics.backend`.
+ * The cost of both captures is about one and a half minutes.
  */
 /**
- * Снятие обеих матриц на ДВУХ бэкендах подряд — предпосылка классификации.
+ * Capture of both matrices on TWO backends in succession — a prerequisite of the classification.
  *
- * Отдельный тип задачи, а не `doLast` в обычной: `ExecOperations` доступен только
- * через инъекцию (в Gradle 8.9 `project.exec` объявлен устаревшим и несовместим с
- * configuration cache). `numericsBackend` вычисляется один раз на конфигурацию, поэтому
- * разнести бэкенды по задачам внутри одной сборки нельзя — задача вызывает `./gradlew`
- * повторно, дважды, с разными `-Dnumerics.backend`.
+ * A separate task type rather than a `doLast` in an ordinary one: `ExecOperations` is available only
+ * through injection (in Gradle 8.9 `project.exec` is deprecated and incompatible with the
+ * configuration cache). `numericsBackend` is computed once per configuration, so the
+ * backends cannot be spread over tasks within a single build — the task invokes `./gradlew`
+ * again, twice, with different `-Dnumerics.backend`.
  */
 abstract class CaptureBothBackends @Inject constructor(
     private val execOperations: ExecOperations,
@@ -707,7 +707,7 @@ abstract class CaptureBothBackends @Inject constructor(
 
 tasks.register<CaptureBothBackends>("captureBaselineBothBackends") {
     group = "verification"
-    description = "Снять обе матрицы на -Dnumerics.backend=java и native (предпосылка classifyBaseline)"
+    description = "Capture both matrices on -Dnumerics.backend=java and native (a prerequisite of classifyBaseline)"
     dependsOn("testClasses")
     gradlewPath.set(rootDir.resolve("gradlew").absolutePath)
     projectDirectory.set(projectDir.absolutePath)
@@ -717,22 +717,22 @@ tasks.register<CaptureBothBackends>("captureBaselineBothBackends") {
 }
 
 /**
- * КЛАССИФИКАЦИЯ ЭТАЛОНА: третья колонка TSV ВЫЧИСЛЯЕТСЯ, а не пишется рукой.
+ * CLASSIFICATION OF THE BASELINE: the third TSV column is COMPUTED rather than written by hand.
  *
- * Сравнивает снимки двух бэкендов (см. `captureBaselineBothBackends`): ключ, совпавший
- * в пределах правила `portable`, получает этот класс; ключи `*.iters` — `exact`, ключи
- * `*.residual` — `residual`; разошедшийся ключ получает `sensitive`, НО только если у
- * него есть система `(I-M)c=g` (схемы `base`/`sloan` задачи F1). Разошедшийся ключ любой
- * другой схемы РОНЯЕТ задачу с явным сообщением: границы `cond*omega` для него не
- * существует, и молчаливое расширение класса означало бы отключение гейта на этих ключах.
+ * It compares the snapshots of the two backends (see `captureBaselineBothBackends`): a key that coincides
+ * within the `portable` rule receives that class; the keys `*.iters` receive `exact` and the keys
+ * `*.residual` receive `residual`; a diverging key receives `sensitive`, BUT only if
+ * it has a system `(I-M)c=g` (the schemes `base`/`sloan` of the problem F1). A diverging key of any
+ * other scheme BREAKS the task with an explicit message: no bound `cond*omega` exists for it,
+ * and a silent widening of the class would mean switching the gate off on those keys.
  *
- * Результат — `build/baseline/classified/baseline-{eh,extra}.tsv` со значениями НАТИВНОГО
- * прогона; после осмотра копируется в `src/test/resources/characterization/` по протоколу
- * `docs/baseline-changes.md`. Полная стоимость — около полутора минут (два снятия).
+ * The result is `build/baseline/classified/baseline-{eh,extra}.tsv` with the values of the NATIVE
+ * run; after an inspection it is copied into `src/test/resources/characterization/` by the protocol of
+ * `docs/baseline-changes.md`. The full cost is about one and a half minutes (two captures).
  */
 tasks.register<JavaExec>("classifyBaseline") {
     group = "verification"
-    description = "ВЫЧИСЛИТЬ колонку класса по снимкам обоих бэкендов (build/baseline/classified)"
+    description = "COMPUTE the class column from the snapshots of both backends (build/baseline/classified)"
     dependsOn("captureBaselineBothBackends")
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("characterization.BaselineClassifier")
@@ -744,92 +744,92 @@ tasks.register<JavaExec>("classifyBaseline") {
 }
 
 /**
- * ГЕЙТ ПОРЯДКА СХОДИМОСТИ.
+ * THE CONVERGENCE-ORDER GATE.
  *
- * Почему ОТДЕЛЬНАЯ задача, а не просто тег `slow`. Сама задача в `check` НЕ входит
- * (см. ниже), а весь `slowTest` стоит 8 мин 39 с — без своей задачи проверка порядков
- * была бы исполнима только вручную либо целиком вместе со всем slow-набором.
- * Тег класса при этом не меняется: метод полной матрицы остаётся `slow` и входит
- * в `slowTest`.
+ * Why a SEPARATE task rather than merely the tag `slow`. The task itself is NOT part of `check`
+ * (see below), while the whole `slowTest` costs 8 min 39 s — without a task of its own the check of the orders
+ * would be executable only manually or in full together with the whole slow set.
+ * The tag of the class is not changed by this: the method of the full matrix stays `slow` and is part
+ * of `slowTest`.
  *
- * ГДЕ ЗАПУСКАЕТСЯ: шагом `Гейт порядка сходимости` в job `characterization`
- * (`.github/workflows/ci.yml`) — явно, на каждый push и PR. Задача, не вызванная ни из `check`,
- * ни из CI, — это не гейт, а ручной инструмент, про который забывают.
+ * WHERE IT IS RUN: by the step `Numerical-neutrality and convergence-order gates` in the job `characterization`
+ * (`.github/workflows/ci.yml`) — explicitly, on every push and PR. A task invoked neither from `check`
+ * nor from CI is not a gate but a manual tool that gets forgotten.
  *
- * МЕСТО В ГРАФЕ: задача в `check` НЕ ВХОДИТ, и это проверено `check --dry-run`.
- * Требуется явное действие: Kover делает источником покрытия ЛЮБУЮ задачу типа `Test`,
- * не перечисленную в `disabledForTestTasks`, и тем самым — зависимостью `koverVerify`,
- * который уже в `check`. Пока задача там не значилась, она молча добавляла к `check`
- * полторы-две минуты, хотя ПОКРЫТИЯ это не добавляло вовсе: полная матрица
- * исполняет те же строки решателей, что и быстрый поднабор того же класса, только
- * на большем числе сеток и систем. Платить это время на каждой сборке за нулевой
- * прирост покрытия смысла нет, поэтому задача внесена в `disabledForTestTasks`
- * блока `kover`. Полная матрица при этом всё равно исполняется в `check` — в составе
- * `slowTest`, включённого туда явно.
+ * ITS PLACE IN THE GRAPH: the task is NOT part of `check`, and this was verified with `check --dry-run`.
+ * An explicit action is required: Kover makes a source of coverage out of ANY task of type `Test`
+ * not listed in `disabledForTestTasks`, and thereby a dependency of `koverVerify`,
+ * which is already in `check`. While the task was not listed there, it silently added one and a half to two
+ * minutes to `check`, although it added NO COVERAGE at all: the full matrix
+ * executes the same lines of the solvers as the fast subset of the same class, only
+ * on a larger number of grids and systems. There is no sense in paying that time on every build for a zero
+ * gain in coverage, so the task was entered into `disabledForTestTasks`
+ * of the `kover` block. The full matrix is nevertheless still executed in `check` — as part of
+ * `slowTest`, which is included there explicitly.
  *
- * Что при этом НЕ теряется: деградацию порядка ловит быстрый поднабор (тег `fast`,
- * 32 сочетания), который гоняется в составе `fastTest` на каждой правке: мутационная
- * проверка (возврат кусочно-линейной реконструкции в `kulkarniQuasi`) роняет его на
- * 4 сочетаниях из 32. Эта задача — полная матрица перед мержем, наравне с
- * `characterizationTest` (под той же мутацией падают 24 сочетания из 168).
+ * What is NOT lost by this: a degradation of the order is caught by the fast subset (tag `fast`,
+ * 32 combinations), which runs as part of `fastTest` on every edit: a mutation
+ * check (a return of the piecewise-linear reconstruction in `kulkarniQuasi`) breaks it on
+ * 4 combinations out of 32. This task is the full matrix before a merge, on a par with
+ * `characterizationTest` (under the same mutation 24 combinations out of 168 fail).
  *
- * ЗАМЕР ПОЛНОЙ МАТРИЦЫ (`--rerun`, бэкенд multik, машина разработчика): 168 сочетаний
- * до n = 64. Два последовательных замера: 91 с и 105 с wall-clock на всю задачу (из них на
- * сам метод полной матрицы — 79 с и 99 с). Разброс между прогонами около 20 % — это
- * свойство замера (JIT и тепловой режим CPU), поэтому везде указана ВИЛКА «1.5-2 мин»,
- * а не одно точное число: точное число здесь создавало бы ложную точность.
+ * THE MEASUREMENT OF THE FULL MATRIX (`--rerun`, the multik backend, the developer machine): 168 combinations
+ * up to n = 64. Two successive measurements: 91 s and 105 s wall-clock for the whole task (of which the
+ * method of the full matrix itself took 79 s and 99 s). The spread between the runs is about 20 % — this is
+ * a property of the measurement (JIT and the thermal regime of the CPU), so the RANGE "1.5-2 min" is stated everywhere
+ * rather than a single exact number: an exact number would create a false precision here.
  */
 tasks.register<Test>("convergenceOrderTest") {
     group = "verification"
-    description = "Полная матрица порядков сходимости: 168 сочетаний на сетках 8/16/32/64"
-    // Тот же довод, что и у остальных численных гейтов: таблица порядков снята на multik.
+    description = "The full matrix of convergence orders: 168 combinations on the grids 8/16/32/64"
+    // The same argument as for the other numerical gates: the table of orders was captured on multik.
     gateOverTestClass("convergence.ConvergenceOrderTest")
 }
 
 tasks.register<Test>("scipyVerify") {
     group = "verification"
-    description = "Внешняя сверка со SciPy/NumPy (тег scipy): требует окружения Python"
+    description = "External cross-check against SciPy/NumPy (tag scipy): it requires a Python environment"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("scipy") }
     excludeGeneratorTools()
-    // Окружение Python и артефакты сверки — обязательные предпосылки именно этой
-    // задачи: тест читает выгрузку из build/verification/.
+    // The Python environment and the cross-check artifacts are mandatory prerequisites of precisely this
+    // task: the test reads the export from build/verification/.
     dependsOn("setupScipyVerification", "dumpVerificationArtifacts")
     systemProperty("scipy.python", scipyPython)
     systemProperty("numerics.backend", numericsBackend)
-    // СТРОГИЙ РЕЖИМ. Здесь сверка запрошена явно и окружение подготовлено
-    // зависимостями, поэтому неработоспособное окружение — ДЕФЕКТ, а не обстоятельство.
-    // Без этого битый venv (интерпретатор есть, SciPy нет) давал бы 9 SKIP и ЗЕЛЁНУЮ
-    // сборку — то есть единственное внешнее доказательство тихо исчезало бы.
+    // THE STRICT MODE. Here the cross-check is requested explicitly and the environment is prepared
+    // by the dependencies, so an inoperative environment is a DEFECT rather than a circumstance.
+    // Without this a broken venv (an interpreter is present, SciPy is not) would give 9 SKIPs and a GREEN
+    // build — that is, the only external piece of evidence would quietly disappear.
     systemProperty("scipy.required", "true")
 }
 
-// Снятие эталонного снимка численных результатов (в build/baseline/*.tsv).
-// Запускается вручную перед обоснованным изменением алгоритма, чтобы
-// зафиксировать старое и новое поведение.
+// Capture of the reference snapshot of the numerical results (into build/baseline/*.tsv).
+// It is run manually before a justified change of an algorithm, in order to
+// record the old and the new behaviour.
 tasks.register<Test>("captureBaseline") {
     group = "verification"
-    description = "Снять эталонный снимок E_h всех схем в build/baseline/"
-    // Каталог вывода задаётся снаружи: `classifyBaseline` снимает матрицу дважды подряд.
+    description = "Capture the reference snapshot of E_h of all the schemes into build/baseline/"
+    // The output directory is set from outside: `classifyBaseline` captures the matrix twice in succession.
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
     filter { includeTestsMatching("characterization.BaselineSnapshotTool") }
-    // Каталог вывода задаётся снаружи: `classifyBaseline` снимает матрицу дважды подряд.
+    // The output directory is set from outside: `classifyBaseline` captures the matrix twice in succession.
     providers.systemProperty("baseline.output.dir").orNull?.let { systemProperty("baseline.output.dir", it) }
     outputs.upToDateWhen { false }
-    // Снимок обязан сниматься на том же бэкенде, с которым его потом сверяют.
+    // The snapshot must be captured on the same backend against which it is later compared.
     systemProperty("numerics.backend", numericsBackend)
 }
 
-// Снятие ДОПОЛНИТЕЛЬНОГО снимка (комбинированный Nyström, неравномерные сетки,
-// отрезок [0,2]) в build/baseline/baseline-extra.tsv. В отличие от `captureBaseline`,
-// имя файла детерминировано, а файл перезаписывается: повторный запуск даёт тот же
-// файл, пригодный для побайтового сравнения.
+// Capture of the ADDITIONAL snapshot (combined Nyström, non-uniform grids,
+// the interval [0,2]) into build/baseline/baseline-extra.tsv. Unlike `captureBaseline`,
+// the name of the file is deterministic and the file is overwritten: a repeated run gives the same
+// file, suitable for a byte-for-byte comparison.
 tasks.register<Test>("captureExtraBaseline") {
     group = "verification"
-    description = "Снять дополнительный снимок в build/baseline/baseline-extra.tsv"
+    description = "Capture the additional snapshot into build/baseline/baseline-extra.tsv"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
@@ -839,93 +839,93 @@ tasks.register<Test>("captureExtraBaseline") {
     systemProperty("numerics.backend", numericsBackend)
 }
 
-// Выгрузка внутренних артефактов (узлы квадратуры, значения базиса, собранные
-// матрицы, образы операторов, правые части, E_h) в build/verification/ для
-// НЕЗАВИСИМОЙ внешней сверки скриптом tools/verify_with_scipy.py.
-// Это не проверка, а генератор данных, поэтому в обычный `test` не входит;
-// её запускает задача `scipyVerify`, которой выгрузка нужна по сути.
-// Генерация таблиц §5--6 статьи о минимальных сплайнах (модельные задачи M1--M5,
-// частотно-настроенные порождающие системы) в build/sec4/. Как и снимки эталонов,
-// это ГЕНЕРАТОР ЧИСЕЛ, а не проверка: критериев PASS/FAIL у него нет, поэтому в
-// `test`, `fastTest`, `slowTest` и `scipyVerify` он не входит.
-// Число узлов составной квадратуры задаётся `-Dsec4.quad` (по умолчанию 8);
-// удвоение узлов служит контролем устойчивости приводимых в статье величин.
+// Export of the internal artifacts (the quadrature nodes, the values of the basis, the assembled
+// matrices, the images of the operators, the right-hand sides, E_h) into build/verification/ for an
+// INDEPENDENT external cross-check by the script tools/verify_with_scipy.py.
+// This is not a check but a data generator, so it is not part of an ordinary `test`;
+// it is run by the task `scipyVerify`, which needs the export in substance.
+// Generation of the tables of §5--6 of the article on minimal splines (the model problems M1--M5,
+// frequency-tuned generating systems) into build/sec4/. Like the baseline snapshots,
+// this is a GENERATOR OF NUMBERS rather than a check: it has no PASS/FAIL criteria, so it is not part of
+// `test`, `fastTest`, `slowTest` or `scipyVerify`.
+// The number of nodes of the composite quadrature is set by `-Dsec4.quad` (8 by default);
+// doubling the nodes serves as a control of the stability of the quantities cited in the article.
 tasks.register<Test>("sec4Tables") {
     group = "verification"
-    description = "Сгенерировать таблицы §5--6 статьи в build/sec4/ (-Dsec4.quad=8|16)"
+    description = "Generate the tables of §5--6 of the article into build/sec4/ (-Dsec4.quad=8|16)"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
     filter { includeTestsMatching("verification.Sec4VerificationTool") }
     outputs.upToDateWhen { false }
-    // Числа сравниваются между прогонами, поэтому бэкенд фиксируется, как и у снимков.
+    // The numbers are compared between runs, so the backend is pinned, as it is for the snapshots.
     systemProperty("numerics.backend", numericsBackend)
     providers.systemProperty("sec4.quad").orNull?.let { systemProperty("sec4.quad", it) }
 }
 
 tasks.register<Test>("dumpVerificationArtifacts") {
     group = "verification"
-    description = "Выгрузить внутренние артефакты в build/verification/ для сверки со SciPy"
+    description = "Export the internal artifacts into build/verification/ for the cross-check against SciPy"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
     filter { includeTestsMatching("verification.VerificationArtifactDumpTool") }
     outputs.upToDateWhen { false }
-    // Артефакты выгружаются для внешней сверки, то есть тоже являются числами,
-    // сравниваемыми со сторонним эталоном — бэкенд фиксируется так же.
+    // The artifacts are exported for an external cross-check, that is, they are also numbers
+    // compared with a third-party reference — the backend is pinned in the same way.
     systemProperty("numerics.backend", numericsBackend)
 }
 
-// --- Настройка измерения покрытия -------------------------------------------
-// Цель — высокое покрытие вычислительного ядра и логики решателей.
-// Демонстрации, бенчмарк и форматтер чисел живут в отдельном sourceSet `demo`
-// и в отчёт не попадают вовсе, поэтому исключений по именам классов не требуется:
-// ранее исключавшийся `numerics.Fmt` перенесён в `demo.format.Fmt`.
+// --- Configuration of the coverage measurement -------------------------------
+// The aim is a high coverage of the computational core and of the logic of the solvers.
+// The demonstrations, the benchmark and the number formatter live in the separate source set `demo`
+// and do not appear in the report at all, so no exclusions by class name are required:
+// the formerly excluded `numerics.Fmt` was moved into `demo.format.Fmt`.
 kover {
     currentProject {
         instrumentation {
-            // Kover собирает покрытие со ВСЕХ задач типа `Test` и делает каждую
-            // зависимостью генерации отчёта, а тот входит в `check`/`build`. Список
-            // ниже — единственный рычаг в Kover 0.8.3, который одновременно и выбирает
-            // источник покрытия, и убирает задачи из графа.
+            // Kover collects coverage from ALL tasks of type `Test` and makes each of them a
+            // dependency of the report generation, and the report is part of `check`/`build`. The list
+            // below is the only lever in Kover 0.8.3 that at once selects the
+            // source of coverage and removes tasks from the graph.
             //
-            // ИСТОЧНИК ПОКРЫТИЯ = `fastTest`, и только он. Выбор сделан ПО ЗАМЕРАМ,
-            // а не по вкусу — были проверены три варианта:
+            // THE SOURCE OF COVERAGE = `fastTest`, and it alone. The choice was made BY MEASUREMENT
+            // rather than by taste — three options were tried:
             //
-            //   (а) источник `test`  — граф `slowTest koverXmlReport` содержит И `slowTest`,
-            //       И `test`: самые дорогие классы прогоняются ДВАЖДЫ, и отчёта нет вовсе;
-            //   (б) источники `fastTest` + `slowTest` — ПРОВЕРЕНО НА ЭТАПЕ 8.6 и ОТВЕРГНУТ
-            //       ПО ФАКТУ. После закрытия расхождения F1 `slowTest` зелёный, и вариант
-            //       стал выглядеть пригодным — но прогон `./gradlew check --rerun-tasks`
-            //       ПАДАЕТ через 7 мин 9 с: `Process 'Gradle Test Executor' finished with
-            //       non-zero exit value 137`, то есть SIGKILL по памяти. Причина: под
-            //       инструментацией Kover тот же `slowTest`, который САМ ПО СЕБЕ проходит
-            //       23/23 за 8 мин 39 с, перестаёт укладываться в память: ему и без того
-            //       нужны матрицы до n = 64 плюс 1366 значений эталона;
-            //   (в) только `fastTest` — ВЫБРАННЫЙ вариант: отчёт всегда строится, CI-job
-            //       его публикует. Плата: строки, покрытые только slow-классами, в отчёт
-            //       не попадают. Плата принята: сами slow-классы исполняются в `check`
-            //       НАПРЯМУЮ через `dependsOn("slowTest")`, то есть ГЕЙТ есть, и теряется
-            //       только ПОКРЫТИЕ, а не проверка. Покрытие как цель вторично по
-            //       сравнению с работающей сборкой.
+            //   (a) the source `test`  — the graph `slowTest koverXmlReport` contains BOTH `slowTest`
+            //       AND `test`: the most expensive classes are run TWICE, and there is no report at all;
+            //   (b) the sources `fastTest` + `slowTest` — TRIED AT STAGE 8.6 and REJECTED
+            //       BY FACT. After the F1 discrepancy was closed, `slowTest` is green and the option
+            //       started to look usable — but the run `./gradlew check --rerun-tasks`
+            //       FAILS after 7 min 9 s: `Process 'Gradle Test Executor' finished with
+            //       non-zero exit value 137`, that is, a SIGKILL on memory. The reason: under
+            //       the Kover instrumentation the same `slowTest` that ON ITS OWN passes
+            //       23/23 in 8 min 39 s stops fitting into memory: it already needs
+            //       matrices up to n = 64 plus 1366 baseline values;
+            //   (c) `fastTest` only — the CHOSEN option: the report is always built and the CI job
+            //       publishes it. The price: the lines covered only by the slow classes do not appear in the
+            //       report. The price is accepted: the slow classes themselves are executed in `check`
+            //       DIRECTLY through `dependsOn("slowTest")`, that is, THE GATE is there and only the
+            //       COVERAGE is lost, not the check. Coverage as an aim is secondary in
+            //       comparison with a working build.
             //
-            // ВАЖНО ПРИ ПРАВКАХ: убирать отсюда `slowTest` НЕЛЬЗЯ без увеличения
-            // `maxHeapSize` задачи — сборка падает по OOM (вариант (б) выше).
+            // IMPORTANT WHEN EDITING: `slowTest` MUST NOT be removed from here without an increase of the
+            // `maxHeapSize` of the task — the build fails on OOM (option (b) above).
             //
-            // Исключены из источников покрытия:
-            //   test                      — полный набор, дублирует fastTest+slowTest;
-            //   slowTest                  — падает под инструментацией (exit 137, см. (б));
-            //                               в `check` входит явным `dependsOn`, а не через Kover;
-            //   characterizationTest      — подмножество slowTest;
-            //   extraCharacterizationTest — то же;
-            //   convergenceOrderTest      — то же (быстрый поднабор уже в fastTest);
-            //   scipyVerify               — требует Python, в сборке его быть не обязано;
+            // Excluded from the sources of coverage:
+            //   test                      — the full set, it duplicates fastTest+slowTest;
+            //   slowTest                  — it fails under the instrumentation (exit 137, see (b));
+            //                               it enters `check` by an explicit `dependsOn` rather than through Kover;
+            //   characterizationTest      — a subset of slowTest;
+            //   extraCharacterizationTest — the same;
+            //   convergenceOrderTest      — the same (the fast subset is already in fastTest);
+            //   scipyVerify               — it requires Python and need not be part of a build;
             //   captureBaseline, captureExtraBaseline, dumpVerificationArtifacts, sec4Tables —
-            //                               генераторы данных, а не проверки. `sec4Tables` здесь
-            //                               ОБЯЗАТЕЛЕН: без него `koverXmlReport` тянул его в job
-            //                               `fast` CI (~18 мин генерации таблиц статьи), и job
-            //                               падал по таймауту 20 мин — так было и в исходном
-            //                               монорепозитории после появления этой задачи.
+            //                               data generators rather than checks. `sec4Tables` is MANDATORY
+            //                               here: without it `koverXmlReport` pulled it into the job
+            //                               `fast` of CI (~18 min of generating the tables of the article), and the job
+            //                               failed on the 20-minute timeout — this was the case in the original
+            //                               monorepository as well after that task appeared.
             disabledForTestTasks.addAll(
                 "test",
                 "slowTest",
@@ -940,28 +940,28 @@ kover {
             )
         }
         sources {
-            // Замеры производительности — не код решателей и в покрытии не участвуют.
+            // Performance measurements are not solver code and do not participate in the coverage.
             excludedSourceSets.add("benchmark")
         }
     }
     reports {
-        // ПЛАНКА ПОКРЫТИЯ, которую держит `koverVerify` (входит в `check`).
-        // До этого блока `koverVerify` в `check` проходил ВХОЛОСТУЮ: правил не было
-        // вовсе, то есть задача была зелёной при любом покрытии.
+        // THE COVERAGE BAR held by `koverVerify` (it is part of `check`).
+        // Before this block `koverVerify` in `check` passed IDLY: there were no rules
+        // at all, that is, the task was green under any coverage.
         //
-        // Числа ИЗМЕРЕНЫ, а не назначены: источник покрытия — только `fastTest`
-        // (см. `disabledForTestTasks` выше), на нём строки 69.2 % (1379 из 1993),
-        // ветви 74.5 % (502 из 674). Порог — измеренное минус 2 пункта: запас на
-        // машинно-зависимые ветви (выбор бэкенда) и на округление.
+        // The numbers are MEASURED rather than assigned: the source of coverage is `fastTest` only
+        // (see `disabledForTestTasks` above), on which the lines are 69.2 % (1379 of 1993) and the
+        // branches 74.5 % (502 of 674). The threshold is the measured value minus 2 points: a margin for the
+        // machine-dependent branches (the selection of the backend) and for rounding.
         //
-        // ПОЧЕМУ ПЛАНКА НИЖЕ, ЧЕМ В minimal-splines (94/89). Там источник покрытия
-        // — весь тестовый набор, здесь — только fast-набор: классы, покрытые
-        // ТОЛЬКО slow-тестами (сверка с публикацией, характеризация, полная матрица
-        // порядков), в отчёт не попадают, хотя сами тесты в `check` исполняются.
-        // Поднимать планку до уровня minimal-splines можно лишь вместе с включением
-        // инструментации для `slowTest`, а он под Kover падает по памяти (exit 137,
-        // см. выше). Планка — не цель, а ЗАЩЁЛКА: она ловит удаление тестов и обвал
-        // покрытия, поэтому честнее держать её на измеренном уровне, чем на желаемом.
+        // WHY THE BAR IS LOWER THAN IN minimal-splines (94/89). There the source of coverage
+        // is the whole test set, here it is the fast set only: the classes covered
+        // ONLY by the slow tests (the cross-check against the publication, the characterization, the full matrix
+        // of orders) do not appear in the report, although the tests themselves are executed in `check`.
+        // Raising the bar to the level of minimal-splines is possible only together with enabling
+        // the instrumentation for `slowTest`, and that fails under Kover on memory (exit 137,
+        // see above). The bar is not an aim but a LATCH: it catches a removal of tests and a collapse of the
+        // coverage, so it is more honest to keep it at the measured level than at the desired one.
         verify {
             rule("Line coverage") {
                 minBound(67)
@@ -976,34 +976,34 @@ kover {
     }
 }
 
-// Демонстрационные запуски: каждый решатель печатает свои таблицы сходимости.
+// Demonstration runs: every solver prints its own convergence tables.
 tasks.register<JavaExec>("runFredholm") {
     group = "application"
-    description = "Демонстрация: таблицы сходимости для уравнения Фредгольма"
+    description = "Demonstration: convergence tables for the Fredholm equation"
     mainClass.set("demo.fredholm.FredholmDemoKt")
     classpath = sourceSets["demo"].runtimeClasspath
 }
 
 tasks.register<JavaExec>("runVolterra") {
     group = "application"
-    description = "Демонстрация: таблицы сходимости для уравнения Вольтерры"
+    description = "Demonstration: convergence tables for the Volterra equation"
     mainClass.set("demo.volterra.VolterraDemoKt")
     classpath = sourceSets["demo"].runtimeClasspath
 }
 
 tasks.register<JavaExec>("runUryson") {
     group = "application"
-    description = "Демонстрация: таблицы сходимости для уравнения Урысона"
+    description = "Demonstration: convergence tables for the Uryson equation"
     mainClass.set("demo.uryson.UrysonDemoKt")
     classpath = sourceSets["demo"].runtimeClasspath
 }
 
-// Бенчмарк живёт в СВОЁМ наборе `src/benchmark` (как в minimal-splines): это не
-// демонстрация (нет таблиц сходимости) и не тест (нет критерия PASS/FAIL), а замер,
-// который не должен ни попадать в покрытие, ни ломать `compileDemoKotlin`.
+// The benchmark lives in its OWN source set `src/benchmark` (as in minimal-splines): it is not a
+// demonstration (there are no convergence tables) and not a test (there is no PASS/FAIL criterion) but a measurement
+// that must neither enter the coverage nor break `compileDemoKotlin`.
 tasks.register<JavaExec>("runBenchmark") {
     group = "application"
-    description = "Бенчмарк производительности (время от N, масштабируемость по потокам)"
+    description = "Performance benchmark (time as a function of N, scalability over threads)"
     mainClass.set("demo.bench.BenchmarkKt")
     classpath = sourceSets["benchmark"].runtimeClasspath
 }

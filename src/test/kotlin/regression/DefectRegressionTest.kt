@@ -17,31 +17,31 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * REGRESSION-ТЕСТЫ обнаруженных и исправленных дефектов.
+ * REGRESSION TESTS for detected and fixed defects.
  *
- * Каждый тест назван по дефекту и снабжён описанием: в чём была ошибка, почему она
- * не проявлялась в существующих тестах и что именно проверяется теперь. Все эти
- * тесты ПАДАЮТ на коде до исправления.
+ * Every test is named after the defect and documented: what the error was, why it
+ * did not show up in the existing tests and what exactly is checked now. All these
+ * tests FAIL on the code before the fix.
  *
- * Дефекты 4 и 5 относятся к слою линейной алгебры и проверяются в библиотеке
- * `numerical-core` (`LinearAlgebraRegressionTest`); нумерация здесь сохранена.
+ * Defects 4 and 5 belong to the linear algebra layer and are checked in the
+ * `numerical-core` library (`LinearAlgebraRegressionTest`); the numbering is kept here.
  */
 @Tag("fast")
 class DefectRegressionTest {
 
     /**
-     * ДЕФЕКТ 1. Модельные задачи F2span/V2span/F1 объявляли производные ядра
-     * (K_s, K_tt) и вторую производную решения нулевыми, хотя истинные значения
-     * ненулевые. Семейство функционалов xi^<0> (де Бура--Фикса, r=0) читает вторые
-     * производные — и молча получало неверную правую часть.
+     * DEFECT 1. The model problems F2span/V2span/F1 declared the kernel derivatives
+     * (K_s, K_tt) and the second derivative of the solution to be zero, although the true values
+     * are non-zero. The functional family xi^<0> (de Boor--Fix, r=0) reads second
+     * derivatives — and silently got a wrong right-hand side.
      *
-     * Проявление: для задачи F2span точное решение u*(t)=t^2 принадлежит
-     * span{1,t,t^2} = порождающей системе B, поэтому метод ОБЯЗАН воспроизводить
-     * его с машинной точностью. До исправления ошибка составляла ~1e-2, то есть
-     * была на двенадцать порядков больше должной.
+     * Manifestation: for the problem F2span the exact solution u*(t)=t^2 belongs to
+     * span{1,t,t^2} = the generating system B, so the method MUST reproduce
+     * it to machine accuracy. Before the fix the error was ~1e-2, that is
+     * twelve orders of magnitude larger than it should be.
      *
-     * Ранее дефект не ловился: тесты для xi^<0> проверяли только конечность
-     * результата и его биортогональность, но не точность на span-задаче.
+     * The defect was not caught before: the tests for xi^<0> checked only finiteness
+     * of the result and its biorthogonality, but not the accuracy on the span problem.
      */
     @Test
     fun defect1_xi0OnSpanProblemIsExactForFredholm() {
@@ -62,13 +62,13 @@ class DefectRegressionTest {
             val error = errorEh({ t -> problem.exact(t) }, solver.base().eval, grid)
             assertTrue(
                 error < 1e-10,
-                "F2span (u*=t^2 в span порождающей системы B) должна решаться точно " +
-                    "семейством xi^<0>, но E_h(n=$n)=$error (до исправления было ~1e-2)",
+                "F2span (u*=t^2 in the span of the generating system B) must be solved exactly " +
+                    "by the family xi^<0>, but E_h(n=$n)=$error (before the fix it was ~1e-2)",
             )
         }
     }
 
-    /** Тот же дефект для решателя Вольтерры (задача V2span). */
+    /** The same defect for the Volterra solver (problem V2span). */
     @Test
     fun defect1_xi0OnSpanProblemIsExactForVolterra() {
         val problem = problems.volterra.VolterraProblem.V2span
@@ -88,21 +88,21 @@ class DefectRegressionTest {
             val error = errorEh({ t -> problem.exact(t) }, solver.base().eval, grid)
             assertTrue(
                 error < 1e-10,
-                "V2span (u*=t^2 в span порождающей системы B) должна решаться точно " +
-                    "семейством xi^<0>, но E_h(n=$n)=$error",
+                "V2span (u*=t^2 in the span of the generating system B) must be solved exactly " +
+                    "by the family xi^<0>, but E_h(n=$n)=$error",
             )
         }
     }
 
     /**
-     * ДЕФЕКТ 1 (проверка самих коэффициентов ядра). Прямая проверка того, что
-     * производные ядра заданы согласованно с самим ядром: сравнение аналитических
-     * K_s и K_tt с центральной конечной разностью.
+     * DEFECT 1 (checking the kernel coefficients themselves). A direct check that the
+     * kernel derivatives are defined consistently with the kernel itself: comparison of the
+     * analytic K_s and K_tt with a central finite difference.
      *
-     * Для ядер Фредгольма проверяется только `K_tt`: производная по `s` в схемах
-     * Фредгольма не используется (пределы интегрирования постоянны) и удалена из
-     * [solvers.fredholm.KernelF]. В схемах Вольтерры `K_s` нужна для граничного члена
-     * формулы Лейбница, поэтому там проверяются обе производные.
+     * For the Fredholm kernels only `K_tt` is checked: the derivative in `s` is not used in the
+     * Fredholm schemes (the integration limits are constant) and was removed from
+     * [solvers.fredholm.KernelF]. In the Volterra schemes `K_s` is needed for the boundary term
+     * of the Leibniz formula, so both derivatives are checked there.
      */
     @Test
     fun defect1_kernelDerivativesAreConsistentWithKernel() {
@@ -120,7 +120,7 @@ class DefectRegressionTest {
                 val numericKtt = (kernel.kT(t + step, s) - kernel.kT(t - step, s)) / (2 * step)
                 assertTrue(
                     abs(kernel.kTT(t, s) - numericKtt) < 1e-6,
-                    "$name: K_tt($t,$s)=${kernel.kTT(t, s)} расходится с разностной ${numericKtt}",
+                    "$name: K_tt($t,$s)=${kernel.kTT(t, s)} disagrees with the difference value ${numericKtt}",
                 )
             }
         }
@@ -135,25 +135,25 @@ class DefectRegressionTest {
                 val numericKs = (kernel.k(t, s + step) - kernel.k(t, s - step)) / (2 * step)
                 assertTrue(
                     abs(kernel.kS(t, s) - numericKs) < 1e-6,
-                    "$name: K_s($t,$s)=${kernel.kS(t, s)} расходится с разностной ${numericKs}",
+                    "$name: K_s($t,$s)=${kernel.kS(t, s)} disagrees with the difference value ${numericKs}",
                 )
                 val numericKtt = (kernel.kT(t + step, s) - kernel.kT(t - step, s)) / (2 * step)
                 assertTrue(
                     abs(kernel.kTT(t, s) - numericKtt) < 1e-6,
-                    "$name: K_tt($t,$s)=${kernel.kTT(t, s)} расходится с разностной ${numericKtt}",
+                    "$name: K_tt($t,$s)=${kernel.kTT(t, s)} disagrees with the difference value ${numericKtt}",
                 )
             }
         }
     }
 
     /**
-     * ДЕФЕКТ 2. `FredholmFirstKindSolver` (Фредгольм) не передавал вторую производную
-     * правой части во внутренний решатель II рода, из-за чего семейство xi^<0>
-     * молча получало f'' = 0.
+     * DEFECT 2. `FredholmFirstKindSolver` (Fredholm) did not pass the second derivative
+     * of the right-hand side to the inner second-kind solver, because of which the family xi^<0>
+     * silently got f'' = 0.
      *
-     * Проверяется, что решатель I рода с xi^<0> теперь даёт конечный и осмысленный
-     * результат, согласованный с решением через семейство theta (которое вторых
-     * производных не использует и потому дефектом не затрагивалось).
+     * It is checked that the first-kind solver with xi^<0> now gives a finite and meaningful
+     * result, consistent with the solution through the family theta (which uses no second
+     * derivatives and was therefore not affected by the defect).
      */
     @Test
     fun defect2_firstKindSolverPassesSecondDerivative() {
@@ -164,20 +164,20 @@ class DefectRegressionTest {
 
         val viaXi0 = problems.fredholm.firstKindSolver(problem, basis, DeBoorFixFunctionals(basis, 0), op)
         val errorXi0 = errorEh({ t -> problem.exact(t) }, viaXi0.base().eval, grid)
-        assertTrue(errorXi0.isFinite(), "Решение I рода через xi^<0> должно быть конечным, получено $errorXi0")
+        assertTrue(errorXi0.isFinite(), "The first-kind solution via xi^<0> must be finite, got $errorXi0")
 
         val viaTheta = problems.fredholm.firstKindSolver(problem, basis, ProjFunctionals(basis), op)
         val errorTheta = errorEh({ t -> problem.exact(t) }, viaTheta.base().eval, grid)
         assertTrue(
             errorXi0 < 100.0 * maxOf(errorTheta, 1e-12),
-            "Ошибка xi^<0> ($errorXi0) не должна катастрофически превосходить theta ($errorTheta)",
+            "The xi^<0> error ($errorXi0) must not catastrophically exceed theta ($errorTheta)",
         )
     }
 
     /**
-     * ДЕФЕКТ 2 (Вольтерра). После редукции I->II рода вторая производная
-     * редуцированного ядра аналитически недоступна, поэтому семейство xi^<0>
-     * на этом пути должно ЯВНО отвергаться, а не давать молча неверный результат.
+     * DEFECT 2 (Volterra). After the I->II kind reduction the second derivative of the
+     * reduced kernel is analytically unavailable, so the family xi^<0>
+     * must be EXPLICITLY rejected on this path instead of silently giving a wrong result.
      */
     @Test
     fun defect2_volterraFirstKindRejectsSecondDerivativeFamilies() {
@@ -186,16 +186,16 @@ class DefectRegressionTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(8))
         assertFailsWith<IllegalArgumentException>(
-            "Решатель Вольтерры I рода обязан отвергать семейства, требующие второй производной",
+            "The first-kind Volterra solver must reject families that require a second derivative",
         ) {
             problems.volterra.firstKindSolver(problem, basis, DeBoorFixFunctionals(basis, 0), op)
         }
     }
 
     /**
-     * ДЕФЕКТ 3. `FredholmFirstKindSolver` (Фредгольм) не проверял положительность параметра
-     * регуляризации: при alpha = 0 множитель c_L = -1/alpha обращался в бесконечность,
-     * при alpha < 0 менялся смысл регуляризации — в обоих случаях без диагностики.
+     * DEFECT 3. `FredholmFirstKindSolver` (Fredholm) did not check positivity of the
+     * regularization parameter: at alpha = 0 the factor c_L = -1/alpha became infinite,
+     * at alpha < 0 the meaning of the regularization changed — in both cases without diagnostics.
      */
     @Test
     fun defect3_firstKindSolverRejectsNonPositiveAlpha() {
@@ -205,7 +205,7 @@ class DefectRegressionTest {
         val funcs = ProjFunctionals(basis)
         val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(8))
         for (badAlpha in listOf(0.0, -1e-10)) {
-            assertFailsWith<IllegalArgumentException>("alpha=$badAlpha должен отвергаться") {
+            assertFailsWith<IllegalArgumentException>("alpha=$badAlpha must be rejected") {
                 problems.fredholm.firstKindSolver(problem, basis, funcs, op, badAlpha)
             }
         }
@@ -214,15 +214,15 @@ class DefectRegressionTest {
 
 
     /**
-     * ДЕФЕКТ 6. Схема Nyström для уравнения Урысона стартовала с ТОЧНОГО решения
-     * задачи (`problem.exact`), недоступного в реальном применении: метод был
-     * невоспроизводим, а возможная расходимость из нейтрального приближения
-     * маскировалась.
+     * DEFECT 6. The Nyström scheme for the Uryson equation started from the EXACT solution
+     * of the problem (`problem.exact`), unavailable in real use: the method was
+     * irreproducible, and a possible divergence from a neutral approximation was
+     * masked.
      *
-     * Проверяется, что метод сходится из нейтрального начального приближения
-     * (проекции постоянной функции) и достигает точности, сопоставимой с базовой
-     * схемой. Тест не зависит от `problem.exact` как стартовой точки — только как
-     * от эталона для измерения ошибки.
+     * It is checked that the method converges from a neutral initial approximation
+     * (the projection of a constant function) and attains an accuracy comparable to the base
+     * scheme. The test does not depend on `problem.exact` as a starting point — only as
+     * a baseline for measuring the error.
      */
     @Test
     fun defect6_urysonNystromConvergesFromNeutralStart() {
@@ -242,45 +242,45 @@ class DefectRegressionTest {
 
                 assertTrue(
                     nystromError.isFinite() && nystromError < 1.0,
-                    "Задача ${problem.name}, n=$n: Nyström обязан сходиться из нейтрального " +
-                        "начального приближения, получено E_h=$nystromError",
+                    "Problem ${problem.name}, n=$n: Nyström must converge from a neutral " +
+                        "initial approximation, got E_h=$nystromError",
                 )
                 assertTrue(
                     nystromError < 100.0 * maxOf(baseError, 1e-14),
-                    "Задача ${problem.name}, n=$n: точность Nyström ($nystromError) не должна " +
-                        "катастрофически уступать базовой схеме ($baseError)",
+                    "Problem ${problem.name}, n=$n: the accuracy of Nyström ($nystromError) must not " +
+                        "fall catastrophically behind the base scheme ($baseError)",
                 )
                 assertTrue(
                     nystromSolution.iterations >= 1,
-                    "Задача ${problem.name}, n=$n: счётчик итераций обязан быть осмысленным",
+                    "Problem ${problem.name}, n=$n: the iteration counter must be meaningful",
                 )
             }
         }
     }
 
     /**
-     * ДЕФЕКТ 7. Решатель Вольтерры I рода проверял `K(t,t) != 0` только в узлах
-     * сетки и серединах интервалов, хотя деление на диагональ выполняется в гораздо
-     * более широком множестве точек: во всех гауссовых узлах составной квадратуры,
-     * в точках шаблона конечной разности `t ± k*h` и в ЛЮБОЙ точке, запрошенной
-     * у готового решения.
+     * DEFECT 7. The first-kind Volterra solver checked `K(t,t) != 0` only at the grid
+     * breakpoints and interval midpoints, although the division by the diagonal is performed on a far
+     * wider set of points: at all Gauss nodes of the composite quadrature,
+     * at the finite-difference stencil points `t ± k*h` and at ANY point requested
+     * from the ready solution.
      *
-     * Проявление ДО исправления (зафиксировано фактическим прогоном): для ядра с
-     * диагональю `K(t,t) = (t - t0)^2`, где `t0 = 0.37625` — точка между узлом и серединой,
-     * конструктор ядро НЕ отвергал (минимум `|K|` по проверяемым точкам составлял
-     * `1.56e-6`, что выше порога `1e-12`), `base()` возвращала правдоподобное
-     * `E_h = 1.2533e-5`, а `sloan()` — МОЛЧА `E_h = NaN`. Пользователь получал `NaN`
-     * без какой-либо диагностики.
+     * Manifestation BEFORE the fix (recorded by an actual run): for a kernel with the
+     * diagonal `K(t,t) = (t - t0)^2`, where `t0 = 0.37625` is a point between a breakpoint and a midpoint,
+     * the constructor did NOT reject the kernel (the minimum of `|K|` over the checked points was
+     * `1.56e-6`, which is above the threshold `1e-12`), `base()` returned a plausible
+     * `E_h = 1.2533e-5`, while `sloan()` SILENTLY returned `E_h = NaN`. The user got `NaN`
+     * without any diagnostics.
      *
-     * Теперь оба рубежа защиты обязаны сработать: либо предварительная проверка
-     * при создании, либо защита в самой точке деления — но молчаливого `NaN` быть не должно.
+     * Now both lines of defence must fire: either the preliminary check
+     * at construction, or the guard at the division point itself — but a silent `NaN` must not occur.
      */
     @Test
     fun defect7_volterraFirstKindRejectsZeroDiagonalBetweenGridPoints() {
         val n = 8
         val grid = Grid.uniform(n)
-        // t0 лежит МЕЖДУ узлом сетки и серединой интервала: узлы кратны 0.125,
-        // середины — 0.0625; 0.37625 не совпадает ни с одной из этих точек.
+        // t0 lies BETWEEN a grid breakpoint and an interval midpoint: the breakpoints are multiples of 0.125,
+        // the midpoints of 0.0625; 0.37625 coincides with none of these points.
         val t0 = 0.37625
         val kernel = solvers.volterra.KernelV(
             k = { t, _ -> (t - t0) * (t - t0) },
@@ -289,8 +289,8 @@ class DefectRegressionTest {
             kTT = { _, _ -> 2.0 },
         )
 
-        // Предусловие теста: в узлах и серединах диагональ ЗАВЕДОМО выше порога,
-        // то есть старая проверка это ядро пропускала.
+        // Precondition of the test: at the breakpoints and midpoints the diagonal is DEFINITELY above the
+        // threshold, that is, the old check let this kernel through.
         var worstAtCheckedPoints = Double.MAX_VALUE
         for (i in 0..n) {
             worstAtCheckedPoints = minOf(worstAtCheckedPoints, abs(kernel.k(grid.x(i), grid.x(i))))
@@ -301,8 +301,8 @@ class DefectRegressionTest {
         }
         assertTrue(
             worstAtCheckedPoints > 1e-12,
-            "Предусловие теста: в узлах и серединах диагональ обязана быть выше порога, " +
-                "иначе дефект ловила бы и старая проверка; получено $worstAtCheckedPoints",
+            "Precondition of the test: at the breakpoints and midpoints the diagonal must be above the threshold, " +
+                "otherwise the old check would have caught the defect too; got $worstAtCheckedPoints",
         )
 
         val problem = problems.volterra.VolterraProblem(
@@ -317,8 +317,8 @@ class DefectRegressionTest {
         val funcs = ProjFunctionals(basis)
         val op = solvers.volterra.VolterraOperator(kernel, grid, GaussLegendre(8))
 
-        // Вырождение обязано быть обнаружено: либо при создании решателя, либо в самой
-        // точке деления во время счёта. Молчаливый NaN/Inf недопустим.
+        // The degeneracy must be detected: either at solver construction, or at the division
+        // point itself during the run. A silent NaN/Inf is unacceptable.
         val failure = kotlin.runCatching {
             val solver = problems.volterra.firstKindSolver(problem, basis, funcs, op)
             val baseError = errorEh({ t -> problem.exact(t) }, solver.base().eval, grid)
@@ -328,33 +328,33 @@ class DefectRegressionTest {
 
         assertTrue(
             failure != null,
-            "Ядро с нулём диагонали в точке t=$t0 (между узлом и серединой) обязано " +
-                "вызывать исключение, а не молча возвращать NaN (до исправления sloan() давала NaN)",
+            "A kernel with a zero of the diagonal at t=$t0 (between a breakpoint and a midpoint) must " +
+                "raise an exception instead of silently returning NaN (before the fix sloan() gave NaN)",
         )
         assertTrue(
             failure is IllegalStateException || failure is IllegalArgumentException,
-            "Ожидалось исключение о вырождении диагонали, получено ${failure!!::class.simpleName}: " +
+            "Expected an exception about the degenerate diagonal, got ${failure!!::class.simpleName}: " +
                 failure.message,
         )
         assertTrue(
             failure.message?.contains("K(t,t)") == true,
-            "Сообщение об ошибке обязано называть точку и величину K(t,t), получено: " +
+            "The error message must name the point and the value of K(t,t), got: " +
                 failure.message,
         )
     }
 
     /**
-     * ДЕФЕКТ 7 (вторая часть). Шаг конечной разности АБСОЛЮТЕН (1e-3), поэтому на
-     * коротком отрезке шаблон `t ± 4h` выходит за пределы `[a,b]`, где ядро и оператор
-     * доопределены нулём — производная искажалась бы молча.
+     * DEFECT 7 (second part). The finite-difference step is ABSOLUTE (1e-3), so on a
+     * short interval the stencil `t ± 4h` leaves `[a,b]`, where the kernel and the operator
+     * are extended by zero — the derivative would be silently distorted.
      *
-     * Такие отрезки теперь ЯВНО запрещены с внятным сообщением. Альтернатива — сделать
-     * шаг относительным — отвергнута: она изменила бы численные результаты на ВСЕХ
-     * существующих задачах и потребовала бы пересъёмки эталона.
+     * Such intervals are now EXPLICITLY forbidden with a clear message. The alternative — making
+     * the step relative — was rejected: it would change the numerical results on ALL
+     * existing problems and would require re-shooting the baseline.
      */
     @Test
     fun defect7_volterraFirstKindRejectsTooShortInterval() {
-        // b - a = 1e-3 = один шаг разности: шаблон t ± 4h заведомо не помещается.
+        // b - a = 1e-3 = one difference step: the stencil t ± 4h definitely does not fit.
         val grid = Grid.uniform(8, a = 0.0, b = 1e-3)
         val problem = problems.volterra.VolterraProblem.V1
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
@@ -362,17 +362,17 @@ class DefectRegressionTest {
         val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(8))
 
         val failure = assertFailsWith<IllegalArgumentException>(
-            "На отрезке длиной 1e-3 шаблон конечной разности не помещается, " +
-                "решатель обязан это отвергнуть",
+            "On an interval of length 1e-3 the finite-difference stencil does not fit, " +
+                "the solver must reject it",
         ) {
             problems.volterra.firstKindSolver(problem, basis, funcs, op)
         }
         assertTrue(
-            failure.message?.contains("коротком отрезке") == true,
-            "Сообщение обязано объяснять причину (короткий отрезок), получено: ${failure.message}",
+            failure.message?.contains("inapplicable on a too short interval") == true,
+            "The message must explain the cause (a short interval), got: ${failure.message}",
         )
 
-        // Контроль: на стандартном отрезке [0,1] решатель по-прежнему создаётся.
+        // Control: on the standard interval [0,1] the solver is still constructed.
         val normalGrid = Grid.uniform(8)
         val normalBasis = MinimalSplineBasis(GeneratingSystem.B, normalGrid)
         val normalOp = solvers.volterra.VolterraOperator(problem.kernel, normalGrid, GaussLegendre(8))

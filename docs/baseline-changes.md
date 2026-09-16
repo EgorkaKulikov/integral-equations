@@ -1,190 +1,190 @@
-# История изменений численных эталонов
+# History of changes to the numerical baselines
 
-## Зачем этот файл
+## Why this file exists
 
-В проекте есть эталоны, фиксирующие ЧИСЛЕННОЕ ПОВЕДЕНИЕ реализации:
+The project has baselines that record the NUMERICAL BEHAVIOUR of the implementation:
 
-| файл | что фиксирует | тест-гейт | допуск |
+| file | what it records | test gate | tolerance |
 |---|---|---|---|
-| `src/test/resources/characterization/baseline-eh.tsv` | `E_h` всех сочетаний «задача × система × семейство × схема» | `characterization.EhCharacterizationTest` | 1e-9 |
-| `src/test/resources/characterization/baseline-extra.tsv` | комбинированный Nyström, неравномерные сетки, отрезок `[0,2]`, ключи `.iters`/`.residual` | `characterization.ExtraCharacterizationTest` | 1e-9 (для невязки — строже) |
+| `src/test/resources/characterization/baseline-eh.tsv` | `E_h` of all combinations of "problem × system × family × scheme" | `characterization.EhCharacterizationTest` | 1e-9 |
+| `src/test/resources/characterization/baseline-extra.tsv` | combined Nyström, non-uniform grids, the interval `[0,2]`, the keys `.iters`/`.residual` | `characterization.ExtraCharacterizationTest` | 1e-9 (stricter for the residual) |
 
-Эти файлы — НЕ данные задачи, а снимок поведения кода. Их назначение — ловить
-непреднамеренное изменение чисел при рефакторинге. Поэтому у них особый режим:
-**правка эталона допустима только вместе с записью в этом файле**, объясняющей,
-что именно изменилось и почему это не регрессия. Без такой записи любая правка
-эталона неотличима от «подгонки под сломанный код» — а тогда гейт перестаёт быть
-гейтом.
+These files are NOT problem data but a snapshot of the behaviour of the code. Their purpose is
+to catch an unintended change of the numbers during a refactoring. Hence their special regime:
+**an edit of a baseline is admissible only together with an entry in this file** explaining
+what exactly has changed and why this is not a regression. Without such an entry any edit of a
+baseline is indistinguishable from "tuning to broken code" — and then the gate ceases to be a
+gate.
 
-Отдельно: `src/test/resources/verification/published-values.tsv` в этом файле НЕ
-учитывается и правке чисел НЕ подлежит вовсе — это ВНЕШНИЙ источник правды (таблицы
-статьи с пометкой «Auto-prepared from verified runs. Do not alter numbers»).
-Изменения его ШАПКИ (комментариев) допустимы и в историю здесь не попадают.
+Separately: `src/test/resources/verification/published-values.tsv` is NOT covered by this file
+and its numbers are NOT to be edited at all — it is an EXTERNAL source of truth (the tables of
+the article marked "Auto-prepared from verified runs. Do not alter numbers").
+Changes to its HEADER (the comments) are admissible and do not enter the history here.
 
-## Что обязано быть в каждой записи
+## What every entry must contain
 
-1. Дата, этап плана, тип изменения: `добавление ключей` / `изменение значений` /
-   `удаление ключей`.
-2. Число строк до и после.
-3. Для типа `добавление ключей` — ДОКАЗАТЕЛЬСТВО, что существующие значения не
-   затронуты (побитовое сравнение пересечения ключей).
-4. Для типа `изменение значений` — старое и новое значение каждого изменённого
-   ключа и содержательная причина.
+1. The date, the stage of the plan, the type of change: `addition of keys` / `change of values` /
+   `removal of keys`.
+2. The number of rows before and after.
+3. For the type `addition of keys` — PROOF that the existing values are not affected
+   (a bitwise comparison of the intersection of the keys).
+4. For the type `change of values` — the old and the new value of every changed key and a
+   substantive reason.
 
-## Рецепт снятия и сравнения
+## The recipe for capturing and comparing
 
-Оба инструмента пишут в `build/baseline/` файл с ДЕТЕРМИНИРОВАННЫМ именем, ОДНОЙ
-операцией записи и ОТСОРТИРОВАННЫМИ по ключу строками: `captureBaseline` —
+Both tools write into `build/baseline/` a file with a DETERMINISTIC name, in a SINGLE write
+operation and with the rows SORTED by key: `captureBaseline` writes
 `build/baseline/baseline-eh.tsv`, `captureExtraBaseline` — `build/baseline/baseline-extra.tsv`.
-Повторный запуск даёт тот же файл, пригодный к побайтовому сравнению; `rm -rf build/baseline`
-больше не обязателен (до 2026-09-15 `BaselineSnapshotTool` писал в
-`snapshot-<имя потока>.tsv` режимом **append**, и без очистки содержимое удваивалось).
+A repeated run produces the same file, suitable for a byte-for-byte comparison; `rm -rf build/baseline`
+is no longer required (until 2026-09-15 `BaselineSnapshotTool` wrote into
+`snapshot-<thread name>.tsv` in **append** mode, and without cleaning the content was doubled).
 
 ```sh
-./gradlew captureBaseline                      # эталон baseline-eh.tsv
+./gradlew captureBaseline                      # the baseline baseline-eh.tsv
 LC_ALL=C sort build/baseline/baseline-eh.tsv > /tmp/snap.tsv
 
-# пересечение ключей ОБЯЗАНО совпасть побитово:
+# the intersection of the keys MUST coincide bitwise:
 grep -v '^#' src/test/resources/characterization/baseline-eh.tsv | LC_ALL=C sort > /tmp/old.tsv
 join -t$'\t' -1 1 -2 1 -o 1.1,1.2,2.2 /tmp/old.tsv /tmp/snap.tsv |
-  awk -F'\t' '$2!=$3 {print "ИЗМЕНИЛОСЬ: "$0}'
+  awk -F'\t' '$2!=$3 {print "CHANGED: "$0}'
 ```
 
-Оба эталона содержат шапку из строк-комментариев. Парсеры (`EhCharacterizationTest`,
-`ExtraCharacterizationTest`) отбрасывают любую строку, не разбирающуюся на РОВНО две
-части по символу табуляции, поэтому комментарии игнорируются — но в самой шапке
-табуляций быть НЕ ДОЛЖНО, иначе строка будет принята за данные.
+Both baselines contain a header of comment lines. The parsers (`EhCharacterizationTest`,
+`ExtraCharacterizationTest`) discard any line that does not split into EXACTLY two
+parts at a tab character, so the comments are ignored — but the header itself MUST NOT
+contain tabs, otherwise the line would be taken for data.
 
 ---
 
-## 2026-08-01. Этап 8.6 — расширение покрытия F1 в `baseline-eh.tsv`
+## 2026-08-01. Stage 8.6 — extension of the F1 coverage in `baseline-eh.tsv`
 
-**Тип изменения:** `добавление ключей` (+ шапка с метаданными в оба файла).
+**Type of change:** `addition of keys` (+ a header with metadata in both files).
 
-**Строк:** `baseline-eh.tsv` — 1316 значений → **1366** значений (+50 ключей), плюс
-29 строк шапки-комментария; `baseline-extra.tsv` — 1344 значения без изменений
-(+18 строк шапки-комментария).
+**Rows:** `baseline-eh.tsv` — 1316 values → **1366** values (+50 keys), plus
+29 header comment lines; `baseline-extra.tsv` — 1344 values unchanged
+(+18 header comment lines).
 
-### Что добавлено
+### What was added
 
-50 новых ключей `F1.*` — уравнение Фредгольма ПЕРВОГО рода (регуляризация Вазваза,
-`alpha = 1e-10`) на сочетаниях: системы `B`/`H`/`T` × семейства `theta`/`xi1`/`xi2` ×
-сетки `n ∈ {8, 16, 32}` × схемы `base`/`sloan`. Полная матрица дала бы 54 ключа; 4 из
-них (`F1.B.theta.n8.base`, `F1.B.theta.n8.sloan`, `F1.B.theta.n16.base`,
-`F1.B.theta.n16.sloan`) в эталоне УЖЕ БЫЛИ и повторно не добавлялись.
+50 new keys `F1.*` — the Fredholm equation of the FIRST kind (Wazwaz regularization,
+`alpha = 1e-10`) on the combinations: systems `B`/`H`/`T` × families `theta`/`xi1`/`xi2` ×
+grids `n ∈ {8, 16, 32}` × schemes `base`/`sloan`. The full matrix would give 54 keys; 4 of
+them (`F1.B.theta.n8.base`, `F1.B.theta.n8.sloan`, `F1.B.theta.n16.base`,
+`F1.B.theta.n16.sloan`) were ALREADY present in the baseline and were not added again.
 
-Перечисление живёт в `BaselineSnapshotTool.F1_COVERAGE` — одно и то же для
-инструмента снятия и для гейта `EhCharacterizationTest.firstKindExtendedFredholmMatchesBaseline`,
-так что рассинхронизация состава невозможна по построению.
+The enumeration lives in `BaselineSnapshotTool.F1_COVERAGE` — one and the same for the
+capturing tool and for the gate `EhCharacterizationTest.firstKindExtendedFredholmMatchesBaseline`,
+so a desynchronization of the composition is impossible by construction.
 
-### Почему это понадобилось
+### Why this was needed
 
-`PublishedValuesTest` сверяет 42 величины F1 с внешней публикацией, и шести ключам из
-`table-f1.tex` в этом же этапе введён отдельный допуск 12 % вместо 2 % (таблица
-измеренно снята на другом пути LU; обоснование — в KDoc
-`PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE`). Само по себе это ослабляет
-проверку, поэтому расширение характеризационного покрытия — ОБЯЗАТЕЛЬНАЯ
-компенсация: набор новых ключей есть НАДМНОЖЕСТВО всех 42 сверяемых с публикацией
-величин, и каждая из них теперь защищена допуском 1e-9.
+`PublishedValuesTest` compares 42 F1 quantities with the external publication, and in the same
+stage a separate tolerance of 12 % instead of 2 % was introduced for six keys of
+`table-f1.tex` (the table was measured to be captured on a different LU route; the justification
+is in the KDoc of `PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE`). By itself this weakens the
+check, so the extension of the characterization coverage is a MANDATORY compensation: the set of
+new keys is a SUPERSET of all 42 quantities compared with the publication, and each of them is
+now protected by a tolerance of 1e-9.
 
-### Доказательство: существующие значения не затронуты
+### Proof: the existing values are not affected
 
-Свежий снимок (`captureBaseline`, бэкенд multik, JDK 21, macOS aarch64) сопоставлен
-с прежним эталоном по рецепту выше:
+A fresh snapshot (`captureBaseline`, the multik backend, JDK 21, macOS aarch64) was matched
+against the former baseline by the recipe above:
 
 ```
-ключей в пересечении                          : 1316
-из них совпало ПОБИТОВО (сравнение строк)     : 1316
-из них изменилось                             : 0
-ключей, исчезнувших из снимка                 : 0
-дубликатов ключей в снимке                    : 0
-новых ключей                                  : 50
+keys in the intersection                        : 1316
+of them coinciding BITWISE (comparison of rows) : 1316
+of them changed                                 : 0
+keys that disappeared from the snapshot         : 0
+duplicate keys in the snapshot                  : 0
+new keys                                        : 50
 ```
 
-То есть изменение эталона — строго добавление строк. Ни одно из 1316 прежних значений
-не пересчитывалось и не переписывалось: новые ключи производятся ОТДЕЛЬНЫМ методом
-`BaselineSnapshotTool.snapshotFirstKindExtendedFredholm`, существующий
-`snapshotFirstKind` не тронут.
+That is, the change of the baseline is strictly an addition of rows. Not one of the 1316 former
+values was recomputed or rewritten: the new keys are produced by a SEPARATE method
+`BaselineSnapshotTool.snapshotFirstKindExtendedFredholm`, and the existing
+`snapshotFirstKind` was left untouched.
 
-### Доказательство, что расширение работает как гейт
+### Proof that the extension works as a gate
 
-Мутация: огрубление квадратуры `GaussLegendre(8) → GaussLegendre(6)` в путях F1
-(только в тестах, `src/main` не менялся).
+The mutation: a coarsening of the quadrature `GaussLegendre(8) → GaussLegendre(6)` in the F1
+routes (in the tests only; `src/main` was not changed).
 
-| проверка | результат под мутацией |
+| check | result under the mutation |
 |---|---|
-| `characterizationTest` | **FAILED** — `firstKindMatchesBaseline` и `firstKindExtendedFredholmMatchesBaseline`, 2 из 5 тестов |
-| `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` | FAILED — 21 из 42 ключей |
-| из них ключи `table-f1.tex` (допуск 12 %) | **всего 1 из 6** (`F.F1.H.theta.n32.base`, 15.57 %) |
+| `characterizationTest` | **FAILED** — `firstKindMatchesBaseline` and `firstKindExtendedFredholmMatchesBaseline`, 2 tests out of 5 |
+| `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` | FAILED — 21 keys out of 42 |
+| of them keys of `table-f1.tex` (tolerance 12 %) | **only 1 out of 6** (`F.F1.H.theta.n32.base`, 15.57 %) |
 
-Вывод: характеризационный гейт ловит мутацию НА ВСЕХ ключах F1 сразу, тогда как в
-ослабленном классе `table-f1.tex` сверка с публикацией ловит её лишь на одном ключе
-из шести — то есть компенсация не декоративна: без неё пять из шести ключей остались
-бы без защиты от такой деградации. Мутация откачена, все изменённые файлы приведены
-к исходному состоянию.
+Conclusion: the characterization gate catches the mutation ON ALL the F1 keys at once, whereas
+in the relaxed class `table-f1.tex` the cross-check against the publication catches it on only
+one key out of six — that is, the compensation is not decorative: without it five keys out of
+six would have been left without protection against such a degradation. The mutation was
+reverted and all the changed files were restored to their original state.
 
-### Добавленные шапки с метаданными окружения
+### The added headers with the metadata of the environment
 
-В оба характеризационных эталона добавлено ЯВНОЕ указание окружения снятия
-(бэкенд `multik`/OpenBLAS 0.2.3, JDK 21, macOS aarch64). До этого бэкенд не был указан
-нигде, хотя эталоны к нему привязаны по факту: прогон `-Dnumerics.backend=reference`
-даёт 4/4 падения основного гейта с расхождением до 5.7e-2. Отсутствие этой записи и
-было корнем несогласованности между характеризационным эталоном и сверкой с
-публикацией (последняя, как измерено, снята частично на другом пути LU).
+An EXPLICIT statement of the capture environment was added to both characterization baselines
+(the backend `multik`/OpenBLAS 0.2.3, JDK 21, macOS aarch64). Before that the backend was stated
+nowhere, although the baselines are in fact bound to it: a run with `-Dnumerics.backend=reference`
+gives 4/4 failures of the main gate with a divergence of up to 5.7e-2. The absence of that record
+was the root of the inconsistency between the characterization baseline and the cross-check
+against the publication (the latter, as measured, was partly captured on a different LU route).
 
-В шапку `baseline-eh.tsv` дополнительно вынесено свойство схемы `sloan` для F1:
-её ключи привязаны к ПОРЯДКУ ОБХОДА УЗЛОВ в `FredholmOperator.applyNodes`, потому что
-там два слагаемых порядка `1.38e10` сокращаются до `O(1)` (измерено: три
-математически эквивалентных порядка суммирования дают `E_h`, различающиеся на
-4.3–39.9 %). Любая перестановка цикла суммирования сломает гейт 1e-9, не меняя
-математики; это свойство задачи, а не дефект, но требует осознанного пересъёма с
-записью здесь.
+A property of the `sloan` scheme for F1 was additionally moved into the header of `baseline-eh.tsv`:
+its keys are bound to the ORDER OF TRAVERSAL OF THE NODES in `FredholmOperator.applyNodes`, because
+there two terms of the order `1.38e10` cancel down to `O(1)` (measured: three
+mathematically equivalent orders of summation give `E_h` values differing by
+4.3–39.9 %). Any permutation of the summation loop will break the 1e-9 gate without changing the
+mathematics; this is a property of the problem rather than a defect, but it requires a deliberate
+recapture with an entry here.
 
-**Проверки после изменения:** `characterizationTest`, `extraCharacterizationTest`,
-`fastTest` (на обоих бэкендах), `slowTest`, `convergenceOrderTest`, `scipyVerify`,
-`check` — зелёные. `slowTest` стал полностью зелёным впервые с этапа 2.
+**Checks after the change:** `characterizationTest`, `extraCharacterizationTest`,
+`fastTest` (on both backends), `slowTest`, `convergenceOrderTest`, `scipyVerify`,
+`check` — green. `slowTest` became fully green for the first time since stage 2.
 
 
 ---
 
-## 2026-09-09. Этап 7 переработки — переход на numerical-core 1.0.0: пересъём `F1.*` и пол гейта
+## 2026-09-09. Stage 7 of the rework — migration to numerical-core 1.0.0: recapture of `F1.*` and the floor of the gate
 
-**Тип изменения:** `изменение значений` (первое применение этого типа) + шапка `baseline-eh.tsv`.
+**Type of change:** `change of values` (the first application of this type) + the header of `baseline-eh.tsv`.
 
-**Строк:** `baseline-eh.tsv` — 1366 значений → **1366** значений (изменено 51, добавлено 0,
-удалено 0; все 51 — ключи `F1.*`), шапка +5 строк комментария; `baseline-extra.tsv` —
-1344 значения **без изменений**.
+**Rows:** `baseline-eh.tsv` — 1366 values → **1366** values (51 changed, 0 added,
+0 removed; all 51 are keys `F1.*`), the header +5 comment lines; `baseline-extra.tsv` —
+1344 values **unchanged**.
 
-### Причина
+### The reason
 
-numerical-core 1.0.0: реализация LAPACK сменилась с multik/OpenBLAS (однопоточный `dgesv`)
-на netlib с системной библиотекой (Apple Accelerate на машине пересъёма,
-`Backends.describe()` = «netlib JNILAPACK (нативная BLAS/LAPACK системы)»); путь
-LU-разложения другой, порядок операций иной. Это не изменение алгоритма проекта: ни одна
-строка `src/main` не менялась, кроме адаптации к API 1.0.0 и NaN-guard в
-`VolterraOperator` (коммит 0a32270).
+numerical-core 1.0.0: the LAPACK implementation changed from multik/OpenBLAS (a single-threaded `dgesv`)
+to netlib with a system library (Apple Accelerate on the recapture machine,
+`Backends.describe()` = "netlib JNILAPACK (the native system BLAS/LAPACK)"); the route of the
+LU decomposition is different and the order of the operations is different. This is not a change of
+a project algorithm: not a single line of `src/main` was changed, apart from the adaptation to the
+API 1.0.0 and the NaN guard in `VolterraOperator` (commit 0a32270).
 
-### Обоснование: отклонения F1 — в пределах границы прямой ошибки
+### Justification: the F1 deviations are within the bound on the forward error
 
-Системы F1 (регуляризация `alpha = 1e-10`, `c_L = -1e10`) имеют
-`cond₁ ∈ [2.14e+10, 2.33e+10]` при относительной обратной ошибке
-`ω ∈ [7.6e-17, 3.0e-16]` (LU обратно устойчив); граница прямой ошибки
-`cond·max(ω, 1e-16)·‖u‖∞` при `‖u‖∞ = e` составляет `(2…7)·10⁻⁶·2.718`. Два обратно
-устойчивых решения разными путями LU законно расходятся на величину этого порядка.
-**Все 51 отклонение внутри границы**: максимальное отношение
-`|ΔE_h| / (cond·ω·‖u‖)` = 1.63, медиана 0.14. Измерено
-`characterization.F1ConditioningTest` (постоянный тест `@Tag("fast")`, строит все 27
-F1-систем тем же кодом, что решатель; таблица — `build/reports/f1-conditioning.tsv`).
+The F1 systems (regularization `alpha = 1e-10`, `c_L = -1e10`) have
+`cond₁ ∈ [2.14e+10, 2.33e+10]` at a relative backward error
+`ω ∈ [7.6e-17, 3.0e-16]` (LU is backward stable); the bound on the forward error
+`cond·max(ω, 1e-16)·‖u‖∞` at `‖u‖∞ = e` amounts to `(2…7)·10⁻⁶·2.718`. Two backward
+stable solutions obtained by different LU routes legitimately diverge by a quantity of that order.
+**All 51 deviations are within the bound**: the maximum ratio
+`|ΔE_h| / (cond·ω·‖u‖)` = 1.63, the median 0.14. Measured by
+`characterization.F1ConditioningTest` (a permanent test `@Tag("fast")`, which builds all 27
+F1 systems with the same code as the solver; the table is `build/reports/f1-conditioning.tsv`).
 
-Отдельное подтверждение — `PublishedValuesTest`: 17 из 42 ключей F1 разошлись с
-опубликованными значениями на 2.03–14.82 % при допуске 2 %; все 17 внутри
-`2·cond₁·ω·‖u‖∞ ≈ 3.8e-5` абс. (максимум |Δ| = 1.34e-5). Допуск 2 % не ослаблен: ключи
-перечислены в `PublishedValuesTest.KNOWN_LU_PATH_DEVIATIONS` и проверяются этой границей.
-Вывод: опубликованные значения F1 воспроизводимы только тем же путём LU, которым сняты.
+A separate confirmation is `PublishedValuesTest`: 17 of the 42 F1 keys diverged from the
+published values by 2.03–14.82 % against a tolerance of 2 %; all 17 are within
+`2·cond₁·ω·‖u‖∞ ≈ 3.8e-5` abs. (the maximum |Δ| = 1.34e-5). The tolerance of 2 % was not relaxed: the keys
+are listed in `PublishedValuesTest.KNOWN_LU_PATH_DEVIATIONS` and are checked against that bound.
+Conclusion: the published F1 values are reproducible only by the same LU route by which they were captured.
 
-### Таблица изменённых ключей
+### Table of the changed keys
 
-| ключ | старое | новое | абс. Δ | cond·ω·‖u‖∞ | отношение |
+| key | old | new | abs. Δ | cond·ω·‖u‖∞ | ratio |
 |---|---|---|---|---|---|
 | `F1.B.theta.n16.base` | 8.65710334232e-05 | 8.65065303772e-05 | 6.45e-08 | 1.39e-05 | 0.00 |
 | `F1.B.theta.n16.sloan` | 8.93919258576e-05 | 8.41045068070e-05 | 5.29e-06 | 1.39e-05 | 0.38 |
@@ -238,63 +238,63 @@ F1-систем тем же кодом, что решатель; таблица 
 | `F1.T.xi2.n8.base` | 0.000133055805644 | 0.000132995825799 | 6.00e-08 | 5.82e-06 | 0.01 |
 | `F1.T.xi2.n8.sloan` | 0.000351049658730 | 0.000352080391623 | 1.03e-06 | 5.82e-06 | 0.18 |
 
-### Не-F1 ключи: эталоны НЕ менялись, уточнён пол гейта
+### Non-F1 keys: the baselines were NOT changed, the floor of the gate was refined
 
-Не-F1 ключи расходились между реализациями LAPACK на уровне округления: `baseline-eh.tsv` —
-442 из 1312 ключей, максимум `4.0e-15` абс. (при прежнем поле `1e-11` падали 93, отн. до
-`3.2e-5` при `E_h ≈ 1e-11`); `baseline-extra.tsv` — 248 из 672 ключей E_h (≤ `1.0e-15` абс.)
-и 248 из 336 ключей невязки (≤ `7.8e-16` абс., до `1.3e-2` отн. при допуске `1e-3`).
-Допуск `1e-9` при `E_h ~ 1e-11…1e-8` требовал абсолютного согласия `1e-20…1e-17` —
-побитовой воспроизводимости LU, невозможной при смене реализации.
+The non-F1 keys diverged between the LAPACK implementations at the level of rounding: `baseline-eh.tsv` —
+442 keys out of 1312, at most `4.0e-15` abs. (under the former floor of `1e-11`, 93 of them failed, rel. up to
+`3.2e-5` at `E_h ≈ 1e-11`); `baseline-extra.tsv` — 248 of the 672 E_h keys (≤ `1.0e-15` abs.)
+and 248 of the 336 residual keys (≤ `7.8e-16` abs., up to `1.3e-2` rel. against a tolerance of `1e-3`).
+The tolerance `1e-9` at `E_h ~ 1e-11…1e-8` demanded an absolute agreement of `1e-20…1e-17` —
+a bitwise reproducibility of LU, impossible under a change of implementation.
 
-Закрыто уточнением пола гейта до `10³·ε·‖u‖∞`: `EhCharacterizationTest.ABSOLUTE_FLOOR`
-`1e-11 → 6e-13` и применяется теперь к РАЗНОСТИ значений (`|actual − expected| ≤ 6e-13`
-— шум, не изменение метода), а не к паре «оба ниже пола»; `ExtraCharacterizationMatrix` —
-новые `NOISE_FLOOR = 6e-13` (E_h, `.iters`) и `RESIDUAL_NOISE_FLOOR = 6e-15` (невязка,
-`10·ε·‖u‖`; общий порог поглотил бы все невязки `< 1e-13`). Обоснование значения — в KDoc
-констант. Прежние пороги `1e-11`/`1e-16`/`1e-18` для пары «оба ниже пола» сохранены.
-Цена: чувствительность к сдвигу самых малых невязок (`~1.2e-14`) упала с 0.1 % до ~50 %.
+It was closed by refining the floor of the gate to `10³·ε·‖u‖∞`: `EhCharacterizationTest.ABSOLUTE_FLOOR`
+`1e-11 → 6e-13`, and it is now applied to the DIFFERENCE of the values (`|actual − expected| ≤ 6e-13`
+— noise, not a change of the method) rather than to the pair "both below the floor"; `ExtraCharacterizationMatrix` —
+the new `NOISE_FLOOR = 6e-13` (E_h, `.iters`) and `RESIDUAL_NOISE_FLOOR = 6e-15` (the residual,
+`10·ε·‖u‖`; a common threshold would have absorbed all residuals `< 1e-13`). The justification of the value is in the KDoc
+of the constants. The former thresholds `1e-11`/`1e-16`/`1e-18` for the pair "both below the floor" are kept.
+The price: the sensitivity to a shift of the smallest residuals (`~1.2e-14`) dropped from 0.1 % to ~50 %.
 
-**Проверки после изменения:** `characterizationTest` и `extraCharacterizationTest`
-(6/6), `test`, `check` (включая `verifyArtifactDependencies`) — зелёные;
-`F1ConditioningTest` — зелёный. Окружение: numerical-core 1.0.0, netlib + Apple
+**Checks after the change:** `characterizationTest` and `extraCharacterizationTest`
+(6/6), `test`, `check` (including `verifyArtifactDependencies`) — green;
+`F1ConditioningTest` — green. Environment: numerical-core 1.0.0, netlib + Apple
 Accelerate, JDK 21, macOS aarch64.
 
-## 2026-09-10. Переход на minimal-splines 1.0.0 (базис в локальных координатах интервала): пересъём 105 ключей
+## 2026-09-10. Migration to minimal-splines 1.0.0 (the basis in local coordinates of the interval): recapture of 105 keys
 
-**Тип изменения:** `изменение значений`; характер — изменение реализации без изменения
-метода (ни одна формула решателей не менялась, сменилась реализация базиса минимальных
-сплайнов в библиотеке).
+**Type of change:** `change of values`; by nature a change of implementation without a change of
+the method (not a single formula of the solvers was changed; what changed is the implementation of the basis of
+minimal splines in the library).
 
-**Строк:** `baseline-eh.tsv` — 1366 значений → **1366** значений (изменено 105, добавлено 0,
-удалено 0: 29 ключей `F.F2exp.H.*`, `V.V2exp.H.*`, `U.B.H.*`; 22 ключа `H`/`T` при `n = 16`;
-54 ключа `F1.*`), шапка +6 строк комментария. `baseline-extra.tsv` — 1344 значения **без изменений**
-(`extraCharacterizationTest` зелёный до пересъёма).
+**Rows:** `baseline-eh.tsv` — 1366 values → **1366** values (105 changed, 0 added,
+0 removed: 29 keys `F.F2exp.H.*`, `V.V2exp.H.*`, `U.B.H.*`; 22 keys `H`/`T` at `n = 16`;
+54 keys `F1.*`), the header +6 comment lines. `baseline-extra.tsv` — 1344 values **unchanged**
+(`extraCharacterizationTest` was green before the recapture).
 
-### Причина
+### The reason
 
-В minimal-splines 0.1.0 матрицы аппроксимационного соотношения `M_k` (базис `ω = M_k⁻¹φ`)
-обращались в глобальных координатах порождающей системы `φ = (1, ρ(t), σ(t))`; их число
-обусловленности растёт как `n²` и при `n = 16…64` на `[0, 1]` составляет `10³…10⁴`, что даёт
-погрешность порядка `10⁻¹²` в значениях базисных функций `ω_j`. В 1.0.0 базис вычисляется в
-локальных координатах интервала (`s = (t − x_k)/h` для `B`, `u = t − x_k` с масштабом
-`l = min(h, 1)` для `H` и `T`), число обусловленности `M̃_k` не зависит от `n` и отрезка и
-равно `≈ 13` (`B`) и `≈ 21` (`H`, `T`). Функции `ω_j` и функционалы математически те же:
-golden-эталоны библиотеки, снятые на 0.1.0, сошлись с 1.0.0 в `10⁻¹⁰` без пересъёма
-(minimal-splines, `docs/ACCURACY.md`, раздел «Локальные координаты интервала»).
+In minimal-splines 0.1.0 the matrices of the approximation relation `M_k` (the basis `ω = M_k⁻¹φ`)
+were inverted in the global coordinates of the generating system `φ = (1, ρ(t), σ(t))`; their condition
+number grows as `n²` and at `n = 16…64` on `[0, 1]` amounts to `10³…10⁴`, which gives
+an error of the order `10⁻¹²` in the values of the basis functions `ω_j`. In 1.0.0 the basis is computed in
+local coordinates of the interval (`s = (t − x_k)/h` for `B`, `u = t − x_k` with the scale
+`l = min(h, 1)` for `H` and `T`), the condition number of `M̃_k` does not depend on `n` or on the interval and
+equals `≈ 13` (`B`) and `≈ 21` (`H`, `T`). The functions `ω_j` and the functionals are mathematically the same:
+the golden baselines of the library, captured on 0.1.0, agreed with 1.0.0 to within `10⁻¹⁰` without a recapture
+(minimal-splines, `docs/ACCURACY.md`, the section "Local coordinates of the interval").
 
-Через решатель это изменение видно тремя способами, отсюда три группы ключей.
+Through the solver this change is visible in three ways, hence three groups of keys.
 
-### Группа 1 (29 ключей): `E_h` упало до машинного уровня
+### Group 1 (29 keys): `E_h` dropped to the machine level
 
-Задачи `F2exp` и `V2exp` с базисом `H`, а также `U.B.H` имеют точное решение в `span φ`
-гиперболической порождающей системы; метод на таком решении точен по построению, и
-единственный источник ненулевого `E_h` — погрешность обращения `M_k`. Прежние значения
-`6.19e-13…9.51e-12` были артефактом обусловленности реализации 0.1.0; новые —
-`8.88e-16…2.66e-15`, то есть порядка `ε·‖u‖∞ ≈ 6e-16`. Критерий отнесения к группе: новое
-значение `≤ 5e-15` при старом `≥ 1e-13`; критерий выделяет ровно эти три задачи.
+The problems `F2exp` and `V2exp` with the basis `H`, as well as `U.B.H`, have an exact solution in the `span φ`
+of the hyperbolic generating system; the method is exact on such a solution by construction, and
+the only source of a non-zero `E_h` is the error of the inversion of `M_k`. The former values
+`6.19e-13…9.51e-12` were an artefact of the conditioning of the 0.1.0 implementation; the new ones are
+`8.88e-16…2.66e-15`, that is, of the order `ε·‖u‖∞ ≈ 6e-16`. The criterion for membership of the group: a new
+value `≤ 5e-15` with an old one `≥ 1e-13`; the criterion selects exactly these three problems.
 
-| ключ | старое | новое |
+| key | old | new |
 |---|---|---|
 | `F.F2exp.H.lambda.n16.base` | 6.48059383934e-12 | 2.22044604925e-15 |
 | `F.F2exp.H.mu.n16.base` | 9.50928225052e-12 | 1.55431223448e-15 |
@@ -326,19 +326,19 @@ golden-эталоны библиотеки, снятые на 0.1.0, сошли�
 | `V.V2exp.H.xi2.n16.base` | 7.17648163118e-12 | 1.33226762955e-15 |
 | `V.V2exp.H.xi2.n8.base` | 7.52287121486e-13 | 8.88178419700e-16 |
 
-### Группа 2 (22 ключа): сдвиг на уровне шума базиса 0.1.0
+### Group 2 (22 keys): a shift at the level of the noise of the 0.1.0 basis
 
-Ключи `F2span.H`, `F2exp.T`, `V2span.H`, `V2exp.T`, `V2win.H` и схемы Нюстрёма `F2exp.H` при
-`n = 16` с `E_h ≈ 4.0e-07…3.1e-04` (погрешность метода не исчерпана).
-Абсолютный сдвиг `|Δ|` лежит в
-`7.26e-13…2.69e-12` — это та же погрешность `~10⁻¹²` базиса 0.1.0, что и в
-группе 1, но на фоне ненулевого `E_h`; относительно — не более `3.8e-06`. Сдвиг превышает пол
-гейта `ABSOLUTE_FLOOR = 6e-13 = 10³·ε·‖u‖∞` (пол описывает шум решения СЛАУ, а не
-погрешность базиса) и допуск `1e-9`; пол и допуск не меняются. Остальные 1261 не-F1 ключа
-сошлись со снимком в пределах пола (максимум `5.9e-13` при `n = 8`, `7.7e-13` при `n = 16`
-с относительным расхождением `≤ 1e-9`).
+The keys `F2span.H`, `F2exp.T`, `V2span.H`, `V2exp.T`, `V2win.H` and the Nyström schemes `F2exp.H` at
+`n = 16` with `E_h ≈ 4.0e-07…3.1e-04` (the error of the method is not exhausted).
+The absolute shift `|Δ|` lies in
+`7.26e-13…2.69e-12` — this is the same error `~10⁻¹²` of the 0.1.0 basis as in
+group 1, but against the background of a non-zero `E_h`; in relative terms it is not above `3.8e-06`. The shift exceeds the floor
+of the gate `ABSOLUTE_FLOOR = 6e-13 = 10³·ε·‖u‖∞` (the floor describes the noise of the solution of the linear system, not
+the error of the basis) and the tolerance `1e-9`; the floor and the tolerance are not changed. The remaining 1261 non-F1 keys
+agreed with the snapshot within the floor (at most `5.9e-13` at `n = 8` and `7.7e-13` at `n = 16`
+with a relative divergence `≤ 1e-9`).
 
-| ключ | старое | новое | абс. Δ | отн. Δ |
+| key | old | new | abs. Δ | rel. Δ |
 |---|---|---|---|---|
 | `F.F2exp.H.mu.n16.iterNystrom` | 6.73434107146e-07 | 6.73436634457e-07 | 2.53e-12 | 3.8e-06 |
 | `F.F2exp.H.mu.n16.nystrom` | 1.42909844625e-06 | 1.42910113143e-06 | 2.69e-12 | 1.9e-06 |
@@ -363,19 +363,19 @@ golden-эталоны библиотеки, снятые на 0.1.0, сошли�
 | `V.V2win.H.xi0.n16.base` | 0.000159769615057 | 0.000159769616398 | 1.34e-12 | 8.4e-09 |
 | `V.V2win.H.xi2.n16.base` | 2.25216351063e-05 | 2.25216363188e-05 | 1.21e-12 | 5.4e-08 |
 
-### Группа 3 (54 ключа `F1.*`): в границе прямой ошибки `cond·ω·‖u‖∞`
+### Group 3 (54 keys `F1.*`): within the bound on the forward error `cond·ω·‖u‖∞`
 
-Системы F1 (`cond₁ ∈ [2.14e+10, 2.33e+10]`, `ω ∈ [7.6e-17, 4.6e-16]`, `‖u‖∞ = e`) усиливают
-возмущение базиса `~10⁻¹²` до `cond·10⁻¹²·‖u‖ ~ 10⁻¹…10⁻²` в коэффициентах, что при
-катастрофическом сокращении в решении Слоана (см. шапку `baseline-eh.tsv`) даёт
-`|ΔE_h| ∈ [2.22e-07, 1.19e-05]` (относительно `1.4e-03…0.145`,
-максимум — `F1.H.theta.n16.sloan`). Все 54 отклонения — внутри границы прямой ошибки
-`cond·max(ω, 1e-16)·‖u‖∞`: максимальное отношение `|ΔE_h| / (cond·ω·‖u‖)` = 1.30
-(`F1.H.theta.n8.sloan`), медиана 0.19, отношение `> 1` у 3 ключей из 54.
-Граница измерена `characterization.F1ConditioningTest` на minimal-splines 1.0.0
-(`build/reports/f1-conditioning.tsv`, 27 систем).
+The F1 systems (`cond₁ ∈ [2.14e+10, 2.33e+10]`, `ω ∈ [7.6e-17, 4.6e-16]`, `‖u‖∞ = e`) amplify
+the perturbation of the basis `~10⁻¹²` up to `cond·10⁻¹²·‖u‖ ~ 10⁻¹…10⁻²` in the coefficients, which under
+the catastrophic cancellation in the Sloan solution (see the header of `baseline-eh.tsv`) gives
+`|ΔE_h| ∈ [2.22e-07, 1.19e-05]` (relative `1.4e-03…0.145`,
+the maximum being `F1.H.theta.n16.sloan`). All 54 deviations are within the bound on the forward error
+`cond·max(ω, 1e-16)·‖u‖∞`: the maximum ratio `|ΔE_h| / (cond·ω·‖u‖)` = 1.30
+(`F1.H.theta.n8.sloan`), the median 0.19, with a ratio `> 1` for 3 keys out of 54.
+The bound was measured by `characterization.F1ConditioningTest` on minimal-splines 1.0.0
+(`build/reports/f1-conditioning.tsv`, 27 systems).
 
-| ключ | старое | новое | абс. Δ | cond·ω·‖u‖∞ | отношение |
+| key | old | new | abs. Δ | cond·ω·‖u‖∞ | ratio |
 |---|---|---|---|---|---|
 | `F1.B.theta.n16.base` | 8.65065303772e-05 | 8.60962320393e-05 | 4.10e-07 | 9.29e-06 | 0.04 |
 | `F1.B.theta.n16.sloan` | 8.41045068070e-05 | 8.81253137566e-05 | 4.02e-06 | 9.29e-06 | 0.43 |
@@ -434,180 +434,180 @@ golden-эталоны библиотеки, снятые на 0.1.0, сошли�
 
 ### `PublishedValuesTest`
 
-Сверка с опубликованными таблицами после перехода выявила 17 ключей `F.F2exp.H.*`,
-`V.V2exp.H.*`, `V.V2win.T.*` (семейства `theta`, `xi1`; опубликовано `1.1e-12…1.4e-10`,
-вычислено `8.9e-16…5.1e-15`) и 6 ключей F1 сверх допуска 2 % (`2.29…8.69 %`, |Δ| ≤ 5.8e-6 при
-границе `2·cond₁·ω·‖u‖∞ ≈ 3.8e-5`). Первые вынесены в `KNOWN_CONDITIONING_ARTIFACTS` и
-проверяются машинным уровнем `E_h ≤ 1e-14 ≈ 16·ε·‖u‖∞`, а не сравнением с публикацией: опубликованные
-значения получены реализацией базиса в глобальных координатах и отражают погрешность
-обращения матриц аппроксимационного соотношения, а не погрешность метода. Вторые добавлены
-в `KNOWN_LU_PATH_DEVIATIONS` (17 → 23 ключа) с прежней границей. Допуск 2 % не менялся.
+The cross-check against the published tables after the migration revealed 17 keys `F.F2exp.H.*`,
+`V.V2exp.H.*`, `V.V2win.T.*` (the families `theta`, `xi1`; published `1.1e-12…1.4e-10`,
+computed `8.9e-16…5.1e-15`) and 6 F1 keys beyond the tolerance of 2 % (`2.29…8.69 %`, |Δ| ≤ 5.8e-6 against
+the bound `2·cond₁·ω·‖u‖∞ ≈ 3.8e-5`). The former were moved into `KNOWN_CONDITIONING_ARTIFACTS` and
+are checked against the machine level `E_h ≤ 1e-14 ≈ 16·ε·‖u‖∞` rather than by a comparison with the publication: the published
+values were obtained by an implementation of the basis in global coordinates and reflect the error of the
+inversion of the matrices of the approximation relation rather than the error of the method. The latter were added
+to `KNOWN_LU_PATH_DEVIATIONS` (17 → 23 keys) with the former bound. The tolerance of 2 % was not changed.
 
-**Проверки после изменения:** `characterizationTest` и `extraCharacterizationTest` (6/6),
-`test`, `check` — зелёные; `F1ConditioningTest` — зелёный. Окружение: numerical-core 1.0.0,
+**Checks after the change:** `characterizationTest` and `extraCharacterizationTest` (6/6),
+`test`, `check` — green; `F1ConditioningTest` — green. Environment: numerical-core 1.0.0,
 minimal-splines 1.0.0 (mavenLocal), netlib + Apple Accelerate, JDK 21, macOS aarch64.
 
 ---
 
-## 2026-09-15. Точность записи снимка 12 → 17 цифр и исправление `BaselineSnapshotTool`; пересъём ОТЛОЖЕН
+## 2026-09-15. Snapshot precision 12 → 17 digits and a fix of `BaselineSnapshotTool`; the recapture was POSTPONED
 
-**Тип изменения:** `изменение значений` — **НЕ ВЫПОЛНЕНО**. Изменены только инструменты
-снятия; оба файла эталонов (`baseline-eh.tsv` — 1366 значений, `baseline-extra.tsv` — 1344)
-остались **без единого изменения**. Почему — ниже, это главное содержание записи.
+**Type of change:** `change of values` — **NOT PERFORMED**. Only the capturing tools were changed;
+both baseline files (`baseline-eh.tsv` — 1366 values, `baseline-extra.tsv` — 1344)
+were left **without a single change**. Why is stated below, and this is the main content of the entry.
 
-### Что изменено в инструментах
+### What was changed in the tools
 
-1. `BaselineSnapshotTool` приведён к устройству `ExtraBaselineSnapshotTool`: накопление пар
-   «ключ — значение» в буфере, сортировка по ключу и **одна** операция `writeText` в
-   `@AfterAll` вместо `appendText` на каждое значение. Имя файла больше не содержит имени
-   потока JUnit: было `build/baseline/snapshot-<имя потока>.tsv`, стало
-   `build/baseline/baseline-eh.tsv`. Следствия: ритуал `rm -rf build/baseline` перед каждым
-   снятием больше не нужен (повторный запуск даёт тот же файл), дифф двух снимков показывает
-   изменение чисел, а не перестановку строк, а падение посреди снятия не оставляет
-   наполовину записанный файл. Класс помечен `@TestInstance(PER_CLASS)` — иначе JUnit создал
-   бы по экземпляру на каждый из пяти тест-методов и буфер терялся бы до записи.
-2. Форматирование числа во **всех** инструментах снятия — `%.17g` вместо `%.12g`, и всюду с
-   явной `Locale.ROOT` (в `BaselineSnapshotTool` локали не было вовсе: `"%.12g".format(x)`
-   берёт локаль по умолчанию и на машине с русской локалью пишет запятую вместо точки, после
-   чего снимок перестаёт читаться). Ключи `*.iters` (целые) и маркеры
-   `NaN` / `Infinity` / `-Infinity` / `ERROR:<класс>` печатаются как раньше.
+1. `BaselineSnapshotTool` was brought to the design of `ExtraBaselineSnapshotTool`: accumulation of
+   "key — value" pairs in a buffer, sorting by key and **one** `writeText` operation in
+   `@AfterAll` instead of an `appendText` for every value. The file name no longer contains the name of the
+   JUnit thread: it was `build/baseline/snapshot-<thread name>.tsv`, it became
+   `build/baseline/baseline-eh.tsv`. The consequences: the ritual `rm -rf build/baseline` before every
+   capture is no longer needed (a repeated run produces the same file), a diff of two snapshots shows
+   a change of the numbers rather than a permutation of the rows, and a failure in the middle of a capture does not leave
+   a half-written file. The class is marked `@TestInstance(PER_CLASS)` — otherwise JUnit would create
+   an instance per each of the five test methods and the buffer would be lost before the write.
+2. The formatting of a number in **all** the capturing tools is `%.17g` instead of `%.12g`, and everywhere with an
+   explicit `Locale.ROOT` (in `BaselineSnapshotTool` there was no locale at all: `"%.12g".format(x)`
+   takes the default locale and on a machine with a Russian locale writes a comma instead of a point, after
+   which the snapshot ceases to be readable). The keys `*.iters` (integers) and the markers
+   `NaN` / `Infinity` / `-Infinity` / `ERROR:<class>` are printed as before.
 
-**Почему 17.** `%.12g` не даёт round-trip для `double`: проверено —
-`"%.12g".format(0.1 + 0.2)` = `0.300000000000`, и обратное чтение не равно `0.1 + 0.2`.
-То есть сама запись эталона вносила относительную погрешность хранения ~1e-12 — грубее, чем
-измеренное расхождение реализаций BLAS на не-F1 ключах (максимум 1.0e-14). 17 значащих цифр —
-минимум, при котором десятичная запись `double` восстанавливается побитово.
+**Why 17.** `%.12g` does not give a round trip for a `double`: it was verified that
+`"%.12g".format(0.1 + 0.2)` = `0.300000000000`, and reading it back is not equal to `0.1 + 0.2`.
+That is, the very writing of the baseline introduced a relative storage error of ~1e-12 — coarser than
+the measured divergence of the BLAS implementations on the non-F1 keys (at most 1.0e-14). 17 significant digits are
+the minimum at which the decimal representation of a `double` is restored bitwise.
 
-### Почему файлы эталонов НЕ переписаны
+### Why the baseline files were NOT rewritten
 
-Пересъём (`captureBaseline captureExtraBaseline -Dnumerics.backend=native`, netlib + Apple
-Accelerate, numerical-core 1.1.0, minimal-splines 1.1.0, JDK 21, macOS aarch64) сверен с
-зафиксированными значениями по всем 2710 ключам. Состав ключей совпал полностью, маркеры
-совпали дословно, но **числа воспроизводятся не побитово**: при округлении обеих величин до
-12 значащих цифр расходятся **1741 ключ из 2710** (983 из 1366 в `baseline-eh.tsv`, 758 из
-1344 в `baseline-extra.tsv`).
+The recapture (`captureBaseline captureExtraBaseline -Dnumerics.backend=native`, netlib + Apple
+Accelerate, numerical-core 1.1.0, minimal-splines 1.1.0, JDK 21, macOS aarch64) was matched against the
+recorded values over all 2710 keys. The composition of the keys coincided completely, the markers
+coincided literally, but **the numbers are not reproduced bitwise**: when both quantities are rounded to
+12 significant digits, **1741 keys out of 2710** diverge (983 of 1366 in `baseline-eh.tsv`, 758 of
+1344 in `baseline-extra.tsv`).
 
-Расхождение **мало по абсолютной величине и целиком укладывается в гейт**: максимум
-`|Δ|` — `7.73e-13` (eh) и `2.47e-13` (extra), ни один ключ не выходит одновременно за
-относительный допуск `1e-9` и за пол `ABSOLUTE_FLOOR = 6e-13`; `characterizationTest` и
-`extraCharacterizationTest` на нативном бэкенде — **6/6 зелёных против прежнего файла**.
-Большие относительные значения (до 2.0 на `F.F2exp.H.xi1.n16.iterKulkarni`:
-`8.88178419700e-16` → `2.6645352591003757e-15`) — это ключи уровня `ε·‖u‖∞ ≈ 6e-16`, где
-относительная мера бессмысленна.
+The divergence is **small in absolute value and fits entirely within the gate**: the maximum
+`|Δ|` is `7.73e-13` (eh) and `2.47e-13` (extra), no key goes beyond the
+relative tolerance `1e-9` and the floor `ABSOLUTE_FLOOR = 6e-13` at the same time; `characterizationTest` and
+`extraCharacterizationTest` on the native backend are **6/6 green against the former file**.
+The large relative values (up to 2.0 on `F.F2exp.H.xi1.n16.iterKulkarni`:
+`8.88178419700e-16` → `2.6645352591003757e-15`) belong to keys at the level `ε·‖u‖∞ ≈ 6e-16`, where
+a relative measure is meaningless.
 
-Причина расхождения не в формате, а в том, что зафиксированные числа снимались на прежнем
-стеке (шапка `baseline-eh.tsv`: 1312 значений — multik/OpenBLAS), и текущий стек даёт другие
-последние биты. Поэтому переписать файл в 17 цифрах **невозможно, не изменив значения**: это
-был бы пересъём с изменением 1741 значения, замаскированный под смену формата. Такой пересъём
-— отдельное решение, требующее собственной записи с обоснованием; правилом «для типа
-`изменение значений` — старое и новое значение каждого изменённого ключа» он здесь не покрыт.
+The cause of the divergence is not the format but the fact that the recorded numbers were captured on the former
+stack (the header of `baseline-eh.tsv`: 1312 values — multik/OpenBLAS), and the current stack gives different
+last bits. Rewriting the file in 17 digits is therefore **impossible without changing the values**: that
+would be a recapture with a change of 1741 values, disguised as a change of format. Such a recapture
+is a separate decision requiring an entry of its own with a justification; the rule "for the type
+`change of values` — the old and the new value of every changed key" does not cover it here.
 
-**Что это означает практически.** Гейты продолжают сверяться с прежним файлом и проходят;
-любой следующий осознанный пересъём автоматически ляжет в файл уже с 17 цифрами, и с этого
-момента погрешность хранения из сравнения исчезнет.
+**What this means in practice.** The gates continue to be compared against the former file and pass;
+any subsequent deliberate recapture will automatically land in the file already with 17 digits, and from that
+moment the storage error will disappear from the comparison.
 
-**Проверки после изменения:** `captureBaseline`, `captureExtraBaseline` — BUILD SUCCESSFUL,
-2710 строк (1366 + 1344); `characterizationTest`, `extraCharacterizationTest` — BUILD
-SUCCESSFUL (6/6). Окружение: netlib + Apple Accelerate, JDK 21, macOS aarch64.
+**Checks after the change:** `captureBaseline`, `captureExtraBaseline` — BUILD SUCCESSFUL,
+2710 rows (1366 + 1344); `characterizationTest`, `extraCharacterizationTest` — BUILD
+SUCCESSFUL (6/6). Environment: netlib + Apple Accelerate, JDK 21, macOS aarch64.
 
 ---
 
-## 2026-09-16. Классификация ключей: третья колонка `класс`, пересъём на 17 цифрах, гейты в CI
+## 2026-09-16. Classification of the keys: a third column `class`, a recapture at 17 digits, the gates in CI
 
-**Тип изменения:** `изменение формата` + `изменение значений` (оба сразу; ниже разделены).
+**Type of change:** `change of format` + `change of values` (both at once; they are separated below).
 
-**Строк:** `baseline-eh.tsv` — **1366** значений (без изменения состава), шапка переписана;
-`baseline-extra.tsv` — **1344** значения (без изменения состава), шапка переписана.
+**Rows:** `baseline-eh.tsv` — **1366** values (the composition unchanged), the header rewritten;
+`baseline-extra.tsv` — **1344** values (the composition unchanged), the header rewritten.
 
-### 1. Формат: три колонки вместо двух, 17 значащих цифр вместо 12
+### 1. Format: three columns instead of two, 17 significant digits instead of 12
 
-Формат строки: `ключ <TAB> значение <TAB> класс`. Значение печатается как `%.17g`
-(`Locale.ROOT`) — это минимум, при котором десятичная запись `double` восстанавливается
-побитово; при 12 цифрах сама запись эталона вносила погрешность хранения ~1e-12, то есть
-была ГРУБЕЕ измеренного расхождения реализаций BLAS (≤ `1.0e-14` на не-F1 ключах).
-Переход к 17 цифрам был подготовлен записью от 2026-09-15 (инструменты уже печатали
-`%.17g`) и отложен до осознанного пересъёма — он выполнен здесь.
+The format of a row: `key <TAB> value <TAB> class`. The value is printed as `%.17g`
+(`Locale.ROOT`) — this is the minimum at which the decimal representation of a `double` is restored
+bitwise; with 12 digits the very writing of the baseline introduced a storage error of ~1e-12, that is, it
+was COARSER than the measured divergence of the BLAS implementations (≤ `1.0e-14` on the non-F1 keys).
+The transition to 17 digits was prepared by the entry of 2026-09-15 (the tools already printed
+`%.17g`) and postponed until a deliberate recapture — which is performed here.
 
-Парсеры обоих гейтов стали СТРОГИМИ: строка, не разбивающаяся ровно на три части, и
-неизвестная метка класса РОНЯЮТ разбор. Прежний парсер («ровно две части, иначе — молча
-комментарий») превращал любую опечатку формата в «ключ отсутствует в эталоне», то есть
-ослаблял гейт бесшумно. Разбор и сравнение вынесены в `characterization.BaselineFormat` —
-одно место на оба гейта.
+The parsers of both gates became STRICT: a row that does not split into exactly three parts, and an
+unknown class label, BREAK the parsing. The former parser ("exactly two parts, otherwise silently
+a comment") turned any typo in the format into "the key is absent from the baseline", that is, it
+weakened the gate noiselessly. The parsing and the comparison were moved into `characterization.BaselineFormat` —
+one place for both gates.
 
-### 2. Классы и что они подчинили
+### 2. The classes and what they subordinated
 
-| класс | ключей | правило |
+| class | keys | rule |
 |---|---|---|
-| `portable` | 1984 (1312 eh + 672 extra) | отн. `1e-9` при поле `6e-13 = 10³·ε·‖u‖∞` |
-| `sensitive` | 54 (`F1.*`, только eh) | `|Δ| ≤ 2·cond₁·max(ω,ε)·‖u‖∞`, cond и ω ВЫЧИСЛЯЮТСЯ в прогоне |
-| `residual` | 336 (`*.residual`, extra) | отн. `1e-3` при шуме `6e-15` |
-| `exact` | 336 (`*.iters`, extra) | строгое совпадение строк |
+| `portable` | 1984 (1312 eh + 672 extra) | rel. `1e-9` with a floor of `6e-13 = 10³·ε·‖u‖∞` |
+| `sensitive` | 54 (`F1.*`, eh only) | `|Δ| ≤ 2·cond₁·max(ω,ε)·‖u‖∞`, cond and ω are COMPUTED in the run |
+| `residual` | 336 (`*.residual`, extra) | rel. `1e-3` with a noise level of `6e-15` |
+| `exact` | 336 (`*.iters`, extra) | a strict coincidence of the strings |
 
-Класс `exact` — УЖЕСТОЧЕНИЕ: счётчики итераций целочисленные и между бэкендами не
-разошлись ни разу (0 из 336), поэтому строгое равенство обосновано измерением.
+The class `exact` is a TIGHTENING: the iteration counters are integers and never diverged between the
+backends (0 out of 336), so a strict equality is justified by measurement.
 
-Классификация ПОДЧИНИЛА пять прежних ad-hoc констант (`RELATIVE_TOLERANCE`,
-`ABSOLUTE_FLOOR`, `NOISE_FLOOR`, `SMALL_VALUE_*`, `RESIDUAL_*`) и суффиксную цепочку `if`
-в `ExtraCharacterizationTest`: режим сравнения теперь свойство ДАННЫХ, а не имени ключа.
-Класс `sensitive` сверяется с границей, которая считается на том же бэкенде
-(`characterization.F1SystemConditioning`, та же механика, что и в `F1ConditioningTest`);
-хранить её в файле нельзя — это вернуло бы привязку эталона к машине.
+The classification SUBORDINATED five former ad-hoc constants (`RELATIVE_TOLERANCE`,
+`ABSOLUTE_FLOOR`, `NOISE_FLOOR`, `SMALL_VALUE_*`, `RESIDUAL_*`) and the suffix chain of `if`
+in `ExtraCharacterizationTest`: the comparison mode is now a property of the DATA rather than of the name of the key.
+The class `sensitive` is compared against a bound computed on the same backend
+(`characterization.F1SystemConditioning`, the same mechanics as in `F1ConditioningTest`);
+storing it in the file is not allowed — that would restore the binding of the baseline to a machine.
 
-### 3. Метод классификации (колонка ВЫЧИСЛЕНА, а не написана рукой)
+### 3. The method of classification (the column is COMPUTED, not written by hand)
 
-Задача `./gradlew classifyBaseline` снимает обе матрицы дважды — на
-`-Dnumerics.backend=java` (netlib F2J, чистая Java) и на `native` (netlib + Apple
-Accelerate) — и сравнивает снимки: совпавший в пределах правила `portable` ключ получает
-этот класс, разошедшийся — `sensitive`. ЗАЩЁЛКА: разошедшийся ключ, у которого нет
-доступной системы `(I−M)c=g` (то есть схема не `base`/`sloan` задачи F1), РОНЯЕТ задачу с
-явным сообщением — это дефект, а не новый класс: границы `cond·ω` для `kulkarni`,
-`nystrom` и Урысона не существует без выставления наружу матрицы соответствующей схемы.
-Расхождение счётчика `*.iters` между бэкендами тоже роняет задачу.
+The task `./gradlew classifyBaseline` captures both matrices twice — on
+`-Dnumerics.backend=java` (netlib F2J, pure Java) and on `native` (netlib + Apple
+Accelerate) — and compares the snapshots: a key that coincides within the `portable` rule receives
+that class, and a diverging one receives `sensitive`. THE LATCH: a diverging key that has no
+accessible system `(I−M)c=g` (that is, a scheme other than `base`/`sloan` of the problem F1) BREAKS the task with
+an explicit message — this is a defect rather than a new class: a bound `cond·ω` for `kulkarni`,
+`nystrom` and Uryson does not exist without exposing the matrix of the corresponding scheme.
+A divergence of the counter `*.iters` between the backends breaks the task as well.
 
-Измерение (воспроизведено этим прогоном): из 1366 ключей `baseline-eh.tsv` прежний гейт
-валили ровно **52, все `F1.*`**; у остальных 1312 расхождение путей LU ≤ `1.0e-14` при
-поле `6e-13` — запас 60×. В `baseline-extra.tsv` — **0** падений на обоих бэкендах.
-Граница `2·cond·max(ω,ε)·‖u‖∞` покрывает все 54 ключа F1: ключей выше границы 0, худшее
-отношение `|Δ|/граница` = 0.673 (`F1.H.theta.n16.sloan`), медиана ~0.14;
+The measurement (reproduced by this run): of the 1366 keys of `baseline-eh.tsv` the former gate was
+broken by exactly **52, all of them `F1.*`**; for the remaining 1312 the divergence of the LU routes is ≤ `1.0e-14` against
+a floor of `6e-13` — a margin of a factor of 60. In `baseline-extra.tsv` there are **0** failures on both backends.
+The bound `2·cond·max(ω,ε)·‖u‖∞` covers all 54 F1 keys: no key lies above the bound, the worst
+ratio `|Δ|/bound` = 0.673 (`F1.H.theta.n16.sloan`), the median ~0.14;
 cond₁ ∈ [2.14e10, 2.33e10], ω ≤ 3.8e-16.
 
-Состав `sensitive` защищён сторожевым тестом
-`characterization.BaselineClassGuardTest` (тег `fast`, приём заимствован у
-`PublishedValuesTest.luPathDependentToleranceCoversExactlyTheDeclaredKeys`): сравнивается
-МНОЖЕСТВО ключей, а не их количество, поэтому смена класса у строки не может тихо
-ослабить гейт.
+The composition of `sensitive` is protected by the guard test
+`characterization.BaselineClassGuardTest` (tag `fast`, the technique borrowed from
+`PublishedValuesTest.luPathDependentToleranceCoversExactlyTheDeclaredKeys`): what is compared is
+the SET of keys rather than their number, so a change of class on a row cannot silently
+weaken the gate.
 
-### 4. Пересъём значений: 1741 ключ из 2710
+### 4. Recapture of the values: 1741 keys out of 2710
 
-Оба файла сняты заново на `-Dnumerics.backend=native` (netlib + Apple Accelerate,
-numerical-core 1.1.0, minimal-splines 1.1.0, JDK 21, macOS aarch64). Состав ключей и все
-маркеры совпали дословно; ЧИСЛА изменились у **1741 ключа из 2710** (983 из 1366 в
-`baseline-eh.tsv`, 758 из 1344 в `baseline-extra.tsv`) — ровно то расхождение, которое
-запись от 2026-09-15 измерила и оставила неприменённым.
+Both files were captured anew on `-Dnumerics.backend=native` (netlib + Apple Accelerate,
+numerical-core 1.1.0, minimal-splines 1.1.0, JDK 21, macOS aarch64). The composition of the keys and all the
+markers coincided literally; the NUMBERS changed for **1741 keys out of 2710** (983 of 1366 in
+`baseline-eh.tsv`, 758 of 1344 in `baseline-extra.tsv`) — exactly the divergence that the
+entry of 2026-09-15 measured and left unapplied.
 
-Почему это законно и почему не «подгонка»: прежние значения снимались на СТАРОМ стеке
-(шапка прежнего файла: 1312 значений — multik/OpenBLAS), а текущий стек даёт другие
-последние биты. Расхождение целиком внутри гейта: максимум `|Δ|` — `7.73e-13` (eh) и
-`2.47e-13` (extra), и `characterizationTest`/`extraCharacterizationTest` были зелёными
-против ПРЕЖНЕГО файла. То есть пересъём не скрывает ни одного падения: он переносит
-эталон на стек, на котором он и проверяется, и одновременно снимает погрешность хранения.
-Поключевая таблица «старое → новое» здесь не приводится осознанно: 1741 строка не читается
-человеком, а сами значения полностью восстанавливаются командой
-`./gradlew captureBaseline captureExtraBaseline -Dnumerics.backend=native` на указанном
-стеке — это и есть проверяемая форма записи.
+Why this is legitimate and why it is not "tuning": the former values were captured on the OLD stack
+(the header of the former file: 1312 values — multik/OpenBLAS), and the current stack gives different
+last bits. The divergence lies entirely within the gate: the maximum `|Δ|` is `7.73e-13` (eh) and
+`2.47e-13` (extra), and `characterizationTest`/`extraCharacterizationTest` were green
+against the FORMER file. That is, the recapture hides no failure: it moves the
+baseline onto the stack on which it is verified, and at the same time removes the storage error.
+A per-key table "old → new" is deliberately not given here: 1741 rows are not read
+by a human, while the values themselves are fully restored by the command
+`./gradlew captureBaseline captureExtraBaseline -Dnumerics.backend=native` on the stated
+stack — and that is the verifiable form of the record.
 
-### 5. Гейты переехали в CI
+### 5. The gates moved into CI
 
-Тег `machine` снят с `EhCharacterizationTest` и `ExtraCharacterizationTest`, а
-`-PmachineDependentGates=false` (7 вхождений) убран из `.github/workflows/ci.yml`; job
-`characterization` гоняет `characterizationTest extraCharacterizationTest
-convergenceOrderTest`. Прогон на ubuntu/OpenBLAS x86_64 — ТРЕТИЙ независимый путь LU.
-Механизм отключения сохранён ради единственного оставшегося машинно-зависимого метода —
-`PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`: он сверяется с ЧИСЛАМИ ИЗ
-СТАТЬИ, которые переснять под платформу нельзя в принципе.
+The tag `machine` was removed from `EhCharacterizationTest` and `ExtraCharacterizationTest`, and
+`-PmachineDependentGates=false` (7 occurrences) was removed from `.github/workflows/ci.yml`; the job
+`characterization` runs `characterizationTest extraCharacterizationTest
+convergenceOrderTest`. The run on ubuntu/OpenBLAS x86_64 is a THIRD independent LU route.
+The disabling mechanism was kept for the sake of the single remaining machine-dependent method —
+`PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`: it is compared against the NUMBERS FROM
+THE ARTICLE, which cannot be recaptured for a platform in principle.
 
-**Проверки после изменения:** `characterizationTest extraCharacterizationTest` зелёные
-на `-Dnumerics.backend=native` И на `-Dnumerics.backend=java` (это и есть цель изменения:
-гейт проходит на ДРУГОМ пути LU); `./gradlew check` — BUILD SUCCESSFUL, 173 теста.
-Окружение: netlib + Apple Accelerate, numerical-core 1.1.0, minimal-splines 1.1.0,
+**Checks after the change:** `characterizationTest extraCharacterizationTest` are green
+on `-Dnumerics.backend=native` AND on `-Dnumerics.backend=java` (this is the very aim of the change:
+the gate passes on a DIFFERENT LU route); `./gradlew check` — BUILD SUCCESSFUL, 173 tests.
+Environment: netlib + Apple Accelerate, numerical-core 1.1.0, minimal-splines 1.1.0,
 JDK 21, macOS aarch64.

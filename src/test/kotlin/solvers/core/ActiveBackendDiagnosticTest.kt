@@ -9,19 +9,19 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * ДИАГНОСТИКА АКТИВНОГО БЭКЕНДА для сборки, в которой сравниваются численные эталоны.
+ * THE DIAGNOSTICS OF THE ACTIVE BACKEND for a build in which numerical baselines are compared.
  *
- * Зачем. `Backends.default()` в режиме `auto` при недоступности нативного BLAS/LAPACK
- * МОЛЧА откатывается на чисто-Java реализацию (F2J), а эталоны `baseline-eh.tsv`/
- * `baseline-extra.tsv` привязаны к нативному LAPACK: на другой реализации LU гейт
- * характеризации падает на ключах F1 (cond ~1e10) с расхождением до 5.7e-2 при допуске
- * 1e-9. Без явной проверки такой откат на другой машине или в CI выглядел бы как
- * «рефакторинг испортил числа», и разбирательство ушло бы не туда.
+ * Why. `Backends.default()` in the `auto` mode, when the native BLAS/LAPACK is unavailable,
+ * SILENTLY falls back to the pure-Java implementation (F2J), while the baselines `baseline-eh.tsv`/
+ * `baseline-extra.tsv` are bound to the native LAPACK: on another LU implementation the characterization
+ * gate fails on the F1 keys (cond ~1e10) with a discrepancy of up to 5.7e-2 at a tolerance of
+ * 1e-9. Without an explicit check such a fallback on another machine or in CI would look like
+ * "the refactoring spoiled the numbers", and the investigation would go in the wrong direction.
  *
- * Что проверяется. Активный бэкенд согласован со свойством `numerics.backend`:
- * `native` → нативный, `java` → чисто-Java, `auto`/не задано → нативный, если он доступен.
- * Во всех режимах, кроме явного `java`, нативная реализация ОБЯЗАНА быть доступна —
- * иначе падает этот тест, а не сотни характеризационных значений.
+ * What is checked. The active backend agrees with the property `numerics.backend`:
+ * `native` → native, `java` → pure Java, `auto`/unset → native if it is available.
+ * In all the modes except an explicit `java` the native implementation MUST be available —
+ * otherwise this test fails rather than hundreds of characterization values.
  */
 @Tag("fast")
 class ActiveBackendDiagnosticTest {
@@ -33,8 +33,8 @@ class ActiveBackendDiagnosticTest {
         if (mode != "java") {
             assertTrue(
                 Backends.isNativeAvailable(),
-                "Нативная реализация BLAS/LAPACK недоступна (numerics.backend=$mode). " +
-                    "Эталоны characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся.",
+                "The native BLAS/LAPACK implementation is unavailable (numerics.backend=$mode). " +
+                    "The baselines characterization/*.tsv were shot on the native LAPACK and are not reproduced on F2J.",
             )
         }
         val expectNative = when (mode) {
@@ -44,13 +44,13 @@ class ActiveBackendDiagnosticTest {
         }
         assertEquals(
             expectNative, Backends.default().isNative,
-            "Активный бэкенд по умолчанию — ${Backends.default().name} (isNative=${Backends.default().isNative}), " +
-                "ожидался isNative=$expectNative при numerics.backend=$mode. " +
-                "Проверьте системное свойство numerics.backend (задачи Gradle передают его явно).",
+            "The default active backend is ${Backends.default().name} (isNative=${Backends.default().isNative}), " +
+                "isNative=$expectNative was expected at numerics.backend=$mode. " +
+                "Check the system property numerics.backend (the Gradle tasks pass it explicitly).",
         )
         assertSame(
             Backends.default(), NumericsContext.default().backend,
-            "NumericsContext.default() обязан нести тот же бэкенд, что и Backends.default().",
+            "NumericsContext.default() must carry the same backend as Backends.default().",
         )
     }
 }

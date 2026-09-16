@@ -17,13 +17,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Тесты границы применимости регуляризованного пути F1 по параметру `alpha`
- * (issue #11) и программного доступа к обусловленности собранной системы.
+ * Tests of the applicability bound of the regularized F1 path in the parameter `alpha`
+ * (issue #11) and of the programmatic access to the conditioning of the assembled system.
  *
- * Проверяемое требование: утверждение KDoc «ниже примерно `alpha = 1e-8`
- * значащих цифр остаётся мало» подкреплено ИЗМЕРЕНИЕМ на самой библиотеке, а не
- * только внешним наблюдением. Граница фиксируется как ГРАНИЦА ПРИМЕНИМОСТИ, а не
- * как отбраковка: ни один вызов решателя из-за большого `cond` не падает.
+ * The requirement being checked: the KDoc statement "below roughly `alpha = 1e-8`
+ * few significant digits are left" is backed by a MEASUREMENT on the library itself and not
+ * only by an external observation. The bound is recorded as an APPLICABILITY BOUND and not
+ * as a rejection: no call of the solver fails because of a large `cond`.
  */
 @Tag("fast")
 class FredholmFirstKindConditionTest {
@@ -43,64 +43,64 @@ class FredholmFirstKindConditionTest {
     }
 
     /**
-     * ОБУСЛОВЛЕННОСТЬ РАСТЁТ КАК `alpha^{-1}` — качественное утверждение KDoc
-     * подтверждено измерением.
+     * THE CONDITIONING GROWS AS `alpha^{-1}` — the qualitative statement of the KDoc
+     * is confirmed by a measurement.
      *
-     * Эталон текущего прогона (`n = 8`, базис B, семейство theta):
+     * The baseline of the current run (`n = 8`, basis B, family theta):
      * `alpha = 1e-6` → `cond∞ ≈ 1.449e+06`, `1e-8` → `1.492e+08`,
-     * `1e-10` → `1.181e+10`. Каждое уменьшение `alpha` на два порядка поднимает
-     * `cond∞` примерно на два порядка, как и предсказывает рост элементов `M`.
-     * Допуск взят широким (множитель 3 в обе стороны): проверяется ПОРЯДОК роста,
-     * а не воспроизводимость цифр на чужой архитектуре.
+     * `1e-10` → `1.181e+10`. Every decrease of `alpha` by two orders raises
+     * `cond∞` by about two orders, as the growth of the entries of `M` predicts.
+     * The tolerance is taken wide (a factor of 3 in both directions): what is checked is the ORDER of the growth,
+     * and not the reproducibility of the digits on a foreign architecture.
      */
     @Test fun conditionGrowsInverselyWithAlpha() {
         val condAt = mutableMapOf<Double, Double>()
         for (alpha in listOf(1e-6, 1e-8, 1e-10)) {
             val est = solver(alpha).baseCondition()
-            assertTrue(est.condInf.isFinite(), "alpha=$alpha: cond должен быть конечным, получено ${est.condInf}")
+            assertTrue(est.condInf.isFinite(), "alpha=$alpha: cond must be finite, got ${est.condInf}")
             condAt[alpha] = est.condInf
         }
         assertTrue(condAt[1e-6]!! in 5e5..5e6, "alpha=1e-6: cond=${condAt[1e-6]}")
         assertTrue(condAt[1e-8]!! in 5e7..5e8, "alpha=1e-8: cond=${condAt[1e-8]}")
         assertTrue(condAt[1e-10]!! in 4e9..4e10, "alpha=1e-10: cond=${condAt[1e-10]}")
-        // Монотонность: чем меньше alpha, тем хуже обусловленность.
+        // Monotonicity: the smaller the alpha, the worse the conditioning.
         assertTrue(condAt[1e-6]!! < condAt[1e-8]!! && condAt[1e-8]!! < condAt[1e-10]!!)
     }
 
     /**
-     * ГРАНИЦА ПРИМЕНИМОСТИ ПРОХОДИТ ПРИМЕРНО ПО `alpha = 1e-8` — измерено ЗДЕСЬ,
-     * тем же критерием достоверности, что и в `Conditioning`.
+     * THE APPLICABILITY BOUND RUNS ROUGHLY AT `alpha = 1e-8` — measured HERE,
+     * by the same reliability criterion as in `Conditioning`.
      *
-     * При `alpha >= 1e-8` невязка обращения собранной матрицы держится ниже порога
-     * [Conditioning.INVERSION_RESIDUAL_TOLERANCE] и оценка `cond` достоверна;
-     * при `alpha = 1e-10` (значение [FredholmFirstKindSolver.DEFAULT_REGULARIZATION])
-     * невязка порог уже превышает — то есть матрица вошла в режим, где сама оценка
-     * обусловленности теряет смысл. Это машинно проверяемый вид утверждения
-     * «ниже примерно 1e-8 значащих цифр остаётся мало».
+     * At `alpha >= 1e-8` the residual of the inversion of the assembled matrix stays below the threshold
+     * [Conditioning.INVERSION_RESIDUAL_TOLERANCE] and the `cond` estimate is reliable;
+     * at `alpha = 1e-10` (the value of [FredholmFirstKindSolver.DEFAULT_REGULARIZATION])
+     * the residual already exceeds the threshold — that is, the matrix entered the regime where the conditioning
+     * estimate itself loses its meaning. This is a machine-checkable form of the statement
+     * "below roughly 1e-8 few significant digits are left".
      */
     @Test fun defaultRegularizationLiesBelowTheReliabilityBoundary() {
-        assertTrue(solver(1e-6).baseCondition().isReliable, "alpha=1e-6 обязана оставаться достоверной")
-        assertTrue(solver(1e-8).baseCondition().isReliable, "alpha=1e-8 обязана оставаться достоверной")
+        assertTrue(solver(1e-6).baseCondition().isReliable, "alpha=1e-6 must stay reliable")
+        assertTrue(solver(1e-8).baseCondition().isReliable, "alpha=1e-8 must stay reliable")
 
         val atDefault = solver(FredholmFirstKindSolver.DEFAULT_REGULARIZATION).baseCondition()
         assertEquals(1e-10, FredholmFirstKindSolver.DEFAULT_REGULARIZATION, 0.0)
         assertTrue(
             !atDefault.isReliable,
-            "alpha=1e-10 попадает в проблемный диапазон: cond=${atDefault.condInf}, " +
-                "невязка обращения=${atDefault.inversionResidual}",
+            "alpha=1e-10 falls into the problematic range: cond=${atDefault.condInf}, " +
+                "inversion residual=${atDefault.inversionResidual}",
         )
-        // Недостоверное число нельзя получить по невнимательности.
+        // An untrustworthy number must not be obtained through inattention.
         assertNull(atDefault.valueOrNull())
     }
 
     /**
-     * ЭТО НЕ ОТБРАКОВКА. При `alpha = 1e-10`, где оценка `cond` уже недостоверна,
-     * решатель работает штатно: базовая схема и итерация Слоана возвращают
-     * конечные значения, ни одного исключения не бросается.
+     * THIS IS NOT A REJECTION. At `alpha = 1e-10`, where the `cond` estimate is already untrustworthy,
+     * the solver works regularly: the base scheme and the Sloan iteration return
+     * finite values, not a single exception is thrown.
      *
-     * Требование прямо следует из обоснования
-     * `LinearAlgebra.SINGULARITY_RELATIVE_TOLERANCE`: большое `cond` у задачи F1 —
-     * штатный режим метода, и отбраковывать его нельзя.
+     * The requirement follows directly from the justification of
+     * `LinearAlgebra.SINGULARITY_RELATIVE_TOLERANCE`: a large `cond` for the problem F1 is
+     * a regular regime of the method, and it must not be rejected.
      */
     @Test fun poorConditioningDoesNotRejectTheProblem() {
         val s = solver(FredholmFirstKindSolver.DEFAULT_REGULARIZATION)
@@ -111,15 +111,15 @@ class FredholmFirstKindConditionTest {
     }
 
     /**
-     * САМОПРОВЕРКА ДВУМЯ ЭКВИВАЛЕНТНЫМИ ЗАПИСЯМИ (способ, задокументированный в
-     * KDoc решателя) — работоспособна и НЕ даёт ложной тревоги на пригодном `alpha`.
+     * A SELF-CHECK BY TWO EQUIVALENT EXPRESSIONS (a technique documented in
+     * the KDoc of the solver) is workable and does NOT give a false alarm at a suitable `alpha`.
      *
-     * Одна и та же величина `‖u_h‖` считается двумя алгебраически эквивалентными
-     * способами: делением `u/(1+t)` против умножения `u · p`, где `p = 1/(1+t)`.
-     * Записи различаются ровно на одно округление. При `alpha = 1e-6`, где по
-     * измерениям расхождения нет, оно и здесь отсутствует на уровне 1e-9 —
-     * то есть сам приём не создаёт шума и годится как оценка снизу для реально
-     * доступной точности.
+     * One and the same quantity `‖u_h‖` is computed in two algebraically equivalent
+     * ways: by dividing `u/(1+t)` against multiplying by `u · p`, where `p = 1/(1+t)`.
+     * The expressions differ by exactly one rounding. At `alpha = 1e-6`, where by
+     * the measurements there is no discrepancy, there is none here either at the level of 1e-9 —
+     * that is, the technique itself creates no noise and is suitable as a lower estimate of the really
+     * available accuracy.
      */
     @Test fun twoEquivalentWritingsAgreeAtUsableAlpha() {
         val s = solver(1e-6)
@@ -132,13 +132,13 @@ class FredholmFirstKindConditionTest {
             val scale = maxOf(kotlin.math.abs(byDivision), kotlin.math.abs(byMultiplication))
             if (scale > 0.0) maxRel = maxOf(maxRel, kotlin.math.abs(byDivision - byMultiplication) / scale)
         }
-        assertTrue(maxRel < 1e-9, "две эквивалентные записи разошлись на $maxRel при alpha=1e-6")
+        assertTrue(maxRel < 1e-9, "the two equivalent expressions diverged by $maxRel at alpha=1e-6")
     }
 
     /**
-     * Оценка считается по ТОЙ ЖЕ матрице, с которой решается система: `baseCondition`
-     * обязана совпасть с прямым вызовом `Conditioning.conditionInf(baseMatrix())`.
-     * Иначе пользователю показывалось бы число от другой задачи.
+     * The estimate is computed on THE SAME matrix the system is solved with: `baseCondition`
+     * must coincide with a direct call of `Conditioning.conditionInf(baseMatrix())`.
+     * Otherwise the user would be shown a number from a different problem.
      */
     @Test fun reportedConditionIsTakenFromTheMatrixActuallySolved() {
         val grid = Grid.uniform(8)
@@ -158,7 +158,7 @@ class FredholmFirstKindConditionTest {
         assertEquals(expected.condInf, s.baseCondition().condInf, 0.0)
     }
 
-    /** Неположительный порог достоверности отвергается — он означал бы отсутствие проверки. */
+    /** A non-positive reliability threshold is rejected — it would mean the absence of a check. */
     @Test fun baseConditionRejectsNonPositiveTolerance() {
         assertFailsWith<IllegalArgumentException> { solver(1e-6).baseCondition(tolerance = 0.0) }
     }

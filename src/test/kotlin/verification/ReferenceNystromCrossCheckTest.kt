@@ -15,84 +15,84 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * СВЕРКА СХЕМ ПРОЕКТА С НЕЗАВИСИМЫМ ЭТАЛОНОМ [ReferenceNystromSolver].
+ * CROSS-CHECKING THE PROJECT SCHEMES AGAINST THE INDEPENDENT BASELINE [ReferenceNystromSolver].
  *
- * Зачем. Проверки, сравнивающие схемы проекта между собой, не обнаруживают ошибку,
- * общую для всех схем: она сократится. Здесь эталоном служит реализация, не
- * использующая НИ ОДНОГО элемента численного ядра проекта (см. KDoc
- * [ReferenceNystromSolver]): ни сплайнов, ни функционалов, ни квадратуры, ни
- * решателя СЛАУ. Поэтому расхождение указывает на дефект, а согласие — свидетельство,
- * не замкнутое на проверяемый код.
+ * Why. Checks comparing the project schemes with each other do not detect an error
+ * common to all the schemes: it cancels out. Here the baseline is an implementation using
+ * NOT A SINGLE element of the numerical core of the project (see the KDoc of
+ * [ReferenceNystromSolver]): no splines, no functionals, no quadrature, no
+ * linear solver. Therefore a discrepancy points at a defect, while an agreement is evidence
+ * not closed on the code under test.
  *
- * Что именно проверяется, в двух шагах — иначе результат нельзя истолковать:
+ * What exactly is checked, in two steps — otherwise the result cannot be interpreted:
  *
- *  1. ПРИГОДНОСТЬ ЭТАЛОНА. Эталон обязан воспроизводить точное решение модельной
- *     задачи на уровне, на порядки лучшем схем проекта. Если он этого не делает,
- *     сверять им нельзя, и шаг 2 бессмыслен ([referenceReproducesExactSolution]).
- *  2. СВЕРКА СХЕМ. Решения проекта отклоняются от эталона не больше, чем от точного
- *     решения (с запасом на то, что эталон сам не идеален) —
+ *  1. THE SUITABILITY OF THE BASELINE. The baseline must reproduce the exact solution of a model
+ *     problem at a level orders of magnitude better than the project schemes. If it does not do so,
+ *     it cannot be cross-checked against, and step 2 is meaningless ([referenceReproducesExactSolution]).
+ *  2. THE CROSS-CHECK OF THE SCHEMES. The project solutions deviate from the baseline by no more than from the exact
+ *     solution (with a margin for the baseline itself not being ideal) —
  *     [projectSchemesAgreeWithReferenceNystrom].
  *
- * Тег `fast`: эталон на 64 узлах — одно обращение матрицы 64x64, схемы проекта берутся
- * на n = 8..32, весь класс укладывается в доли секунды.
+ * The `fast` tag: the baseline on 64 nodes is one inversion of a 64x64 matrix, the project schemes are taken
+ * at n = 8..32, the whole class fits into fractions of a second.
  */
 @Tag("fast")
 class ReferenceNystromCrossCheckTest {
 
     private companion object {
-        /** Отрезок задачи; совпадает с областью определения модельных задач. */
+        /** The interval of the problem; coincides with the domain of the model problems. */
         const val A = 0.0
         const val B = 1.0
 
-        /** Сетки, на которых берутся схемы проекта. */
+        /** The grids on which the project schemes are taken. */
         val GRID_SIZES = listOf(8, 16, 32)
 
-        /** Точки сравнения; 41 точка покрывает отрезок мельче самой грубой сетки. */
+        /** The comparison points; 41 points cover the interval more finely than the coarsest grid. */
         const val SAMPLE_SIZE = 41
         val SAMPLE: List<Double> = (0 until SAMPLE_SIZE).map { A + (B - A) * it / (SAMPLE_SIZE - 1.0) }
 
         /**
-         * Допуск на пригодность эталона.
+         * The tolerance on the suitability of the baseline.
          *
-         * Обоснование величины: квадратура Гаусса–Лежандра на гладком ядре сходится
-         * экспоненциально, поэтому 64 узла дают точность уровня машинной. Порог 1e-12
-         * оставляет запас порядка 100 ulp на накопление ошибки решения СЛАУ 64x64 —
-         * и при этом на шесть порядков строже погрешности схем проекта (1e-5..1e-8),
-         * так что эталон заведомо точнее измеряемой величины.
+         * The justification of the value: the Gauss-Legendre quadrature on a smooth kernel converges
+         * exponentially, so 64 nodes give an accuracy at the machine level. The threshold 1e-12
+         * leaves a margin of order 100 ulp for the accumulation of the error of a 64x64 linear solve —
+         * and is at the same time six orders stricter than the error of the project schemes (1e-5..1e-8),
+         * so the baseline is certainly more accurate than the quantity being measured.
          */
         const val TOL_REFERENCE_FITNESS = 1e-12
 
         /**
-         * АБСОЛЮТНЫЕ пороги отклонения от эталона: ключ `задача/система/схема/n`.
+         * The ABSOLUTE thresholds of the deviation from the baseline: the key is `problem/system/scheme/n`.
          *
-         * ПОЧЕМУ АБСОЛЮТНЫЕ, а не «с запасом к отклонению от точного решения».
-         * Предыдущий вариант сравнивал `versusReference <= 1.5 * versusExact + 1e-12`
-         * и был ТОЖДЕСТВЕННО ИСТИНЕН. Доказательство: по неравенству треугольника
-         * `versusReference <= versusExact + |эталон - точное|`, а второе слагаемое уже
-         * ограничено [TOL_REFERENCE_FITNESS] тестом [referenceReproducesExactSolution].
-         * Значит `versusReference <= versusExact + 1e-12 <= 1.5 * versusExact + 1e-12`
-         * выполнялось ПРИ ЛЮБОМ `versusExact`, включая деградировавшее в тысячи раз:
-         * тест не мог упасть в принципе и проверял лишь арифметику самих формул.
+         * WHY ABSOLUTE and not "with a margin over the deviation from the exact solution".
+         * The previous variant compared `versusReference <= 1.5 * versusExact + 1e-12`
+         * and was IDENTICALLY TRUE. The proof: by the triangle inequality
+         * `versusReference <= versusExact + |baseline - exact|`, and the second term is already
+         * bounded by [TOL_REFERENCE_FITNESS] by the test [referenceReproducesExactSolution].
+         * Hence `versusReference <= versusExact + 1e-12 <= 1.5 * versusExact + 1e-12`
+         * held FOR ANY `versusExact`, including one degraded by thousands of times:
+         * the test could not fail in principle and checked only the arithmetic of the formulas themselves.
          *
-         * Абсолютный порог от этого свободен: он не зависит от проверяемого решения.
-         * Второй рассматривавшийся вариант (`|versusReference - versusExact| <= 2 * TOL`)
-         * отвергнут: он проверяет близость ДВУХ ИЗМЕРЕНИЙ одной и той же ошибки
-         * (то есть всё то же неравенство треугольника, только в две стороны), и при
-         * деградации схемы ОБА измерения растут согласованно, так что разность
-         * осталась бы малой — деградация снова прошла бы. Значимо только требование,
-         * внешнее к решению.
+         * An absolute threshold is free of this: it does not depend on the solution under test.
+         * The second variant considered (`|versusReference - versusExact| <= 2 * TOL`)
+         * was rejected: it checks the closeness of TWO MEASUREMENTS of one and the same error
+         * (that is, the same triangle inequality, only in two directions), and on a
+         * degradation of the scheme BOTH measurements grow consistently, so the difference
+         * would stay small — the degradation would pass again. Only a requirement
+         * external to the solution is meaningful.
          *
-         * Откуда взяты числа: удвоение фактически измеренного `versusReference`
-         * (сводка печатается самим тестом) — тот же принцип, что у таблицы
-         * `EH_LIMITS` в `tools/verify_with_scipy.py`. Запас x2 ловит падение порядка
-         * сходимости на любой из трёх сеток (переход O(h^3) -> O(h^2) при n = 8 даёт
-         * рост в 8 раз), а разброса между прогонами здесь нет: величины
-         * детерминированы бит-в-бит.
+         * Where the numbers come from: a doubling of the actually measured `versusReference`
+         * (the summary is printed by the test itself) — the same principle as for the table
+         * `EH_LIMITS` in `tools/verify_with_scipy.py`. The x2 margin catches a drop of the convergence
+         * order on any of the three grids (a transition O(h^3) -> O(h^2) at n = 8 gives
+         * an eightfold growth), while there is no spread between runs here: the quantities
+         * are deterministic bit for bit.
          *
-         * Особый случай `F2exp/H`: решение `exp(t)` лежит в span системы `H`, поэтому
-         * остаётся только округление (1e-13...1e-11), растущее с размером СЛАУ. Пороги
-         * там такие же по правилу (x2 факта) — и именно они проверяют, что свойство
-         * «решение в span» не утрачено.
+         * The special case `F2exp/H`: the solution `exp(t)` lies in the span of the system `H`, so
+         * only rounding remains (1e-13...1e-11), growing with the size of the linear system. The thresholds
+         * there follow the same rule (x2 of the fact) — and it is exactly they that check that the property
+         * "the solution is in the span" is not lost.
          */
         val REFERENCE_LIMITS: Map<String, Double> = mapOf(
             "F2/B/base/n=8" to 2.03e-04, "F2/B/base/n=16" to 2.49e-05, "F2/B/base/n=32" to 3.05e-06,
@@ -103,7 +103,7 @@ class ReferenceNystromCrossCheckTest {
             "F2/T/sloan/n=8" to 1.07e-05, "F2/T/sloan/n=16" to 5.45e-07, "F2/T/sloan/n=32" to 2.72e-08,
             "F2exp/B/base/n=8" to 9.82e-05, "F2exp/B/base/n=16" to 1.13e-05, "F2exp/B/base/n=32" to 1.37e-06,
             "F2exp/B/sloan/n=8" to 1.29e-05, "F2exp/B/sloan/n=16" to 6.39e-07, "F2exp/B/sloan/n=32" to 3.50e-08,
-            // Решение в span системы H: остаётся только округление (см. выше).
+            // The solution is in the span of the system H: only rounding remains (see above).
             "F2exp/H/base/n=8" to 1.00e-12, "F2exp/H/base/n=16" to 1.00e-11, "F2exp/H/base/n=32" to 2.40e-11,
             "F2exp/H/sloan/n=8" to 2.20e-13, "F2exp/H/sloan/n=16" to 2.20e-12, "F2exp/H/sloan/n=32" to 3.10e-12,
             "F2exp/T/base/n=8" to 1.97e-04, "F2exp/T/base/n=16" to 2.27e-05, "F2exp/T/base/n=32" to 2.74e-06,
@@ -111,19 +111,19 @@ class ReferenceNystromCrossCheckTest {
         )
     }
 
-    /** Модельные задачи; для каждой — независимо выписанные ядро и точное решение. */
+    /** The model problems; for each one an independently written out kernel and exact solution. */
     private fun problems() = listOf(FredholmProblem.F2, FredholmProblem.F2exp)
 
     /**
-     * Эталон строится ТОЛЬКО из постановки задачи: ядро, правая часть, отрезок.
-     * Правая часть берётся точной (`f = u - Ku`, интеграл считается самим эталоном
-     * на его же квадратуре), чтобы не втянуть в эталон оператор проекта.
+     * The baseline is built ONLY from the statement of the problem: the kernel, the right-hand side, the interval.
+     * The right-hand side is taken exact (`f = u - Ku`, the integral is computed by the baseline itself
+     * on its own quadrature), so as not to draw the project operator into the baseline.
      */
     private fun reference(problem: FredholmProblem): ReferenceNystromSolver {
         val kernel = { t: Double, s: Double -> problem.kernel.k(t, s) }
-        // f(t) = u(t) - ∫ K(t,s) u(s) ds. Интеграл берётся НЕЗАВИСИМОЙ квадратурой
-        // эталона, а НЕ оператором проекта (`problem.rhsExact` требует
-        // `FredholmOperator` и втянул бы проверяемую квадратуру в эталон).
+        // f(t) = u(t) - ∫ K(t,s) u(s) ds. The integral is taken by the INDEPENDENT quadrature
+        // of the baseline and NOT by the project operator (`problem.rhsExact` requires
+        // a `FredholmOperator` and would draw the quadrature under test into the baseline).
         val rhs = { t: Double ->
             problem.exact(t) - ReferenceNystromSolver.integrate(A, B) { s -> kernel(t, s) * problem.exact(s) }
         }
@@ -131,10 +131,10 @@ class ReferenceNystromCrossCheckTest {
     }
 
     /**
-     * Шаг 1: эталон воспроизводит точное решение модельных задач.
+     * Step 1: the baseline reproduces the exact solution of the model problems.
      *
-     * Без этой проверки шаг 2 не имеет смысла: сверка с негодным эталоном либо
-     * пропускает дефекты, либо сообщает о ложных.
+     * Without this check step 2 makes no sense: a cross-check against an unfit baseline either
+     * misses defects, or reports false ones.
      */
     @Test
     fun referenceReproducesExactSolution() {
@@ -143,26 +143,26 @@ class ReferenceNystromCrossCheckTest {
             val deviation = SAMPLE.maxOf { t -> abs(solver.eval(t) - problem.exact(t)) }
             assertTrue(
                 deviation <= TOL_REFERENCE_FITNESS,
-                "Эталонный Nystrom не воспроизводит точное решение задачи ${problem.name}: " +
-                    "отклонение $deviation > допуска $TOL_REFERENCE_FITNESS. Сверять таким " +
-                    "эталоном нельзя — сначала причина, а не ослабление допуска.",
+                "The baseline Nystrom does not reproduce the exact solution of the problem ${problem.name}: " +
+                    "the deviation $deviation > the tolerance $TOL_REFERENCE_FITNESS. Such a " +
+                    "baseline cannot be cross-checked against — find the cause first, do not loosen the tolerance.",
             )
         }
     }
 
     /**
-     * Шаг 2: решения схем проекта согласуются с независимым эталоном.
+     * Step 2: the solutions of the project schemes agree with the independent baseline.
      *
-     * Проверяются обе схемы (базовая и итерация Слоана) на всех трёх порождающих
-     * системах и трёх сетках — то есть тот же охват, что и у выгружаемого
-     * `solution-errors.tsv`, но сравнение идёт ПОТОЧЕЧНО с независимым решением,
-     * а не только по агрегату `E_h`.
+     * Both schemes (the base one and the Sloan iteration) are checked on all three generating
+     * systems and three grids — that is, the same coverage as the dumped
+     * `solution-errors.tsv`, but the comparison is POINTWISE against an independent solution,
+     * and not only by the aggregate `E_h`.
      */
     @Test
     fun projectSchemesAgreeWithReferenceNystrom() {
-        // Сводка худших отклонений: печатается всегда, а не только при падении.
-        // Причина: зелёный тест без чисел не позволяет отличить «схемы точны» от
-        // «допуск слишком широк», а именно это различие и есть содержание сверки.
+        // A summary of the worst deviations: printed always, and not only on a failure.
+        // The reason: a green test without numbers does not let one distinguish "the schemes are accurate" from
+        // "the tolerance is too wide", and it is exactly this distinction that is the content of the cross-check.
         val summary = linkedMapOf<String, Double>()
         for (problem in problems()) {
             val referenceSolver = reference(problem)
@@ -186,43 +186,43 @@ class ReferenceNystromCrossCheckTest {
                         val versusReference = SAMPLE.maxOf { t -> abs(evaluate(t) - referenceSolver.eval(t)) }
                         val tag = "${problem.name}/${system.name}/$scheme/n=$n"
                         summary[tag] = versusReference
-                        // Нефинитное отклонение — отдельный отказ: сравнение `NaN <= limit`
-                        // ложно, поэтому без проверки сообщение было бы о превышении порога,
-                        // что уводит диагностику в сторону от настоящей причины.
+                        // A non-finite deviation is a separate failure: the comparison `NaN <= limit`
+                        // is false, so without the check the message would be about exceeding the threshold,
+                        // which leads the diagnosis away from the real cause.
                         assertTrue(
                             versusReference.isFinite(),
-                            "$tag: отклонение от эталона НЕФИНИТНО ($versusReference): схема " +
-                                "вернула NaN или бесконечность",
+                            "$tag: the deviation from the baseline is NON-FINITE ($versusReference): the scheme " +
+                                "returned NaN or an infinity",
                         )
                         val limit = REFERENCE_LIMITS[tag]
                         assertTrue(
                             limit != null,
-                            "$tag: для этого сочетания нет порога в REFERENCE_LIMITS. Новое сочетание " +
-                                "обязано либо сверяться, либо ронять тест — но не проходить молча",
+                            "$tag: there is no threshold for this combination in REFERENCE_LIMITS. A new combination " +
+                                "must either be cross-checked or break the test — but not pass silently",
                         )
                         assertTrue(
                             versusReference <= limit!!,
-                            "$tag: отклонение от НЕЗАВИСИМОГО эталона $versusReference превышает " +
-                                "абсолютный порог $limit. Эталон не использует код проекта (см. KDoc " +
-                                "ReferenceNystromSolver), поэтому расхождение указывает на дефект схемы, " +
-                                "а не эталона. Порог НЕ ослаблять — сначала причина.",
+                            "$tag: the deviation from the INDEPENDENT baseline $versusReference exceeds " +
+                                "the absolute threshold $limit. The baseline does not use the project code (see the KDoc of " +
+                                "ReferenceNystromSolver), so the discrepancy points at a defect of the scheme, " +
+                                "not of the baseline. Do NOT loosen the threshold — find the cause first.",
                         )
                     }
                 }
             }
         }
-        // Полнота в ОБРАТНУЮ сторону: каждый порог обязан быть использован. Иначе
-        // исчезновение сочетания из цикла (например, сужение GRID_SIZES) сократило бы
-        // объём сверки незаметно — тест оставался бы зелёным.
+        // Completeness in the OPPOSITE direction: every threshold must be used. Otherwise
+        // a disappearance of a combination from the loop (a narrowing of GRID_SIZES, say) would reduce
+        // the volume of the cross-check unnoticed — the test would stay green.
         val unused = REFERENCE_LIMITS.keys - summary.keys
         assertTrue(
             unused.isEmpty(),
-            "Пороги REFERENCE_LIMITS остались НЕИСПОЛЬЗОВАННЫМи: ${unused.sorted()}. Значит, " +
-                "сверка перестала охватывать часть сочетаний, а тест этого не заметил бы",
+            "The REFERENCE_LIMITS thresholds were left UNUSED: ${unused.sorted()}. Hence " +
+                "the cross-check stopped covering part of the combinations, and the test would not notice it",
         )
-        println("Отклонение схем проекта от НЕЗАВИСИМОГО эталона Nystrom (max по $SAMPLE_SIZE точкам):")
+        println("The deviation of the project schemes from the INDEPENDENT Nystrom baseline (max over $SAMPLE_SIZE points):")
         for ((tag, deviation) in summary) {
-            println("  %-26s %.3e  (порог %.3e)".format(tag, deviation, REFERENCE_LIMITS[tag]))
+            println("  %-26s %.3e  (threshold %.3e)".format(tag, deviation, REFERENCE_LIMITS[tag]))
         }
     }
 }
