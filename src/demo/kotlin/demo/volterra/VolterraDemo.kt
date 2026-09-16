@@ -19,30 +19,30 @@ import solvers.volterra.VolterraOperator
 import solvers.volterra.VolterraSecondKindSolver
 
 /**
- * Демонстрационная печать таблиц сходимости для линейных уравнений Вольтерры.
+ * Demonstration printout of convergence tables for linear Volterra equations.
  *
- * Это не часть библиотеки, а иллюстрация её применения: код собирает решатели на
- * последовательности сгущающихся сеток, вычисляет погрешность `E_h` и наблюдаемый
- * порядок `p_h` и выводит результат в консоль.
+ * This is not part of the library but an illustration of its use: the code builds solvers on
+ * a sequence of refined grids, computes the error `E_h` and the observed
+ * order `p_h`, and prints the result to the console.
  */
 object Tables {
     /**
-     * Последовательность сеток: каждое следующее значение вдвое мельче предыдущего.
+     * Sequence of grids: each next value is twice as fine as the previous one.
      *
-     * Ограничение `n <= 64` связано со стоимостью матрицы `M2`: для оператора Вольтерры
-     * она требует двойного интегрирования с переменным верхним пределом, то есть
-     * `O(dim^2 * Q^2)` вычислений ядра.
+     * The limit `n <= 64` is due to the cost of the matrix `M2`: for the Volterra operator
+     * it requires double integration with a variable upper limit, i.e.
+     * `O(dim^2 * Q^2)` kernel evaluations.
      */
     private val GRID_SIZES = listOf(8, 16, 32, 64)
 
     /**
-     * Сетки для таблицы Nyström ограничены сильнее: итерированный вариант применяет
-     * точный оператор Вольтерры к приближению `u^N_h`, вычисление которого само стоит
-     * `O(n)` на точку из-за зависящих от `t` весов.
+     * The grids for the Nyström table are restricted more tightly: the iterated variant applies
+     * the exact Volterra operator to the approximation `u^N_h`, whose own evaluation costs
+     * `O(n)` per point because of the `t`-dependent weights.
      */
     private val NYSTROM_GRID_SIZES = listOf(8, 16, 32)
 
-    /** Квадратура для всех демонстраций: порядок заведомо выше порядка аппроксимации. */
+    /** Quadrature for all demonstrations: the order is deliberately above the approximation order. */
     private val quad = GaussLegendre(8)
 
     private fun makeSolver(
@@ -59,8 +59,8 @@ object Tables {
     }
 
     /**
-     * Создаёт семейство функционалов по его краткому имени.
-     * @throws IllegalArgumentException при неизвестном имени (защита от опечаток).
+     * Creates a functional family from its short name.
+     * @throws IllegalArgumentException on an unknown name (protection against typos).
      */
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
         "theta" -> ProjFunctionals(basis)
@@ -69,15 +69,15 @@ object Tables {
         "xi2" -> DeBoorFixFunctionals(basis, 2)
         "mu" -> AveragingFunctionals(basis)
         "lambda" -> ThreePointFunctionals(basis)
-        else -> throw IllegalArgumentException("Неизвестное семейство функционалов: '$name'")
+        else -> throw IllegalArgumentException("unknown functional family: '$name'")
     }
 
-    /** Сходимость трёх семейств де Бура–Фикса (r = 0, 1, 2) на базисах B, H, T. */
+    /** Convergence of the three de Boor–Fix families (r = 0, 1, 2) on the bases B, H, T. */
     fun tableDeBoorFix(problem: VolterraProblem) {
-        println("\n--- ${problem.name}: функционалы де Бура--Фикса xi<0>, xi<1>, xi<2>, базисы B/H/T ---")
-        val schemes = listOf("база", "Слоан", "Кулк", "ит.Кулк")
+        println("\n--- ${problem.name}: de Boor--Fix functionals xi<0>, xi<1>, xi<2>, bases B/H/T ---")
+        val schemes = listOf("base", "Sloan", "Kulk", "it.Kulk")
         for (familyName in listOf("xi0", "xi1", "xi2")) {
-            println("  семейство $familyName:")
+            println("  family $familyName:")
             for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
                 val errors = schemes.map { ArrayList<Double>() }
                 for (n in GRID_SIZES) {
@@ -88,15 +88,15 @@ object Tables {
                     errors[2].add(errorEh(exact, solver.kulkarni().eval, grid))
                     errors[3].add(errorEh(exact, solver.iteratedKulkarni().eval, grid))
                 }
-                println("   базис ${system.name}:")
+                println("   basis ${system.name}:")
                 printComparison(schemes, errors, GRID_SIZES, indent = "     ")
             }
         }
     }
 
-    /** Погрешность, наблюдаемый порядок и константа для базовой схемы на базисах B, H, T. */
+    /** Error, observed order and constant for the base scheme on the bases B, H, T. */
     fun tablePhi(problem: VolterraProblem) {
-        println("\n--- ${problem.name}: theta, базисы B/H/T (E_h, p_h, C_h) ---")
+        println("\n--- ${problem.name}: theta, bases B/H/T (E_h, p_h, C_h) ---")
         for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
             val errors = ArrayList<Double>()
             val steps = ArrayList<Double>()
@@ -106,9 +106,9 @@ object Tables {
                 errors.add(errorEh({ t -> problem.exact(t) }, solver.base().eval, grid))
             }
             val observedOrders = orders(errors)
-            println("  базис ${system.name}:")
+            println("  basis ${system.name}:")
             for (i in GRID_SIZES.indices) {
-                // C_h = E_h / h^3: теоретический порядок базовой схемы для квадратичных сплайнов.
+                // C_h = E_h / h^3: the theoretical order of the base scheme for quadratic splines.
                 val constant = errors[i] / Math.pow(steps[i], 3.0)
                 println(
                     "   n=%4d h=%s E_h=%s p_h=%s C_h=%s".format(
@@ -120,13 +120,13 @@ object Tables {
         }
     }
 
-    /** Сравнение базовой схемы, итерации Слоана и обеих схем Кулкарни. */
+    /** Comparison of the base scheme, the Sloan iteration and both Kulkarni schemes. */
     fun tableMethods(problem: VolterraProblem, system: GeneratingSystem) {
         println(
-            "\n--- ${problem.name}: базис ${system.name}, theta: " +
-                "база/Слоан/Кулкарни/итер.Кулкарни (E_h, p_h) ---",
+            "\n--- ${problem.name}: basis ${system.name}, theta: " +
+                "base/Sloan/Kulkarni/iter.Kulkarni (E_h, p_h) ---",
         )
-        val names = listOf("база", "Слоан", "Кулк", "ит.Кулк")
+        val names = listOf("base", "Sloan", "Kulk", "it.Kulk")
         val errors = names.map { ArrayList<Double>() }
         for (n in GRID_SIZES) {
             val (solver, grid) = makeSolver(problem, system, "theta", n)
@@ -139,9 +139,9 @@ object Tables {
         printComparison(names, errors, GRID_SIZES)
     }
 
-    /** Сравнение семейств функционалов theta, xi, mu, lambda на базовой схеме. */
+    /** Comparison of the functional families theta, xi, mu, lambda on the base scheme. */
     fun tableFamilies(problem: VolterraProblem, system: GeneratingSystem) {
-        println("\n--- ${problem.name}: базис ${system.name}, семейства функционалов, базовая схема (E_h, p_h) ---")
+        println("\n--- ${problem.name}: basis ${system.name}, functional families, base scheme (E_h, p_h) ---")
         for (familyName in listOf("theta", "xi", "mu", "lambda")) {
             val errors = ArrayList<Double>()
             for (n in GRID_SIZES) {
@@ -159,19 +159,19 @@ object Tables {
     }
 
     /**
-     * Сравнение квадратурных схем Nyström: классической, итерированной, комбинированной
-     * и итерированной комбинированной.
+     * Comparison of the Nyström quadrature schemes: classical, iterated, combined
+     * and iterated combined.
      *
-     * Для уравнения Вольтерры доказанных оценок суперсходимости в известной литературе
-     * нет, поэтому наблюдаемые здесь порядки следует трактовать как численный результат
-     * для конкретных задач, а не как подтверждение теоремы.
+     * For the Volterra equation no proven superconvergence estimates are known in the literature,
+     * so the orders observed here should be read as a numerical result
+     * for the particular problems, not as a confirmation of a theorem.
      */
     fun tableNystrom(problem: VolterraProblem, system: GeneratingSystem) {
         println(
-            "\n--- ${problem.name}: базис ${system.name}, theta: " +
-                "база/Слоан/Nyström/итер.Nyström/комб.Nyström (E_h, p_h) ---",
+            "\n--- ${problem.name}: basis ${system.name}, theta: " +
+                "base/Sloan/Nyström/iter.Nyström/comb.Nyström (E_h, p_h) ---",
         )
-        val names = listOf("база", "Слоан", "Nyst", "ит.Nyst", "комб.Nyst")
+        val names = listOf("base", "Sloan", "Nyst", "it.Nyst", "comb.Nyst")
         val errors = names.map { ArrayList<Double>() }
         for (n in NYSTROM_GRID_SIZES) {
             val (solver, grid) = makeSolver(problem, system, "theta", n)
@@ -186,13 +186,13 @@ object Tables {
     }
 
     /**
-     * Уравнение первого рода: сведение к уравнению второго рода дифференцированием.
+     * Equation of the first kind: reduction to an equation of the second kind by differentiation.
      *
-     * Задача корректна, поскольку диагональ ядра отлична от нуля (`K(t,t) = 1`),
-     * что и позволяет применить однократное дифференцирование (случай `m = 1`).
+     * The problem is well-posed because the kernel diagonal is nonzero (`K(t,t) = 1`),
+     * which is what allows a single differentiation (the case `m = 1`).
      */
     fun tableFirstKind() {
-        println("\n--- V1 (уравнение I рода, сведение дифференцированием), базис B, theta ---")
+        println("\n--- V1 (equation of the first kind, reduction by differentiation), basis B, theta ---")
         val problem = VolterraProblem.V1
         for (n in GRID_SIZES) {
             val grid = Grid.uniform(n)
@@ -204,14 +204,14 @@ object Tables {
             val sloanError = errorEh(exact, solver.sloan().eval, grid)
             val kulkarniError = errorEh(exact, solver.kulkarni().eval, grid)
             println(
-                "   n=%4d E_h(база)=%s E_h(Слоан)=%s E_h(Кулк)=%s".format(
+                "   n=%4d E_h(base)=%s E_h(Sloan)=%s E_h(Kulk)=%s".format(
                     n, Fmt.e(baseError), Fmt.e(sloanError), Fmt.e(kulkarniError),
                 ),
             )
         }
     }
 
-    /** Печатает построчное сравнение нескольких схем с их наблюдаемыми порядками. */
+    /** Prints a line-by-line comparison of several schemes with their observed orders. */
     private fun printComparison(
         names: List<String>,
         errors: List<List<Double>>,
@@ -231,21 +231,21 @@ object Tables {
 }
 
 /**
- * Точка входа демонстрации: печатает таблицы сходимости для трёх задач второго рода
- * и одной задачи первого рода.
+ * Entry point of the demonstration: prints convergence tables for three problems of the second kind
+ * and one problem of the first kind.
  *
- * Корректность вычислительного ядра проверяется тестами (`./gradlew fastTest`), а не
- * этой программой.
+ * The correctness of the computational core is verified by tests (`./gradlew fastTest`), not
+ * by this program.
  */
 fun main() {
     println("=".repeat(72))
-    println("Уравнения Вольтерры: таблицы сходимости")
+    println("Volterra equations: convergence tables")
     println("=".repeat(72))
 
-    // Три задачи второго рода, различающиеся поведением диагонали ядра:
-    //   V2    — рациональное ядро, K(t,t) != 0;
-    //   V2exp — экспоненциальное ядро, K(t,t) != 0;
-    //   V2win — сглаживающее ядро K = t - s, где K(t,t) = 0.
+    // Three problems of the second kind, differing in the behaviour of the kernel diagonal:
+    //   V2    — rational kernel, K(t,t) != 0;
+    //   V2exp — exponential kernel, K(t,t) != 0;
+    //   V2win — smoothing kernel K = t - s, where K(t,t) = 0.
     val secondKindExamples = listOf(
         VolterraProblem.V2 to GeneratingSystem.B,
         VolterraProblem.V2exp to GeneratingSystem.B,
@@ -260,5 +260,5 @@ fun main() {
     }
 
     Tables.tableFirstKind()
-    println("\nРасчёт завершён.")
+    println("\nComputation finished.")
 }

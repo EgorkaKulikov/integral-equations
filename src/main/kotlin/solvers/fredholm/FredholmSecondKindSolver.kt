@@ -16,21 +16,21 @@ import solvers.core.SecondKindDefaults.COMBINED_NYSTROM_TOLERANCE
 import solvers.core.SecondKindSolverCore
 
 /**
- * Линейный решатель уравнения II рода u - L u = f, L = c_L * \mathcal K
- * (c_L = 1 для F2; c_L = -1/alpha для F1 Wazwaz, \mathcal K_eff = -(1/alpha)\mathcal K).
- * Правая часть f и её производные задаются явно ([RhsWithDerivatives]) для переиспользования в F1.
+ * Linear solver for the second-kind equation u - L u = f, L = c_L * \mathcal K
+ * (c_L = 1 for F2; c_L = -1/alpha for F1 Wazwaz, \mathcal K_eff = -(1/alpha)\mathcal K).
+ * The right-hand side f and its derivatives are supplied explicitly ([RhsWithDerivatives]) for reuse in F1.
  *
- * Матрицы дискретной задачи:
+ * Matrices of the discrete problem:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
  *   g_j      = chi_j(f),          d_j      = chi_j(L f).
  *
- * @param throwOnDivergence поведение ИТЕРАЦИОННЫХ схем ([kulkarni] для
- *        квазиинтерполянтов, [combinedNystrom]) при недостижении сходимости:
- *        `true` (по умолчанию) — исключение, `false` — результат с
- *        `converged = false` и достигнутой невязкой в [SolutionFunc.residual].
- *        На прямые схемы не влияет. Параметр задан на уровне решателя,
- *        а не каждого метода: это политика обработки ошибок, а не свойство
- *        отдельной схемы.
+ * @param throwOnDivergence behaviour of the ITERATIVE schemes ([kulkarni] for
+ *        quasi-interpolants, [combinedNystrom]) when convergence is not reached:
+ *        `true` (default) — an exception, `false` — a result with
+ *        `converged = false` and the attained residual in [SolutionFunc.residual].
+ *        Direct schemes are unaffected. The parameter is set at the solver level
+ *        rather than per method: it is an error-handling policy, not a property of
+ *        an individual scheme.
  */
 public class FredholmSecondKindSolver(
     basis: MinimalSplineBasis,
@@ -43,37 +43,37 @@ public class FredholmSecondKindSolver(
 ) : SecondKindSolverCore<DoubleArray>(
     basis, funcs, cL, rhs, throwOnDivergence, ctx,
 ) {
-    // Числовые параметры итерационных схем (COMBINED_NYSTROM_*, KULKARNI_QUASI_*)
-    // живут в [solvers.core.SecondKindDefaults]: у Фредгольма и Вольтерры они
-    // совпадают, и расхождение при подборе нового значения было бы молчаливым.
+    // The numerical parameters of the iterative schemes (COMBINED_NYSTROM_*, KULKARNI_QUASI_*)
+    // live in [solvers.core.SecondKindDefaults]: they coincide for Fredholm and Volterra,
+    // and a divergence while tuning a new value would be silent.
     //
-    // Поля `grid`, `n`, `dim` объявлены в [SecondKindSolverCore] и инициализируются РАНЬШЕ
-    // полей этого класса — именно тот порядок, который нужен [omegaNodes] (он
-    // эагерный и читает `dim`). Обратный порядок дал бы `dim = 2` МОЛЧА.
+    // The fields `grid`, `n`, `dim` are declared in [SecondKindSolverCore] and initialized BEFORE
+    // the fields of this class — exactly the order [omegaNodes] needs (it is
+    // eager and reads `dim`). The reverse order would give `dim = 2` SILENTLY.
 
     private val ng = op.gNode.size
 
     /**
-     * `L omega_i` в глобальных гауссовых узлах:
-     * `LomegaNodes[i][k] = c_L (\mathcal K omega_{i-2})(gNode[k])`. ЛЕНИВОЕ поле.
+     * `L omega_i` at the global Gauss nodes:
+     * `LomegaNodes[i][k] = c_L (\mathcal K omega_{i-2})(gNode[k])`. A LAZY field.
      *
-     * Почему ленивое: единственный потребитель — [matrixM2] (второе применение L),
-     * а внутри класса `M2` нужна только схеме Кулкарни для ПРОЕКТОРОВ
-     * ([kulkarni] → `kulkarniProjector`, где строится `I - M - M2 + M^2`); [matrixM2]
-     * публична и вызывается также из тестов. Остальные схемы — [base], [sloan],
-     * `kulkarniQuasi` для квазиинтерполянтов, всё семейство Nyström ([nystrom],
-     * [combinedNystrom]) — к `M2` не обращаются вовсе.
+     * Why lazy: the only consumer is [matrixM2] (the second application of L),
+     * and inside the class `M2` is needed only by the Kulkarni scheme for PROJECTORS
+     * ([kulkarni] → `kulkarniProjector`, where `I - M - M2 + M^2` is built); [matrixM2]
+     * is public and is also called from the tests. The other schemes — [base], [sloan],
+     * `kulkarniQuasi` for quasi-interpolants, the whole Nyström family ([nystrom],
+     * [combinedNystrom]) — do not touch `M2` at all.
      *
-     * Стоимость сборки велика: `dim * ng` интегралов (по одному на каждую пару
-     * `i, k`), и каждый из них — квадратура по `ng` узлам, то есть O(dim * ng^2)
-     * обращений к ядру. При эагерном поле эту цену платили ВСЕ схемы, в том числе
-     * те, которые её не используют.
+     * The assembly cost is high: `dim * ng` integrals (one per pair
+     * `i, k`), each of them a quadrature over `ng` nodes, i.e. O(dim * ng^2)
+     * kernel evaluations. With an eager field ALL schemes paid that price, including
+     * those that do not use it.
      *
-     * Режим ленивости — по умолчанию (`SYNCHRONIZED`), и это обязательно: поле
-     * читается из потоков параллельной сборки ([ParallelAssembly] в [matrixM2]),
-     * так что первое обращение возможно из рабочего потока, и `NONE` был бы гонкой.
-     * Узким местом синхронизация не становится: чтение идёт один раз на столбец
-     * (`dim` раз всего), а не во внутреннем цикле по узлам.
+     * The laziness mode is the default one (`SYNCHRONIZED`), and this is mandatory: the field
+     * is read from the threads of the parallel assembly ([ParallelAssembly] in [matrixM2]),
+     * so the first access may come from a worker thread, and `NONE` would be a race.
+     * The synchronization does not become a bottleneck: the read happens once per column
+     * (`dim` times in total), not in the inner loop over the nodes.
      */
     private val LomegaNodes: Array<DoubleArray> by lazy {
         Array(dim) { ki ->
@@ -83,36 +83,36 @@ public class FredholmSecondKindSolver(
     }
 
     /**
-     * `omega_i` в глобальных узлах: `omegaNodes[i][k] = omega_{i-2}(gNode[k])` — аргумент
-     * для `applyNodes` при сборке [matrixM].
+     * `omega_i` at the global nodes: `omegaNodes[i][k] = omega_{i-2}(gNode[k])` — the argument
+     * for `applyNodes` while assembling [matrixM].
      *
-     * Поле оставлено ЭАГЕРНЫМ НЕ потому, что нужно всем схемам (его читает только
-     * [matrixM], а семейство Nyström и `kulkarniQuasi` его не требуют), а потому, что
-     * оно дешёвое: `dim * ng` вычислений сплайна без обращений к ядру, то есть в `ng`
-     * раз дешевле [LomegaNodes]. Ленивость здесь дала бы только накладные расходы.
+     * The field is left EAGER NOT because all schemes need it (only [matrixM] reads it,
+     * while the Nyström family and `kulkarniQuasi` do not require it), but because
+     * it is cheap: `dim * ng` spline evaluations without kernel calls, i.e. `ng` times
+     * cheaper than [LomegaNodes]. Laziness here would only add overhead.
      */
     private val omegaNodes: Array<DoubleArray> = Array(dim) { ki ->
         val i = ki - 2
         DoubleArray(ng) { k -> basis.omega(i, op.gNode[k]) }
     }
 
-    // --- Реализация точек расширения [SecondKindSolverCore] --------------------
+    // --- Implementation of the [SecondKindSolverCore] extension points ---------
     //
-    // Подготовленный операнд у Фредгольма — массив значений функции в глобальных
-    // гауссовых узлах: пределы интегрирования постоянны, поэтому одни и те же узлы
-    // обслуживают любое `t`, и повторное применение L сводится к свёртке с ядром.
+    // For Fredholm the prepared operand is the array of function values at the global
+    // Gauss nodes: the integration limits are constant, so the same nodes
+    // serve any `t`, and a repeated application of L reduces to a convolution with the kernel.
 
-    override val equationName: String get() = "Фредгольм"
+    override val equationName: String get() = "Fredholm"
 
     override val kulkarniQuasiHint: String
-        get() = "Для квазиинтерполянтов (mu, lambda) нет свойства P^2 = P, поэтому " +
-            "редукция Кулкарни неприменима и используется простая итерация, требующая " +
-            "сжатия (спектральный радиус оператора меньше единицы)"
+        get() = "For quasi-interpolants (mu, lambda) the property P^2 = P does not hold, so the " +
+            "Kulkarni reduction is inapplicable and a simple iteration is used, which requires " +
+            "contractivity (the spectral radius of the operator is less than one)"
 
     /**
-     * Критерий останова мерится в гауссовых узлах оператора — тех же, по которым
-     * идёт сама итерация. Синтетическая выборка, как у Вольтерры, здесь не нужна
-     * и дала бы другое число итераций.
+     * The stopping criterion is measured at the Gauss nodes of the operator — the same ones the
+     * iteration itself runs on. A synthetic sample like Volterra's is not needed here
+     * and would give a different iteration count.
      */
     override val checkPoints: DoubleArray get() = op.gNode
 
@@ -123,15 +123,15 @@ public class FredholmSecondKindSolver(
 
     override fun imageDeriv(o: DoubleArray): (Double) -> Double = { t -> cL * op.applyDerivNodes(t, o) }
 
-    /** Пределы интегрирования постоянны, члена Лейбница нет, поэтому `uD` не читается. */
+    /** The integration limits are constant, there is no Leibniz term, so `uD` is not read. */
     @Suppress("UNUSED_PARAMETER")
     override fun imageDeriv2(o: DoubleArray, uD: (Double) -> Double): (Double) -> Double =
         { t -> cL * op.applyDeriv2Nodes(t, o) }
 
     /**
-     * Контрольные точки СОВПАДАЮТ с узлами подготовки операнда, поэтому значения
-     * уже вычислены — второй проход по `u` был бы чистым удвоением работы
-     * на каждой итерации (`u` там — результат применения оператора, а не таблица).
+     * The check points COINCIDE with the nodes used to prepare the operand, so the values
+     * are already computed — a second pass over `u` would be a pure doubling of the work
+     * on every iteration (`u` there is the result of applying the operator, not a table).
      */
     override fun checkValues(u: (Double) -> Double, o: DoubleArray): DoubleArray = o
 
@@ -139,7 +139,7 @@ public class FredholmSecondKindSolver(
 
     override fun applyOperatorDeriv(t: Double, u: (Double) -> Double): Double = op.applyDeriv(t, u)
 
-    /** У Фредгольма вторая производная образа не содержит `u'`: пределы постоянны. */
+    /** For Fredholm the second derivative of the image contains no `u'`: the limits are constant. */
     @Suppress("UNUSED_PARAMETER")
     override fun applyOperatorDeriv2(t: Double, u: (Double) -> Double, uD: (Double) -> Double): Double =
         op.applyDeriv2(t, u)
@@ -154,7 +154,7 @@ public class FredholmSecondKindSolver(
     }
 
     override fun doubleOmegaImages(i: Int): ImageTriple {
-        val ln = LomegaNodes[i] // (L omega_i) в узлах
+        val ln = LomegaNodes[i] // (L omega_i) at the nodes
         return ImageTriple(
             { t -> cL * op.applyNodes(t, ln) },
             { t -> cL * op.applyDerivNodes(t, ln) },
@@ -162,32 +162,32 @@ public class FredholmSecondKindSolver(
         )
     }
 
-    // --- Nyström (сплайн-квадратура; см. docs/REFERENCES.md, раздел 3) -------
+    // --- Nyström (spline quadrature; see docs/REFERENCES.md, section 3) -------
 
     /**
-     * Опорные точки {eta_r} и агрегированные веса b_r базового Nyström:
+     * Support points {eta_r} and aggregated weights b_r of the base Nyström scheme:
      * b_r = sum_j sum_{q: s_{j,q}=eta_r} c_{j,q} W_j, W_j = int_a^b omega_j.
-     * Точки упорядочены по возрастанию (для единообразия с Вольтерра; для F2 порядок
-     * несуществен). Семейство xi (де Бура--Фикса) НЕ поддерживается: его функционалы
-     * используют производную и не сводятся к линейной комбинации значений
-     * (известное ограничение метода; обходится семейством xitilde).
+     * The points are ordered ascending (for uniformity with Volterra; for F2 the order
+     * is immaterial). The family xi (de Boor–Fix) is NOT supported: its functionals
+     * use a derivative and do not reduce to a linear combination of values
+     * (a known limitation of the method; it is worked around by the family xitilde).
      *
-     * ИНДЕКСАЦИЯ ТОЧЕК — по паре (номер функционала, номер узла), см. [SupportPoints].
-     * Раньше индекс искался по ЗНАЧЕНИЮ точки в `HashMap<Double, Int>`, то есть держался
-     * на побитовом совпадении Double; работало это лишь потому, что и карта, и запрос
-     * читали один и тот же массив `vf.nodes`. Слияние совпадающих точек разных
-     * функционалов теперь идёт по ЯВНОМУ допуску `grid.breakpointInclusionEps`.
+     * THE POINTS ARE INDEXED by the pair (functional number, node number), see [SupportPoints].
+     * Previously the index was looked up by the VALUE of the point in a `HashMap<Double, Int>`, i.e. it relied
+     * on a bit-exact match of Doubles; that worked only because both the map and the query
+     * read the same array `vf.nodes`. Merging the coinciding points of different
+     * functionals now goes by the EXPLICIT tolerance `grid.breakpointInclusionEps`.
      */
     private fun nystromSupport(): Pair<DoubleArray, DoubleArray> {
         require(!funcs.usesDerivative) {
-            "Nyström для семейства '${funcs.name}' не реализован: функционалы " +
-                "де Бура--Фикса (xi) используют производную и не сводятся к значениям."
+            "Nyström is not implemented for the family '${funcs.name}': the de Boor–Fix " +
+                "functionals (xi) use a derivative and do not reduce to values."
         }
         val vfs = Array(dim) { k ->
             funcs.chi(k - 2) as? ValueFunctional
-                ?: error("Nyström: функционал '${funcs.name}' (j=${k - 2}) не является ValueFunctional.")
+                ?: error("Nyström: the functional '${funcs.name}' (j=${k - 2}) is not a ValueFunctional.")
         }
-        // W_j = int_a^b omega_j (высокоточная составная квадратура по узлам сетки).
+        // W_j = int_a^b omega_j (a high-accuracy composite quadrature over the grid breakpoints).
         val wJ = DoubleArray(dim) { k -> op.quad.integrate(grid.breakpoints) { s -> basis.omega(k - 2, s) } }
         val support = SupportPoints.byAscendingValue(vfs, grid.breakpointInclusionEps)
         val pts = support.points
@@ -199,15 +199,15 @@ public class FredholmSecondKindSolver(
         return pts to bAgg
     }
 
-    /** u^N_h(t) = f(t) + cL sum_r b_r K(t, eta_r) u_hat_r — восстановление решения. */
+    /** u^N_h(t) = f(t) + cL sum_r b_r K(t, eta_r) u_hat_r — reconstruction of the solution. */
     private fun nystromEval(t: Double, pts: DoubleArray, bAgg: DoubleArray, uHat: DoubleArray): Double =
         fEff(t) + nystromQuadrature(t, pts, bAgg, uHat)
 
     /**
-     * Квадратурный оператор (L^N_h u)(t) = cL sum_r b_r K(t, eta_r) u(eta_r).
+     * The quadrature operator (L^N_h u)(t) = cL sum_r b_r K(t, eta_r) u(eta_r).
      *
-     * Зависит от u только через её значения в опорных точках [uAtPoints] — именно
-     * это свойство делает оператор конечноранговым.
+     * It depends on u only through its values at the support points [uAtPoints] — this is exactly
+     * the property that makes the operator finite-rank.
      */
     private fun nystromQuadrature(
         t: Double,
@@ -220,7 +220,7 @@ public class FredholmSecondKindSolver(
         return cL * acc
     }
 
-    /** Матрица (I - A^N): A^N_{rho,r} = cL b_r K(eta_rho, eta_r). */
+    /** The matrix (I - A^N): A^N_{rho,r} = cL b_r K(eta_rho, eta_r). */
     private fun nystromMatrix(pts: DoubleArray, bAgg: DoubleArray): DenseMatrix {
         val p = pts.size
         val a = DenseMatrix.zeros(p, p)
@@ -232,15 +232,15 @@ public class FredholmSecondKindSolver(
     }
 
     /**
-     * КЛАССИЧЕСКИЙ сплайн-Nyström: подынтегральная функция g_t(s)=K(t,s)u(s)
-     * заменяется своей сплайн-(квази)проекцией, интеграл — квадратурой
-     * sum_j chi_j(g_t) W_j. Решается u = f + L^N_h u, что даёт линейную систему
-     * (I - A^N) u_hat = f_hat по ЗНАЧЕНИЯМ решения в опорных точках {eta_r}.
-     * Приближение u^N_h лежит ВНЕ сплайнового пространства. Не поддерживает семейство xi.
+     * The CLASSICAL spline Nyström: the integrand g_t(s)=K(t,s)u(s)
+     * is replaced by its spline (quasi-)projection and the integral by the quadrature
+     * sum_j chi_j(g_t) W_j. The equation u = f + L^N_h u is solved, which gives the linear system
+     * (I - A^N) u_hat = f_hat in the VALUES of the solution at the support points {eta_r}.
+     * The approximation u^N_h lies OUTSIDE the spline space. The family xi is not supported.
      *
-     * ВАЖНО о порядке сходимости: это «голая» квадратура, которая сама по себе
-     * НЕ повышает порядок. Опубликованные оценки суперсходимости O(h^7)/O(h^8)
-     * относятся НЕ к ней, а к комбинированному оператору — см. [combinedNystrom].
+     * IMPORTANT on the convergence order: this is a "bare" quadrature which by itself
+     * does NOT raise the order. The published superconvergence estimates O(h^7)/O(h^8)
+     * refer NOT to it but to the combined operator — see [combinedNystrom].
      */
     public fun nystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
@@ -249,9 +249,9 @@ public class FredholmSecondKindSolver(
     }
 
     /**
-     * Итерированный Nyström: u_hat^N_h(t)=f(t)+(L u^N_h)(t) с
-     * ТОЧНЫМ оператором L (высокоточная квадратура op.applyNodes, как в sloan()). Одно
-     * интегрирование найденного u^N_h, новой системы не требуется (аналог итерации Слоана).
+     * Iterated Nyström: u_hat^N_h(t)=f(t)+(L u^N_h)(t) with the
+     * EXACT operator L (the high-accuracy quadrature op.applyNodes, as in sloan()). A single
+     * integration of the computed u^N_h, no new system is required (the analogue of the Sloan iteration).
      */
     public fun iteratedNystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
@@ -261,29 +261,29 @@ public class FredholmSecondKindSolver(
     }
 
     /**
-     * КОМБИНИРОВАННЫЙ оператор Nyström: u^N_h = f + L_n u^N_h, где
+     * The COMBINED Nyström operator: u^N_h = f + L_n u^N_h, where
      *
      *     L_n = P_chi L + (I - P_chi) L^N_h,
      *
-     * то есть на образе проектора действует ТОЧНЫЙ оператор, а на его дополнении —
-     * квадратура. Отличие от [nystrom]: там решается u = f + L^N_h u («голая»
-     * квадратура, классический Nyström).
+     * that is, on the range of the projector the EXACT operator acts, and on its complement —
+     * the quadrature. The difference from [nystrom]: there u = f + L^N_h u is solved (the "bare"
+     * quadrature, the classical Nyström).
      *
-     * Зачем это нужно: в разности L - L_n = (I - P_chi)(L - L^C_h) остаток проектора
-     * (I - P_chi) входит ДВАЖДЫ — явным множителем и внутри остатка квадратуры, —
-     * что и даёт суперсходимость. Именно к этому оператору, а не к голой квадратуре,
-     * относятся опубликованные оценки порядка O(h^7) и O(h^8) (см. список источников
-     * в docs/REFERENCES.md: Allouch, Remogna, Sbibih, Tahrichi, AMC 404 (2021), Art. 126227;
+     * Why this is needed: in the difference L - L_n = (I - P_chi)(L - L^C_h) the projector remainder
+     * (I - P_chi) enters TWICE — as an explicit factor and inside the quadrature remainder —
+     * which is what yields the superconvergence. It is to this operator, not to the bare quadrature,
+     * that the published order estimates O(h^7) and O(h^8) refer (see the list of sources
+     * in docs/REFERENCES.md: Allouch, Remogna, Sbibih, Tahrichi, AMC 404 (2021), Art. 126227;
      * Remogna, Sbibih, Tahrichi, Mathematics 11 (2023), Art. 3236).
      *
-     * Способ решения: простая итерация u^{(m+1)} = f + L_n u^{(m)}. Оператор L_n
-     * конечного ранга, поэтому задача равносильна конечномерной СЛАУ; итерация выбрана
-     * как существенно более простая реализация (прямая сборка требует P×P интегралов
-     * вида ∫K(t,s)K(s,eta_r)ds). Сходимость линейна со знаменателем ||L_n|| и требует
-     * ||L_n|| < 1; при недостижении сходимости бросается исключение (а не возвращается
-     * молча неверный результат).
+     * Solution method: the simple iteration u^{(m+1)} = f + L_n u^{(m)}. The operator L_n has
+     * finite rank, so the problem is equivalent to a finite-dimensional linear system; the iteration was chosen
+     * as a substantially simpler implementation (a direct assembly requires P×P integrals
+     * of the form ∫K(t,s)K(s,eta_r)ds). The convergence is linear with ratio ||L_n|| and requires
+     * ||L_n|| < 1; if convergence is not reached an exception is thrown (rather than
+     * silently returning a wrong result).
      *
-     * @throws IllegalStateException если итерация не сошлась и [throwOnDivergence] равно `true`.
+     * @throws IllegalStateException if the iteration did not converge and [throwOnDivergence] is `true`.
      */
     public fun combinedNystrom(): SolutionFunc {
         val (pts, bAgg) = nystromSupport()
@@ -294,10 +294,10 @@ public class FredholmSecondKindSolver(
             val currentFun = uFun
             val currentNodes = uAtNodes
             val currentAtPoints = DoubleArray(pts.size) { currentFun(pts[it]) }
-            // Точный оператор L на текущем итеранте и его проекция P_chi(L u).
+            // The exact operator L on the current iterate and its projection P_chi(L u).
             val exactImage = { t: Double -> cL * op.applyNodes(t, currentNodes) }
             val projectedExact = funcs.projectorCoeffs(exactImage)
-            // Квадратурный оператор L^N_h и его проекция P_chi(L^N_h u).
+            // The quadrature operator L^N_h and its projection P_chi(L^N_h u).
             val quadratureImage = { t: Double -> nystromQuadrature(t, pts, bAgg, currentAtPoints) }
             val projectedQuadrature = funcs.projectorCoeffs(quadratureImage)
             // u^{(m+1)} = f + P_chi(L u) + L^N_h u - P_chi(L^N_h u).
@@ -315,12 +315,12 @@ public class FredholmSecondKindSolver(
         reportConvergence(
             converged = stop.converged,
             throwOnDivergence = throwOnDivergence,
-            methodName = "Комбинированный Nyström (Фредгольм)",
+            methodName = "Combined Nyström (Fredholm)",
             iterations = stop.performedIterations,
             maxIterations = COMBINED_NYSTROM_MAX_ITERATIONS,
             residual = stop.residual,
             tolerance = COMBINED_NYSTROM_TOLERANCE,
-            hint = "Для сходимости простой итерации требуется ||L_n|| < 1",
+            hint = "Convergence of the simple iteration requires ||L_n|| < 1",
             diverged = stop.diverged,
         )
         val resultFun = uFun
@@ -333,13 +333,13 @@ public class FredholmSecondKindSolver(
     }
 
     /**
-     * Итерированный комбинированный Nyström: \hat u^N_h = f + L u^N_h с ТОЧНЫМ
-     * оператором L (аналог итерации Слоана; новой системы не требует).
+     * Iterated combined Nyström: \hat u^N_h = f + L u^N_h with the EXACT
+     * operator L (the analogue of the Sloan iteration; it requires no new system).
      */
     public fun iteratedCombinedNystrom(): SolutionFunc {
         val combined = combinedNystrom()
         val uNodes = DoubleArray(ng) { combined.eval(op.gNode[it]) }
-        // Признак сходимости наследуется от исходного комбинированного оператора.
+        // The convergence flag is inherited from the underlying combined operator.
         return SolutionFunc(
             eval = { t -> fEff(t) + cL * op.applyNodes(t, uNodes) },
             converged = combined.converged,

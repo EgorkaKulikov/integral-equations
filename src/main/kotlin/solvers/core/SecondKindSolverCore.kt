@@ -11,13 +11,13 @@ import solvers.core.SecondKindDefaults.KULKARNI_QUASI_MAX_ITERATIONS
 import solvers.core.SecondKindDefaults.KULKARNI_QUASI_TOLERANCE
 
 /**
- * Образ `L u` вместе с двумя его производными — ровно то, что функционал `chi_j`
- * получает на вход при сборке матриц `M` и `M2`.
+ * The image `L u` together with its two derivatives — exactly what the functional `chi_j`
+ * receives as input while the matrices `M` and `M2` are assembled.
  *
- * Тройка возвращается ОДНИМ объектом, а не тремя независимыми вызовами: у Вольтерры
- * все три замыкания строятся из одного подготовленного операнда, и разделение заставило бы
- * создавать операнд (а вместе с ним — кэш подынтегральной функции) заново,
- * изменив число обращений к ядру.
+ * The triple is returned as ONE object rather than by three independent calls: for Volterra
+ * all three closures are built from a single prepared operand, and splitting them would force
+ * the operand (and with it the integrand cache) to be created anew,
+ * changing the number of kernel evaluations.
  */
 public class ImageTriple(
     public val value: (Double) -> Double,
@@ -26,73 +26,71 @@ public class ImageTriple(
 )
 
 /**
- * ОБЩЕЕ ЯДРО ЛИНЕЙНЫХ РЕШАТЕЛЕЙ УРАВНЕНИЯ II РОДА `u - L u = f`.
+ * SHARED CORE OF THE LINEAR SOLVERS FOR THE SECOND-KIND EQUATION `u - L u = f`.
  *
- * Здесь собрано всё, что у решателей Фредгольма и Вольтерры совпадало ДОСЛОВНО либо
- * различалось только способом применения оператора `L`: сборка матриц `M`, `M2`,
- * векторов `g`, `d`, базовая коллокация, итерация Слоана и всё семейство схем Кулкарни.
+ * It collects everything that was LITERALLY identical in the Fredholm and Volterra solvers, or
+ * differed only in how the operator `L` is applied: assembly of the matrices `M`, `M2`,
+ * of the vectors `g`, `d`, the base collocation, the Sloan iteration and the whole Kulkarni family.
  *
- * Матрицы дискретной задачи:
+ * Matrices of the discrete problem:
  *   M_{j,i}  = chi_j(L omega_i),  M2_{j,i} = chi_j(L(L omega_i)),
  *   g_j      = chi_j(f),          d_j      = chi_j(L f).
  *
- * ### Что СОЗНАТЕЛЬНО не переехало сюда
+ * ### What DELIBERATELY did not move here
  *
- * Всё семейство Nyström (`nystromSupport`, `nystromEval`, `nystrom`,
- * `iteratedNystrom`, `combinedNystrom`, `iteratedCombinedNystrom`) осталось
- * в наследниках. Причина не в объёме, а в структуре: у Фредгольма веса `b_r`
- * НЕ зависят от `t` и вычисляются один раз, у Вольтерры они пересчитываются
- * на каждом `t` из-за причинного усечения носителя `[a, t]`. Из-за этого
- * различаются типы результата (`Pair` против выделенного класса), сигнатуры
- * `nystromEval`, разделение «сборка матрицы / решение системы», а у
- * `combinedNystrom` — ещё и множество точек, на котором меряется критерий
- * останова. Слияние потребовало бы менять порядок операций, то есть числа.
+ * The whole Nyström family (`nystromSupport`, `nystromEval`, `nystrom`,
+ * `iteratedNystrom`, `combinedNystrom`, `iteratedCombinedNystrom`) stayed
+ * in the subclasses. The reason is structural rather than a matter of size: for Fredholm the
+ * weights `b_r` do NOT depend on `t` and are computed once, while for Volterra they are recomputed
+ * at every `t` because of the causal truncation of the support `[a, t]`. As a consequence
+ * the result types differ (`Pair` versus a dedicated class), so do the signatures of
+ * `nystromEval` and the split "matrix assembly / system solve"; for
+ * `combinedNystrom` even the point set on which the stopping criterion is measured differs.
+ * Merging them would change the order of operations, i.e. the numbers.
  *
- * ### Абстракция «подготовленный операнд» ([Operand])
+ * ### The "prepared operand" abstraction ([Operand])
  *
- * Единственное содержательное различие общей части — КАК представляется функция,
- * к которой многократно применяется `L`:
+ * The only substantial difference in the shared part is HOW the function to which `L` is
+ * applied repeatedly is represented:
  *
- * * Фредгольм: пределы интегрирования постоянны, поэтому существует фиксированный
- *   набор глобальных гауссовых узлов, и операнд — это массив значений функции
- *   в этих узлах (`DoubleArray`); повторное применение `L` — свёртка с ядром
- *   по уже готовым значениям.
- * * Вольтерра: верхний предел `t` переменный, фиксированного набора узлов НЕ
- *   существует, и операнд — сама функция (замыкание); применение `L` идёт через
- *   квадратуру по усечённому отрезку.
+ * * Fredholm: the integration limits are constant, hence a fixed set of global Gauss nodes
+ *   exists and the operand is the array of function values at those nodes (`DoubleArray`);
+ *   a repeated application of `L` is a convolution with the kernel over the already available
+ *   values.
+ * * Volterra: the upper limit `t` is variable, no fixed node set EXISTS, and the operand is the
+ *   function itself (a closure); `L` is applied through a quadrature over the truncated interval.
  *
- * Различие выражено параметром типа [Operand] и парой [prepare] / [image], а НЕ
- * булевым флагом «это Вольтерра»: флаг пришлось бы проверять в каждом методе,
- * и добавление третьего уравнения потребовало бы править все ветвления.
- * Параметр типа выбран вместо интерфейса-обёртки сознательно: `DoubleArray`
- * и `(Double) -> Double` — оба ссылочные типы, поэтому упаковки нет, а обёртка
- * добавила бы по объекту на каждый подготовленный операнд в горячем пути сборки
- * матриц.
+ * The difference is expressed by the type parameter [Operand] and the pair [prepare] / [image],
+ * NOT by a boolean flag "this is Volterra": such a flag would have to be checked in every method,
+ * and adding a third equation would require editing every branch.
+ * A type parameter was chosen over a wrapper interface deliberately: `DoubleArray`
+ * and `(Double) -> Double` are both reference types, so there is no boxing, whereas a wrapper
+ * would add one object per prepared operand on the hot path of matrix assembly.
  *
- * ### Порядок инициализации
+ * ### Initialization order
  *
- * Инициализаторы БАЗОВОГО класса выполняются РАНЬШЕ инициализаторов производного,
- * поэтому здесь нет ни одного поля, значение которого читается через
- * `abstract`/`open` член: [grid], [n] и [dim] вычисляются исключительно из
- * параметров первичного конструктора. Все точки расширения ([checkPoints],
- * [prepare], [image], …) вызываются ТОЛЬКО из методов, то есть уже после того,
- * как конструктор наследника отработал. Нарушение этого правила даёт молчаливый
- * дефект: например, `dim` увидел бы `n = 0` и стал бы равен `2`, все матрицы
- * стали бы `2x2`, а система — разрешимой и бессмысленной.
+ * The initializers of the BASE class run BEFORE those of the derived class,
+ * therefore there is not a single field here whose value is read through an
+ * `abstract`/`open` member: [grid], [n] and [dim] are computed exclusively from the
+ * primary constructor parameters. All extension points ([checkPoints],
+ * [prepare], [image], …) are called ONLY from methods, i.e. after the subclass constructor
+ * has finished. Violating this rule yields a silent defect: for instance `dim` would see
+ * `n = 0` and become `2`, all matrices would become `2x2`, and the system would be
+ * solvable and meaningless.
  *
- * @param basis базис минимальных сплайнов.
- * @param funcs семейство функционалов chi_j.
- * @param cL множитель оператора: `c_L = 1` для уравнения II рода;
- *        `c_L = -1/alpha` при регуляризации уравнения I рода по Вазвазу.
- * @param rhs правая часть `f` вместе с двумя производными — задаётся явно, чтобы
- *        решатель переиспользовался решателями уравнений I рода с ДРУГОЙ (эффективной)
- *        правой частью. Одним объектом, а не тремя параметрами: см. [RhsWithDerivatives].
- * @param throwOnDivergence поведение ИТЕРАЦИОННЫХ схем ([kulkarni] для
- *        квазиинтерполянтов, `combinedNystrom` в наследниках) при недостижении
- *        сходимости: `true` (по умолчанию) — исключение, `false` — результат с
- *        `converged = false` и достигнутой невязкой в [SolutionFunc.residual].
- *        На прямые схемы не влияет. Параметр задан на уровне решателя, а не
- *        каждого метода: это политика обработки ошибок, а не свойство схемы.
+ * @param basis minimal spline basis.
+ * @param funcs family of functionals chi_j.
+ * @param cL operator factor: `c_L = 1` for a second-kind equation;
+ *        `c_L = -1/alpha` when a first-kind equation is regularized following Wazwaz.
+ * @param rhs right-hand side `f` together with its two derivatives — supplied explicitly so that
+ *        the solver can be reused by the first-kind solvers with a DIFFERENT (effective)
+ *        right-hand side. As one object rather than three parameters: see [RhsWithDerivatives].
+ * @param throwOnDivergence behaviour of the ITERATIVE schemes ([kulkarni] for
+ *        quasi-interpolants, `combinedNystrom` in the subclasses) when convergence is
+ *        not reached: `true` (default) — an exception, `false` — a result with
+ *        `converged = false` and the attained residual in [SolutionFunc.residual].
+ *        Direct schemes are unaffected. The parameter is set at the solver level rather than
+ *        per method: it is an error-handling policy, not a property of a scheme.
  */
 public abstract class SecondKindSolverCore<Operand>(
     public val basis: MinimalSplineBasis,
@@ -103,96 +101,96 @@ public abstract class SecondKindSolverCore<Operand>(
     public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     init {
-        // Семейство функционалов решает СЛАУ при построении — тем же бэкендом, что и решатель.
+        // The functional family solves linear systems while being built — with the same backend as the solver.
         NumericsContext.requireSame("SecondKindSolverCore", ctx, "funcs", funcs.ctx)
     }
 
-    // Тройка РАСПАКОВЫВАЕТСЯ в собственные поля один раз, в конструкторе.
-    // Так все чтения в горячем пути (сборка M/M2, итерации Слоана и Кулкарни)
-    // остаются ровно тем же одним разыменованием поля, что и до объединения
-    // параметров: `rhs.value(t)` добавлял бы второе разыменование на КАЖДЫЙ вызов.
+    // The triple is UNPACKED into dedicated fields once, in the constructor.
+    // This keeps every read on the hot path (assembly of M/M2, the Sloan and Kulkarni
+    // iterations) exactly the same single field dereference as before the parameters
+    // were merged: `rhs.value(t)` would add a second dereference on EVERY call.
     //
-    // Сам `rhs` — НЕ свойство, а просто параметр конструктора: иначе на три функции
-    // приходилось бы шесть публичных членов (`rhs.value` и `fEff` — одно и то же),
-    // а два способа получить одно и то же приглашают к ошибке. Как параметр он ещё и
-    // не занимает поля в объекте.
+    // `rhs` itself is NOT a property but merely a constructor parameter: otherwise three functions
+    // would turn into six public members (`rhs.value` and `fEff` are one and the same),
+    // and two ways to obtain the same thing invite mistakes. As a parameter it also
+    // occupies no field in the object.
 
-    /** Правая часть `f(t)`. */
+    /** Right-hand side `f(t)`. */
     public val fEff: (Double) -> Double = rhs.value
 
-    /** Первая производная правой части `f'(t)`. */
+    /** First derivative of the right-hand side `f'(t)`. */
     public val fEffDeriv: (Double) -> Double = rhs.deriv
 
-    /** Вторая производная правой части `f''(t)`. */
+    /** Second derivative of the right-hand side `f''(t)`. */
     public val fEffDeriv2: (Double) -> Double = rhs.deriv2
 
     public val grid: Grid = basis.grid
     public val n: Int = grid.n
     public val dim: Int = n + 2
 
-    // ==== Точки расширения ==================================================
+    // ==== Extension points ==================================================
 
-    /** Название уравнения для диагностических сообщений («Фредгольм» / «Вольтерра»). */
+    /** Equation name for diagnostic messages ("Fredholm" / "Volterra"). */
     protected abstract val equationName: String
 
     /**
-     * Пояснение к сообщению о расходимости схемы Кулкарни для квазиинтерполянтов.
+     * Explanatory note for the divergence message of the Kulkarni scheme for quasi-interpolants.
      *
-     * Вынесено в точку расширения, а не собрано из общего шаблона, потому что
-     * тексты у двух решателей исторически различаются: у Фредгольма он длиннее
-     * (называет условие сжатия явно). Диагностика — часть наблюдаемого поведения,
-     * поэтому объединение текстов здесь было бы изменением поведения.
+     * Made an extension point instead of being built from a common template because the
+     * texts of the two solvers historically differ: the Fredholm one is longer
+     * (it names the contraction condition explicitly). Diagnostics are part of the observable
+     * behaviour, so merging the texts here would be a behavioural change.
      */
     protected abstract val kulkarniQuasiHint: String
 
     /**
-     * Точки, на которых меряется критерий останова итерационных схем.
+     * Points at which the stopping criterion of the iterative schemes is measured.
      *
-     * У Фредгольма это глобальные гауссовы узлы оператора: итерант там уже вычислен
-     * как побочный результат подготовки операнда, поэтому критерий бесплатен.
-     * У Вольтерры фиксированных узлов нет, и берётся отдельная равномерная выборка
-     * `4n+1` точек. Множества РАЗНЫЕ, и это существенно: один и тот же допуск
-     * `1e-13`, применённый к другому множеству, даёт другое число итераций.
+     * For Fredholm these are the global Gauss nodes of the operator: the iterate is already
+     * computed there as a by-product of preparing the operand, so the criterion is free.
+     * For Volterra there are no fixed nodes, and a separate uniform sample of
+     * `4n+1` points is taken. The sets are DIFFERENT, and this matters: the same tolerance
+     * `1e-13` applied to a different set yields a different iteration count.
      */
     protected abstract val checkPoints: DoubleArray
 
     /**
-     * Готовит функцию `u` к многократному применению оператора `L`.
+     * Prepares the function `u` for repeated application of the operator `L`.
      *
-     * Фредгольм: значения `u` в глобальных гауссовых узлах. Вольтерра: сама `u`
-     * (подготовка невозможна — узлы зависят от `t`).
+     * Fredholm: the values of `u` at the global Gauss nodes. Volterra: `u` itself
+     * (preparation is impossible — the nodes depend on `t`).
      */
     protected abstract fun prepare(u: (Double) -> Double): Operand
 
-    /** `(L u)(t)` по подготовленному операнду. */
+    /** `(L u)(t)` from a prepared operand. */
     protected abstract fun image(o: Operand): (Double) -> Double
 
-    /** `(L u)'(t)` по подготовленному операнду. */
+    /** `(L u)'(t)` from a prepared operand. */
     protected abstract fun imageDeriv(o: Operand): (Double) -> Double
 
     /**
-     * `(L u)''(t)` по подготовленному операнду.
+     * `(L u)''(t)` from a prepared operand.
      *
-     * @param uD производная САМОГО операнда. У Вольтерры она обязательна: из-за
-     *        переменного верхнего предела вторая производная содержит член Лейбница
-     *        `K(t,t) u'(t)`. У Фредгольма пределы постоянны, такого члена нет,
-     *        и аргумент не читается — см. переопределение в решателе Фредгольма.
+     * @param uD derivative of the OPERAND itself. For Volterra it is mandatory: because of
+     *        the variable upper limit the second derivative contains the Leibniz term
+     *        `K(t,t) u'(t)`. For Fredholm the limits are constant, there is no such term,
+     *        and the argument is not read — see the override in the Fredholm solver.
      */
     protected abstract fun imageDeriv2(o: Operand, uD: (Double) -> Double): (Double) -> Double
 
     /**
-     * Значения итеранта в [checkPoints] — то, по чему мерится критерий останова.
+     * Values of the iterate at [checkPoints] — what the stopping criterion is measured on.
      *
-     * Точка расширения, а не просто вычисление по формуле: у Фредгольма контрольные
-     * точки СОВПАДАЮТ с узлами подготовки операнда, поэтому значения уже посчитаны
-     * и достаточно вернуть сам операнд. Общая формула удвоила бы там стоимость
-     * критерия останова на КАЖДОЙ итерации: `u` там не константа, а результат
-     * применения оператора.
+     * An extension point rather than a plain formula: for Fredholm the check points
+     * COINCIDE with the nodes used to prepare the operand, so the values are already computed
+     * and it suffices to return the operand itself. A common formula would double the cost of
+     * the stopping criterion there on EVERY iteration: `u` is not a constant there but the result
+     * of applying the operator.
      */
     protected open fun checkValues(u: (Double) -> Double, o: Operand): DoubleArray =
         DoubleArray(checkPoints.size) { u(checkPoints[it]) }
 
-    /** `(\mathcal K u)(t)` — применение оператора к НЕподготовленной функции. */
+    /** `(\mathcal K u)(t)` — application of the operator to an UNPREPARED function. */
     protected abstract fun applyOperator(t: Double, u: (Double) -> Double): Double
 
     /** `d/dt (\mathcal K u)(t)`. */
@@ -201,9 +199,9 @@ public abstract class SecondKindSolverCore<Operand>(
     /**
      * `d^2/dt^2 (\mathcal K u)(t)`.
      *
-     * @param uD производная `u`; нужна только Вольтерре (член Лейбница), у Фредгольма
-     *        игнорируется. Арность выбрана по «широкому» варианту: сузить её нельзя,
-     *        а лишний аргумент у Фредгольма ничего не стоит.
+     * @param uD derivative of `u`; needed by Volterra only (the Leibniz term), ignored by
+     *        Fredholm. The arity follows the "wider" variant: it cannot be narrowed,
+     *        while the extra argument costs Fredholm nothing.
      */
     protected abstract fun applyOperatorDeriv2(
         t: Double,
@@ -211,15 +209,15 @@ public abstract class SecondKindSolverCore<Operand>(
         uD: (Double) -> Double,
     ): Double
 
-    /** `L omega_i` и её производные для столбца `i` матрицы `M`. */
+    /** `L omega_i` and its derivatives for column `i` of the matrix `M`. */
     protected abstract fun omegaImages(i: Int): ImageTriple
 
-    /** `L(L omega_i)` и её производные для столбца `i` матрицы `M2`. */
+    /** `L(L omega_i)` and its derivatives for column `i` of the matrix `M2`. */
     protected abstract fun doubleOmegaImages(i: Int): ImageTriple
 
-    // ==== Общая часть =======================================================
+    // ==== Shared part =======================================================
 
-    /** chi_j(g) по значениям g, g' и g'' (обёртка). */
+    /** chi_j(g) from the values of g, g' and g'' (a wrapper). */
     private fun chiOf(
         g: (Double) -> Double,
         gD: (Double) -> Double,
@@ -227,30 +225,30 @@ public abstract class SecondKindSolverCore<Operand>(
     ): DoubleArray = DoubleArray(dim) { funcs.chi(it - 2).apply(g, gD, gDD) }
 
     /**
-     * Сборка матрицы `chi_j(<образ>_i)` по столбцам с последующим транспонированием.
+     * Assembly of the matrix `chi_j(<image>_i)` column by column, followed by a transposition.
      *
-     * Транспонирование вынесено из параллельной части сознательно: столбцы
-     * независимы по `i`, а построчная запись в общую матрицу из потоков потребовала
-     * бы синхронизации. Порядок обхода при копировании сохранён дословно.
+     * The transposition was deliberately moved out of the parallel part: the columns
+     * are independent in `i`, whereas writing rows into a shared matrix from several threads
+     * would require synchronization. The traversal order of the copy is preserved literally.
      */
     private fun assembleChiMatrix(images: (Int) -> ImageTriple): DenseMatrix {
-        // Столбцы M независимы по i; cols[i] = столбец i.
+        // The columns of M are independent in i; cols[i] = column i.
         val cols = ParallelAssembly.assembleRows(dim, dim, ctx.parallel) { i ->
             val im = images(i)
             DoubleArray(dim) { j -> funcs.chi(j - 2).apply(im.value, im.deriv, im.deriv2) }
         }
-        // DenseMatrix хранится ПО СТОЛБЦАМ, поэтому собранные столбцы просто укладываются
-        // друг за другом: транспонирование, которое требовалось при построчном хранении,
-        // исчезает вместе с ним. Ни одной арифметической операции при переносе не выполняется.
+        // DenseMatrix is stored COLUMN-MAJOR, so the assembled columns are simply laid out
+        // one after another: the transposition required by row-major storage
+        // disappears together with it. Not a single arithmetic operation is performed while copying.
         val data = DoubleArray(dim * dim)
         for (i in 0 until dim) cols[i].copyInto(data, i * dim)
         return DenseMatrix.fromColumnMajor(dim, dim, data)
     }
 
-    /** Матрица M_{j,i} = chi_j(L omega_i). Для xi учитывается (L omega_i)', для xi^<0> и (L omega_i)''. */
+    /** Matrix M_{j,i} = chi_j(L omega_i). For xi it accounts for (L omega_i)', for xi^<0> also for (L omega_i)''. */
     public fun matrixM(): DenseMatrix = assembleChiMatrix { i -> omegaImages(i) }
 
-    /** Матрица M2_{j,i} = chi_j(L(L omega_i)) (двойное применение L). */
+    /** Matrix M2_{j,i} = chi_j(L(L omega_i)) (a double application of L). */
     public fun matrixM2(): DenseMatrix = assembleChiMatrix { i -> doubleOmegaImages(i) }
 
     /** g_j = chi_j(f). */
@@ -259,31 +257,31 @@ public abstract class SecondKindSolverCore<Operand>(
     /**
      * d_j = chi_j(L f).
      *
-     * ВАЖНО: образ правой части строится через ПРЯМОЕ применение оператора
-     * ([applyOperator]), а не через [prepare] + [image]. У Вольтерры это означает,
-     * что кэш подынтегральной функции здесь НЕ создаётся — правая часть применяется
-     * ровно по одному разу на каждый функционал, и кэш только добавил бы аллокаций.
-     * Факт зафиксирован в KDoc `VolterraOperator.IntegrandCache` и менять его нельзя.
+     * IMPORTANT: the image of the right-hand side is built through a DIRECT application of the
+     * operator ([applyOperator]), not through [prepare] + [image]. For Volterra this means
+     * that no integrand cache is created here — the right-hand side is applied
+     * exactly once per functional, and a cache would only add allocations.
+     * The fact is recorded in the KDoc of `VolterraOperator.IntegrandCache` and must not be changed.
      */
     public fun vectorD(): DoubleArray {
         val rhsImage = { t: Double -> cL * applyOperator(t) { s -> fEff(s) } }
         val rhsImageDeriv = { t: Double -> cL * applyOperatorDeriv(t) { s -> fEff(s) } }
-        // Вторая производная образа правой части требует и f, и f' (член Лейбница у Вольтерры).
+        // The second derivative of the right-hand side image needs both f and f' (the Leibniz term for Volterra).
         val rhsImageDeriv2 = { t: Double -> cL * applyOperatorDeriv2(t, fEff, fEffDeriv) }
         return chiOf(rhsImage, rhsImageDeriv, rhsImageDeriv2)
     }
 
     /**
-     * Матрица базовой схемы `I - M` — та самая, с которой решается СЛАУ
-     * в [solveBaseCoeffs].
+     * Matrix of the base scheme `I - M` — the very one the linear system in
+     * [solveBaseCoeffs] is solved with.
      *
-     * ЗАЧЕМ ПУБЛИЧНА. Без неё обусловленность собранной системы было нечем
-     * измерить извне: [matrixM] даёт только `M`, а решается система с `I - M`,
-     * и восстанавливать её на стороне вызывающего — значит дублировать формулу
-     * схемы и рисковать расхождением с ней.
+     * WHY IT IS PUBLIC. Without it there was no way to measure the conditioning of the
+     * assembled system from the outside: [matrixM] gives only `M`, while the system is solved
+     * with `I - M`, and rebuilding it on the caller side would duplicate the formula
+     * of the scheme and risk diverging from it.
      *
-     * Порядок операций сохранён ДОСЛОВНО: выделение этого метода из
-     * [solveBaseCoeffs] — чистое перемещение строк, числа от него не меняются.
+     * The order of operations is preserved LITERALLY: extracting this method from
+     * [solveBaseCoeffs] is a pure move of lines, it changes no numbers.
      */
     public fun baseMatrix(): DenseMatrix {
         val m = matrixM()
@@ -292,7 +290,7 @@ public abstract class SecondKindSolverCore<Operand>(
         return a
     }
 
-    /** Базовая схема: (I - M) c = g. */
+    /** Base scheme: (I - M) c = g. */
     public fun solveBaseCoeffs(): DoubleArray =
         LinearAlgebra.solve(baseMatrix(), vectorG(), ctx.backend)
 
@@ -301,7 +299,7 @@ public abstract class SecondKindSolverCore<Operand>(
         return SolutionFunc(eval = { t -> basis.evalSpline(c, t) })
     }
 
-    /** Слоан: ~u_h(t) = f(t) + (L u_h)(t). u_h — сплайн, L применяется к подготовленному операнду. */
+    /** Sloan: ~u_h(t) = f(t) + (L u_h)(t). u_h is a spline, L is applied to a prepared operand. */
     public fun sloan(): SolutionFunc {
         val c = solveBaseCoeffs()
         val splineImage = image(prepare { s -> basis.evalSpline(c, s) })
@@ -309,9 +307,9 @@ public abstract class SecondKindSolverCore<Operand>(
     }
 
     /**
-     * Кулкарни для проекторов (theta, xi): (I - M - M2 + M^2) c = (I - M) g + d;
-     * u_h^K = y_h + (I - P_chi)[f + L y_h]. Для квазиинтерполянтов (mu, lambda) без
-     * редукции — прямая итерация конечноранговым U^K_h [численное наблюдение].
+     * Kulkarni for projectors (theta, xi): (I - M - M2 + M^2) c = (I - M) g + d;
+     * u_h^K = y_h + (I - P_chi)[f + L y_h]. For quasi-interpolants (mu, lambda) there is no
+     * reduction — a direct iteration with the finite-rank U^K_h [numerical observation].
      */
     public fun kulkarni(): SolutionFunc {
         return if (funcs.isProjector) kulkarniProjector() else kulkarniQuasi()
@@ -329,7 +327,7 @@ public abstract class SecondKindSolverCore<Operand>(
         // rhs = (I - M) g + d
         val mg = LinearAlgebra.matVec(m, g, ctx.backend)
         val rhs = DoubleArray(dim) { g[it] - mg[it] + d[it] }
-        val c = LinearAlgebra.solve(a, rhs, ctx.backend) // коэффициенты y_h
+        val c = LinearAlgebra.solve(a, rhs, ctx.backend) // coefficients of y_h
         // u_h^K = y_h + (I - P_chi)[f + L y_h]; (I - P_chi)w = w - P_chi w.
         val yh = { s: Double -> basis.evalSpline(c, s) }
         val yhD = { s: Double -> basis.evalSplineDeriv(c, s) }
@@ -345,18 +343,18 @@ public abstract class SecondKindSolverCore<Operand>(
     }
 
     /**
-     * Кулкарни для mu, lambda: итерация u^{(m+1)} = f + U^K_h u^{(m)},
+     * Kulkarni for mu, lambda: the iteration u^{(m+1)} = f + U^K_h u^{(m)},
      * U^K_h u = P_chi(L u) + L(P_chi u) - P_chi(L(P_chi u)).
-     * [численное наблюдение]: разрешимость/сходимость не гарантированы (нет P^2=P).
+     * [numerical observation]: solvability/convergence are not guaranteed (P^2=P does not hold).
      *
-     * Итерант хранится как НЕПРЕРЫВНАЯ функция u^{(m)}(t): реконструкция того же
-     * порядка, что и базис (через basis.evalSpline и точную квадратуру оператора),
-     * без понижающей кусочно-линейной интерполяции узловых значений. Ранее итерант
-     * хранился значениями на равномерной выборке с кусочно-линейным восстановлением,
-     * что ограничивало точность величиной O(h_sample^2) НЕЗАВИСИМО от порядка базиса.
+     * The iterate is stored as a CONTINUOUS function u^{(m)}(t): a reconstruction of the same
+     * order as the basis (through basis.evalSpline and the exact operator quadrature),
+     * without an order-reducing piecewise-linear interpolation of nodal values. Previously the
+     * iterate was stored as values on a uniform sample with piecewise-linear reconstruction,
+     * which capped the accuracy at O(h_sample^2) REGARDLESS of the order of the basis.
      *
-     * Контрольные точки ([checkPoints]) участвуют ТОЛЬКО в критерии останова,
-     * в самой итерации они не используются.
+     * The check points ([checkPoints]) take part ONLY in the stopping criterion,
+     * they are not used in the iteration itself.
      */
     private fun kulkarniQuasi(): SolutionFunc {
         var uFun: (Double) -> Double = { t -> fEff(t) }
@@ -366,14 +364,14 @@ public abstract class SecondKindSolverCore<Operand>(
         while (stop.performedIterations < KULKARNI_QUASI_MAX_ITERATIONS) {
             val curFun = uFun
             val curOperand = uOperand
-            // P_chi u: коэффициенты chi_j(u) по непрерывной u^{(m)} (сохраняет порядок).
+            // P_chi u: the coefficients chi_j(u) from the continuous u^{(m)} (preserves the order).
             val pc = funcs.projectorCoeffs(curFun)
             val pcFun = { s: Double -> basis.evalSpline(pc, s) }
             val luFun = image(curOperand)                 // L u
             val pLu = funcs.projectorCoeffs(luFun)        // P_chi(L u)
             val lpu = image(prepare(pcFun))               // L(P_chi u)
             val pLPu = funcs.projectorCoeffs(lpu)         // P_chi(L(P_chi u))
-            // Непрерывная реконструкция следующего итеранта u^{(m+1)}(t).
+            // Continuous reconstruction of the next iterate u^{(m+1)}(t).
             val nextFun = { t: Double ->
                 fEff(t) + basis.evalSpline(pLu, t) + lpu(t) - basis.evalSpline(pLPu, t)
             }
@@ -386,12 +384,12 @@ public abstract class SecondKindSolverCore<Operand>(
             uAtCheck = nextAtCheck
             if (stop.accept(diff)) break
         }
-        // Ранее несошедшийся итерант возвращался МОЛЧА: отличить его от верного
-        // результата было невозможно. Теперь действует единый контракт [reportConvergence].
+        // Previously a non-converged iterate was returned SILENTLY: telling it apart from a
+        // correct result was impossible. Now the single contract [reportConvergence] applies.
         reportConvergence(
             converged = stop.converged,
             throwOnDivergence = throwOnDivergence,
-            methodName = "Схема Кулкарни для квазиинтерполянта '${funcs.name}' ($equationName)",
+            methodName = "Kulkarni scheme for the quasi-interpolant '${funcs.name}' ($equationName)",
             iterations = stop.performedIterations,
             maxIterations = KULKARNI_QUASI_MAX_ITERATIONS,
             residual = stop.residual,
@@ -409,11 +407,11 @@ public abstract class SecondKindSolverCore<Operand>(
     }
 
     /**
-     * Итерированный Кулкарни: ^u_h^K = f + L u_h^K.
+     * Iterated Kulkarni: ^u_h^K = f + L u_h^K.
      *
-     * Признак сходимости НАСЛЕДУЕТСЯ от [kulkarni]: сама итерация Слоана — одно
-     * интегрирование без итераций, но её результат осмыслен лишь тогда, когда
-     * осмыслено исходное приближение.
+     * The convergence flag is INHERITED from [kulkarni]: the Sloan iteration itself is a single
+     * integration without iterations, but its result is meaningful only when the
+     * underlying approximation is meaningful.
      */
     public fun iteratedKulkarni(): SolutionFunc {
         val kulkarniSolution = kulkarni()

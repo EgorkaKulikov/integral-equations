@@ -9,123 +9,123 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * СМОУК-ТЕСТЫ ВНЕШНЕЙ СВЕРКИ СО SciPy/NumPy.
+ * SMOKE TESTS OF THE EXTERNAL CROSS-CHECK AGAINST SciPy/NumPy.
  *
- * Зачем нужны. Все остальные проверки проекта написаны на его же коде и потому
- * подтверждают лишь внутреннюю согласованность: ошибка, внесённая до создания
- * эталона, была бы зафиксирована вместе с ним. Настоящий набор сверяет результаты
- * со СТОРОННИМИ библиотеками (SciPy, NumPy), разработанными независимо, и это
- * единственное доказательство в проекте, не замкнутое на проверяемую реализацию.
+ * Why they are needed. All the other checks of the project are written on its own code and
+ * therefore confirm only internal consistency: an error introduced before the baseline was
+ * created would have been recorded together with it. This suite cross-checks the results
+ * against THIRD-PARTY libraries (SciPy, NumPy) developed independently, and this is
+ * the only evidence in the project not closed on the implementation under test.
  *
- * Почему это тесты, а не разовый скрипт. Разовая сверка защищает от ошибки лишь в
- * момент запуска: любая последующая правка численного ядра могла бы разойтись со
- * SciPy незаметно. Постоянной гарантией сверку делает отдельный набор `scipyVerify`,
- * который в CI выполняется на каждой ветке.
+ * Why tests and not a one-off script. A one-off cross-check protects against an error only at
+ * the moment of the run: any later edit of the numerical core could diverge from
+ * SciPy unnoticed. What makes the cross-check a permanent guarantee is the separate `scipyVerify`
+ * suite, which CI runs on every branch.
  *
- * Устройство. Тест самодостаточен: сам выгружает артефакты через
- * [VerificationArtifacts] (не полагаясь на то, что перед ним запускалась задача
- * `dumpVerificationArtifacts`), запускает `tools/verify_with_scipy.py` и разбирает
- * его МАШИНОЧИТАЕМЫЙ отчёт. Разбор отчёта, а не только кода возврата, принципиален:
- * при расхождении сообщение называет конкретный слой, величину отклонения и допуск.
+ * Design. The test is self-contained: it dumps the artifacts itself via
+ * [VerificationArtifacts] (without relying on the `dumpVerificationArtifacts` task having been
+ * run before it), runs `tools/verify_with_scipy.py` and parses
+ * its MACHINE-READABLE report. Parsing the report, and not only the exit code, is essential:
+ * on a discrepancy the message names the concrete layer, the size of the deviation and the tolerance.
  *
- * Слои сверки (снизу вверх, чтобы место расхождения было видно сразу):
+ * Cross-check layers (bottom-up, so that the place of a discrepancy is visible at once):
  *
- *     L1  квадратура Гаусса--Лежандра      <- numpy leggauss
- *     L2  линейная алгебра, решение СЛАУ   <- scipy.linalg.solve
- *     L3  базис минимальных сплайнов       <- scipy.interpolate.BSpline
- *     L4/L5 образы операторов, правые части<- scipy.integrate.quad (QUADPACK)
- *     L6a пригодность эталона           <- независимый Nystrom против точного решения
- *     L6b решения ПРОЕКТА (E_h)         <- пороги и порядок сходимости против эталона
+ *     L1  Gauss--Legendre quadrature          <- numpy leggauss
+ *     L2  linear algebra, linear system solve <- scipy.linalg.solve
+ *     L3  minimal spline basis                <- scipy.interpolate.BSpline
+ *     L4/L5 operator images, right-hand sides <- scipy.integrate.quad (QUADPACK)
+ *     L6a suitability of the baseline      <- independent Nystrom against the exact solution
+ *     L6b solutions OF THE PROJECT (E_h)   <- limits and convergence order against the baseline
  *
- * Запуск. Штатный способ — `./gradlew scipyVerify`: эта задача готовит окружение
- * Python (`setupScipyVerification`), выгружает артефакты (`dumpVerificationArtifacts`)
- * и передаёт путь к интерпретатору свойством `scipy.python`.
+ * Running. The regular way is `./gradlew scipyVerify`: this task prepares the Python
+ * environment (`setupScipyVerification`), dumps the artifacts (`dumpVerificationArtifacts`)
+ * and passes the interpreter path through the property `scipy.python`.
  *
- * Поведение без окружения Python зависит от СТРОГОГО РЕЖИМА (`scipy.required`):
+ * Behaviour without a Python environment depends on the STRICT MODE (`scipy.required`):
  *
- *  - `scipy.required=false` или свойство не задано (так работает обычный `test`) —
- *    ПРОПУСК (`Assumptions`). Отсутствие venv — состояние машины, а не
- *    расхождение с SciPy, и трактовать его как провал было бы ложным сигналом;
- *  - `scipy.required=true` (так работает `scipyVerify`) — ПАДЕНИЕ. Здесь сверка
- *    запрошена явно и подготовлена зависимыми задачами, поэтому пропуск означал бы
- *    незамеченную поломку подготовки и ЗЕЛЁНУЮ сборку без единой сверки —
- *    ровно то, чего эта проверка обязана не допускать.
+ *  - `scipy.required=false` or the property is unset (this is how the ordinary `test` works) —
+ *    SKIP (`Assumptions`). A missing venv is a state of the machine, not a
+ *    discrepancy with SciPy, and treating it as a failure would be a false signal;
+ *  - `scipy.required=true` (this is how `scipyVerify` works) — FAILURE. Here the cross-check is
+ *    requested explicitly and prepared by dependent tasks, so a skip would mean
+ *    an unnoticed breakage of the preparation and a GREEN build without a single cross-check —
+ *    exactly what this check must prevent.
  *
- * Разделение сделано потому, что один и тот же пропуск имеет разный смысл: в
- * повседневном прогоне он ожидаем, в целевом — это дефект.
+ * The split is made because one and the same skip has a different meaning: in an
+ * everyday run it is expected, in a targeted one it is a defect.
  */
 @Tag("scipy")
 class ScipyCrossVerificationTest {
 
     private companion object {
-        /** Скрипт сверки; путь относительно корня проекта. */
+        /** The cross-check script; the path is relative to the project root. */
         const val SCRIPT_PATH = "tools/verify_with_scipy.py"
 
         /**
-         * Предел времени на прогон сверки. Скрипт выполняется единицы секунд;
-         * запас нужен для холодного старта интерпретатора и импорта SciPy.
-         * Ограничение обязательно: без него сбой окружения подвесил бы сборку.
+         * Time limit for the cross-check run. The script takes a few seconds;
+         * the margin is needed for a cold start of the interpreter and importing SciPy.
+         * The limit is mandatory: without it an environment failure would hang the build.
          */
         const val TIMEOUT_SECONDS = 300L
 
-        /** Слои, наличие которых в отчёте обязательно. */
+        /** The layers whose presence in the report is mandatory. */
         val REQUIRED_LAYERS = listOf("L1", "L2", "L3", "L4/L5", "L6a", "L6b")
 
-        /** Задачи Фредгольма, выгружаемые дампером и сверяемые в слое L4/L5. */
+        /** The Fredholm problems dumped by the dumper and cross-checked in the layer L4/L5. */
         val FREDHOLM_PROBLEMS = listOf("F2", "F2exp")
 
-        /** Задачи Вольтерры, выгружаемые дампером и сверяемые в слое L4/L5. */
+        /** The Volterra problems dumped by the dumper and cross-checked in the layer L4/L5. */
         val VOLTERRA_PROBLEMS = listOf("V2", "V2exp", "V2win")
 
         /**
-         * Величины правой части, сверка которых обязательна для КАЖДОЙ задачи.
+         * The right-hand side quantities whose cross-check is mandatory for EVERY problem.
          *
-         * `rhsDeriv`/`rhsDeriv2` перечислены ЯВНО: именно они раньше молча выпадали
-         * из сверки, и именно они проверяют формулы Лейбница для Вольтерры.
+         * `rhsDeriv`/`rhsDeriv2` are listed EXPLICITLY: it is exactly they that used to silently drop
+         * out of the cross-check, and exactly they that check the Leibniz formulas for Volterra.
          */
         val RHS_QUANTITIES = listOf("rhs", "rhsDeriv", "rhsDeriv2")
 
         /**
-         * Строгий режим: сверка запрошена явно, окружение обязано быть готово.
-         * Выставляется задачей `scipyVerify`; в остальных прогонах отсутствует.
+         * Strict mode: the cross-check is requested explicitly, the environment must be ready.
+         * Set by the `scipyVerify` task; absent in the other runs.
          */
         val STRICT: Boolean = System.getProperty("scipy.required")?.toBoolean() ?: false
 
         /**
-         * Результат сверки в машиночитаемом виде. Разбирается без внешних библиотек
-         * разбора JSON: в проекте их нет, а формат отчёта фиксирован и прост.
+         * The cross-check result in machine-readable form. Parsed without external JSON
+         * parsing libraries: the project has none, and the report format is fixed and simple.
          */
         var cachedReport: ScipyReport? = null
     }
 
     /**
-     * Требование к ОКРУЖЕНИЮ (не к числам): в строгом режиме нарушение — падение,
-     * иначе — пропуск. Сообщение одно и то же: причина и способ исправления нужны
-     * в обоих случаях, меняется только статус теста.
+     * A requirement on the ENVIRONMENT (not on the numbers): in strict mode a violation is a failure,
+     * otherwise a skip. The message is the same: the cause and the way to fix it are needed
+     * in both cases, only the status of the test changes.
      *
-     * ПРИМЕЧАНИЕ: к ЧИСЛЕННЫМ расхождениям этот метод не применяется никогда:
-     * они всегда дают падение через `assertTrue`, в любом режиме.
+     * NOTE: this method never applies to NUMERICAL discrepancies:
+     * they always fail through `assertTrue`, in any mode.
      */
     private fun requireEnvironment(condition: Boolean, message: String) {
         if (condition) return
         if (STRICT) {
             fail(
-                "$message\n\nЗадача `scipyVerify` требует работоспособного окружения (scipy.required=true): " +
-                    "внешняя сверка — единственное доказательство, не замкнутое на код проекта, и тихо " +
-                    "пропустить её значит получить зелёную сборку без единой выполненной проверки. " +
-                    "Способ исправить: `./gradlew setupScipyVerification` — задача создаст .venv-verify " +
-                    "и установит версии из tools/requirements-verify.txt, после чего повторить сверку.",
+                "$message\n\nThe `scipyVerify` task requires a working environment (scipy.required=true): " +
+                    "the external cross-check is the only evidence not closed on the project code, and skipping " +
+                    "it silently means getting a green build without a single check performed. " +
+                    "How to fix: `./gradlew setupScipyVerification` — the task creates .venv-verify " +
+                    "and installs the versions from tools/requirements-verify.txt, after which repeat the cross-check.",
             )
         }
         assumeTrue(false, message)
     }
 
     /**
-     * Одна проверка из отчёта скрипта.
+     * One check from the report of the script.
      *
-     * [compared] — число ФАКТИЧЕСКИ сравнённых точек, [skipped] — выпавших из
-     * сравнения. Без первого отчёт нельзя отличить «расхождений нет» от
-     * «сравнивать было нечего»: отклонение в обоих случаях равно нулю.
+     * [compared] is the number of points ACTUALLY compared, [skipped] the number dropped from the
+     * comparison. Without the former the report cannot tell "no discrepancies" from
+     * "there was nothing to compare": the deviation is zero in both cases.
      */
     private class Check(
         val layer: String,
@@ -137,7 +137,7 @@ class ScipyCrossVerificationTest {
         val skipped: Int,
     )
 
-    /** Разобранный отчёт скрипта сверки. */
+    /** The parsed report of the cross-check script. */
     private class ScipyReport(
         val exitCode: Int,
         val numpyVersion: String,
@@ -149,10 +149,10 @@ class ScipyCrossVerificationTest {
     )
 
     /**
-     * Готовит артефакты, запускает сверку и разбирает отчёт.
+     * Prepares the artifacts, runs the cross-check and parses the report.
      *
-     * Результат кэшируется: скрипт выполняет все слои за один прогон, и повторный
-     * запуск для каждого тестового метода лишь умножал бы время сборки.
+     * The result is cached: the script performs all layers in one run, and repeating the
+     * run for every test method would only multiply the build time.
      */
     private fun report(): ScipyReport {
         cachedReport?.let { return it }
@@ -163,19 +163,19 @@ class ScipyCrossVerificationTest {
         val configuredPython: String? = System.getProperty("scipy.python")
         requireEnvironment(
             configuredPython != null,
-            "Окружение сверки со SciPy недоступно: не задано свойство scipy.python. Штатный " +
-                "запуск — ./gradlew scipyVerify (задача сама готовит окружение и передаёт путь). " +
-                "Для ручного запуска укажите -Dscipy.python=<путь к интерпретатору>.",
+            "The SciPy cross-check environment is unavailable: the property scipy.python is not set. The regular " +
+                "way to run is ./gradlew scipyVerify (the task prepares the environment and passes the path itself). " +
+                "For a manual run specify -Dscipy.python=<path to the interpreter>.",
         )
         val python = configuredPython!!
         requireEnvironment(
             File(python).exists(),
-            "Окружение сверки со SciPy недоступно: интерпретатор Python не найден ($python). " +
-                "Выполните ./gradlew setupScipyVerification — задача создаст окружение " +
-                "и установит SciPy/NumPy версий из tools/requirements-verify.txt.",
+            "The SciPy cross-check environment is unavailable: the Python interpreter is not found ($python). " +
+                "Run ./gradlew setupScipyVerification — the task creates the environment " +
+                "and installs SciPy/NumPy of the versions from tools/requirements-verify.txt.",
         )
         val script = File(SCRIPT_PATH)
-        if (!script.exists()) fail("Не найден скрипт сверки ${script.absolutePath}")
+        if (!script.exists()) fail("The cross-check script ${script.absolutePath} is not found")
 
         val jsonFile = File(artifactDir, "scipy-report.json")
         jsonFile.delete()
@@ -189,22 +189,22 @@ class ScipyCrossVerificationTest {
         val finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)
         if (!finished) {
             process.destroyForcibly()
-            fail("Сверка со SciPy не завершилась за $TIMEOUT_SECONDS с. Вывод:\n$consoleOutput")
+            fail("The SciPy cross-check did not finish in $TIMEOUT_SECONDS s. Output:\n$consoleOutput")
         }
         val exitCode = process.exitValue()
-        // Код 2 означает недоступность SciPy/NumPy в найденном интерпретаторе — случай
-        // «venv есть, пакетов нет». Это состояние окружения, а не расхождение чисел,
-        // поэтому реакция зависит от строгого режима (см. [requireEnvironment]).
+        // Code 2 means SciPy/NumPy are unavailable in the found interpreter — the case
+        // "the venv exists, the packages do not". This is a state of the environment, not a discrepancy of
+        // numbers, so the reaction depends on the strict mode (see [requireEnvironment]).
         requireEnvironment(
             exitCode != 2,
-            "Окружение сверки со SciPy неработоспособно: SciPy/NumPy недоступны в $python " +
-                "(интерпретатор есть, пакетов нет). Выполните ./gradlew setupScipyVerification. " +
-                "Вывод скрипта:\n$consoleOutput",
+            "The SciPy cross-check environment is not operational: SciPy/NumPy are unavailable in $python " +
+                "(the interpreter exists, the packages do not). Run ./gradlew setupScipyVerification. " +
+                "Script output:\n$consoleOutput",
         )
         if (!jsonFile.exists()) {
             fail(
-                "Скрипт сверки не создал машиночитаемый отчёт ${jsonFile.absolutePath} " +
-                    "(код возврата $exitCode). Вывод:\n$consoleOutput",
+                "The cross-check script did not create the machine-readable report ${jsonFile.absolutePath} " +
+                    "(exit code $exitCode). Output:\n$consoleOutput",
             )
         }
         val parsed = parseReport(jsonFile.readText(), exitCode, consoleOutput)
@@ -213,11 +213,11 @@ class ScipyCrossVerificationTest {
     }
 
     /**
-     * Разбирает отчёт скрипта.
+     * Parses the report of the script.
      *
-     * Формат создаётся `json.dump` из [SCRIPT_PATH] с отступами, поэтому строчный
-     * разбор надёжен: каждое поле находится на своей строке. Отдельная зависимость
-     * ради разбора этого файла не оправдана.
+     * The format is produced by `json.dump` from [SCRIPT_PATH] with indentation, so line-wise
+     * parsing is reliable: every field is on its own line. A separate dependency
+     * just to parse this file is not justified.
      */
     private fun parseReport(text: String, exitCode: Int, consoleOutput: String): ScipyReport {
         fun scalar(field: String): String =
@@ -232,7 +232,7 @@ class ScipyCrossVerificationTest {
         }
 
         val checks = mutableListOf<Check>()
-        // Один элемент массива checks: поля идут в порядке, заданном скриптом.
+        // One element of the checks array: the fields follow the order set by the script.
         val entry = Regex(
             "\\{\\s*\"layer\"\\s*:\\s*\"([^\"]*)\"\\s*,\\s*\"name\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*," +
                 "\\s*\"deviation\"\\s*:\\s*([-0-9.eE+]+)\\s*,\\s*\"tolerance\"\\s*:\\s*([-0-9.eE+]+)\\s*," +
@@ -262,36 +262,36 @@ class ScipyCrossVerificationTest {
         )
     }
 
-    /** Проверки одного слоя; пустой список означает, что слой не выполнялся. */
+    /** The checks of one layer; an empty list means the layer was not performed. */
     private fun checksOf(layer: String): List<Check> = report().checks.filter { it.layer == layer }
 
     /**
-     * Проверка обязана быть И СОШЕДШЕЙСЯ, И НЕПУСТОЙ.
+     * A check must be BOTH CONVERGED AND NON-EMPTY.
      *
-     * Второе требование не избыточно: скрипт исключает точки из сравнения в ряде
-     * случаев (индекс вне базиса, NaN эталона, точка на узле, вырожденный отрезок
-     * интегрирования), и если выпадут ВСЕ точки, отклонение останется нулём —
-     * внешне неотличимо от идеального согласия.
+     * The second requirement is not redundant: the script excludes points from the comparison in a number
+     * of cases (index outside the basis, NaN of the baseline, a point at a node, a degenerate integration
+     * interval), and if ALL points drop out, the deviation stays zero —
+     * outwardly indistinguishable from perfect agreement.
      */
     private fun assertMeaningful(check: Check) {
         assertTrue(
             check.compared > 0,
-            "${check.layer} ${check.name}: сравнено 0 точек (пропущено ${check.skipped}) — проверка " +
-                "не выполнена. Нулевое отклонение здесь означает отсутствие данных, а не согласие.",
+            "${check.layer} ${check.name}: 0 points compared (${check.skipped} skipped) — the check " +
+                "was not performed. A zero deviation here means absence of data, not agreement.",
         )
         assertTrue(
             check.ok,
-            "${check.layer} ${check.name}: отклонение ${check.deviation} превышает допуск " +
-                "${check.tolerance} (сравнено точек ${check.compared}, пропущено ${check.skipped})",
+            "${check.layer} ${check.name}: the deviation ${check.deviation} exceeds the tolerance " +
+                "${check.tolerance} (points compared ${check.compared}, skipped ${check.skipped})",
         )
     }
 
     /**
-     * Сводная проверка: расхождений со SciPy нет ни на одном слое.
+     * Summary check: there are no discrepancies with SciPy on any layer.
      *
-     * Сообщение об ошибке содержит перечень расхождений с величинами и допусками,
-     * а также полный вывод скрипта — иначе диагностика по одному коду возврата
-     * была бы невозможна.
+     * The error message contains the list of discrepancies with the values and tolerances,
+     * and also the full output of the script — otherwise diagnosis from the exit code alone
+     * would be impossible.
      */
     @Test
     fun allLayersAgreeWithScipy() {
@@ -301,56 +301,56 @@ class ScipyCrossVerificationTest {
             result.exitCode == 0 && failed.isEmpty(),
             buildString {
                 appendLine(
-                    "Сверка со SciPy ${result.scipyVersion} / NumPy ${result.numpyVersion} " +
-                        "обнаружила расхождения (${failed.size} шт., код возврата ${result.exitCode}).",
+                    "The cross-check against SciPy ${result.scipyVersion} / NumPy ${result.numpyVersion} " +
+                        "found discrepancies (${failed.size} of them, exit code ${result.exitCode}).",
                 )
-                appendLine("Расхождение НЕ следует устранять ослаблением допуска: сначала причина.")
+                appendLine("A discrepancy must NOT be fixed by loosening the tolerance: find the cause first.")
                 for (check in failed) {
                     appendLine(
-                        "  ${check.layer} / ${check.name}: отклонение ${check.deviation} " +
-                            "> допуска ${check.tolerance} " +
-                            "(сравнено точек ${check.compared}, пропущено ${check.skipped})",
+                        "  ${check.layer} / ${check.name}: deviation ${check.deviation} " +
+                            "> tolerance ${check.tolerance} " +
+                            "(points compared ${check.compared}, skipped ${check.skipped})",
                     )
                 }
                 for (failure in result.failures) appendLine("  $failure")
-                appendLine("--- вывод скрипта ---")
+                appendLine("--- script output ---")
                 append(result.consoleOutput.take(4000))
             },
         )
     }
 
     /**
-     * Отчёт обязан содержать ВСЕ слои и не быть пустым.
+     * The report must contain ALL layers and must not be empty.
      *
-     * Без этой проверки сверка могла бы «проходить» вырожденно: если скрипт не
-     * найдёт артефакты, он лишь запишет замечание и вернёт нулевой код, а зелёный
-     * тест создаст ложное впечатление проверенности.
+     * Without this check the cross-check could "pass" degenerately: if the script does not
+     * find the artifacts, it merely records a note and returns a zero code, and a green
+     * test would create a false impression of being verified.
      */
     @Test
     fun everyLayerIsActuallyExecuted() {
         val result = report()
-        assertTrue(result.checks.isNotEmpty(), "Отчёт сверки пуст: ни одна проверка не выполнена")
+        assertTrue(result.checks.isNotEmpty(), "The cross-check report is empty: not a single check was performed")
         val missing = REQUIRED_LAYERS.filter { layer -> result.checks.none { it.layer == layer } }
         assertTrue(
             missing.isEmpty(),
-            "В отчёте отсутствуют слои: $missing. Вероятно, не выгружены артефакты. " +
-                "Замечания скрипта: ${result.notes}",
+            "The report is missing the layers: $missing. Probably the artifacts were not dumped. " +
+                "Notes of the script: ${result.notes}",
         )
         assertTrue(
             result.notes.isEmpty(),
-            "Скрипт сообщил о непроверенных слоях: ${result.notes}. " +
-                "Сверка обязана выполняться полностью, иначе она не является гарантией.",
+            "The script reported unverified layers: ${result.notes}. " +
+                "The cross-check must be performed in full, otherwise it is not a guarantee.",
         )
     }
 
     /**
-     * НИ ОДНА проверка отчёта не смеет быть вырожденной (`compared == 0`).
+     * NO check of the report may be degenerate (`compared == 0`).
      *
-     * Зачем отдельным тестом. Наличие слоя в отчёте ещё не значит, что слой
-     * что-то сравнил: точки выпадают из сравнения молча (индекс вне базиса, NaN
-     * эталона, точка на узле, вырожденный отрезок интегрирования), а худшее
-     * отклонение инициализируется нулём. Без этого требования любая ошибка в
-     * условии пропуска превратила бы сверку в тихо зелёную пустышку.
+     * Why a separate test. The presence of a layer in the report does not yet mean the layer
+     * compared anything: points drop out of the comparison silently (index outside the basis, NaN
+     * of the baseline, a point at a node, a degenerate integration interval), while the worst
+     * deviation is initialized with zero. Without this requirement any error in the
+     * skip condition would turn the cross-check into a silently green dummy.
      */
     @Test
     fun everyCheckComparedAtLeastOnePoint() {
@@ -360,79 +360,79 @@ class ScipyCrossVerificationTest {
             empty.isEmpty(),
             buildString {
                 appendLine(
-                    "В отчёте есть проверки, не сравнившие НИ ОДНОЙ точки (${empty.size} шт.). " +
-                        "Такая проверка не доказывает ничего: отклонение равно нулю потому, " +
-                        "что сравнивать было нечего.",
+                    "The report contains checks that compared NOT A SINGLE point (${empty.size} of them). " +
+                        "Such a check proves nothing: the deviation equals zero because " +
+                        "there was nothing to compare.",
                 )
                 for (check in empty) {
-                    appendLine("  ${check.layer} / ${check.name}: пропущено ${check.skipped} точек")
+                    appendLine("  ${check.layer} / ${check.name}: ${check.skipped} points skipped")
                 }
             },
         )
-        // Суммарное число сравнённых точек по каждому обязательному слою — положительно.
+        // The total number of compared points for every mandatory layer is positive.
         for (layer in REQUIRED_LAYERS) {
             val total = result.checks.filter { it.layer == layer }.sumOf { it.compared }
-            assertTrue(total > 0, "Слой $layer не сравнил ни одной точки (суммарно compared = 0)")
+            assertTrue(total > 0, "Layer $layer compared no points at all (total compared = 0)")
         }
     }
 
     /**
-     * L1: узлы и веса квадратуры Гаусса–Лежандра совпадают с `numpy leggauss`.
+     * L1: the nodes and weights of the Gauss-Legendre quadrature coincide with `numpy leggauss`.
      *
-     * Проверка независима по существу: проект вычисляет узлы методом Ньютона по
-     * нулям многочлена Лежандра, NumPy использует другой алгоритм.
+     * The check is independent in substance: the project computes the nodes by Newton's method from
+     * the zeros of the Legendre polynomial, NumPy uses a different algorithm.
      */
     @Test
     fun quadratureNodesMatchNumpy() {
         val checks = checksOf("L1")
-        assertTrue(checks.size >= 2, "Ожидались проверки узлов и весов, получено ${checks.size}")
+        assertTrue(checks.size >= 2, "Checks of the nodes and the weights were expected, got ${checks.size}")
         for (check in checks) assertMeaningful(check)
     }
 
-    /** L2: решение собранной системы `(I - M) c = g` совпадает со `scipy.linalg.solve`. */
+    /** L2: the solution of the assembled system `(I - M) c = g` coincides with `scipy.linalg.solve`. */
     @Test
     fun linearAlgebraMatchesScipy() {
         val checks = checksOf("L2")
-        assertTrue(checks.isNotEmpty(), "Слой L2 не выполнен")
+        assertTrue(checks.isNotEmpty(), "Layer L2 was not performed")
         for (check in checks) assertMeaningful(check)
     }
 
     /**
-     * L3: базис минимальных сплайнов системы `B` и две его производные совпадают
-     * с `scipy.interpolate.BSpline` на четырёх типах сеток.
+     * L3: the minimal spline basis of the system `B` and its two derivatives coincide
+     * with `scipy.interpolate.BSpline` on four kinds of grids.
      *
-     * Сверка возможна лишь для системы `B`: узлы кратности 3 на концах задают
-     * клампованный вектор узлов степени 2. Для систем `H` и `T` аналога в SciPy
-     * нет (см. docs/REFERENCES.md, раздел 6).
+     * The cross-check is possible only for the system `B`: breakpoints of multiplicity 3 at the ends define
+     * a clamped knot vector of degree 2. For the systems `H` and `T` there is no analogue in SciPy
+     * (see docs/REFERENCES.md, section 6).
      */
     @Test
     fun splineBasisMatchesScipyBSpline() {
         val checks = checksOf("L3")
-        // Четыре сетки по три величины (значение и две производные).
-        assertTrue(checks.size >= 12, "Ожидалось не менее 12 проверок L3, получено ${checks.size}")
+        // Four grids by three quantities (the value and two derivatives).
+        assertTrue(checks.size >= 12, "At least 12 L3 checks were expected, got ${checks.size}")
         for (check in checks) assertMeaningful(check)
     }
 
     /**
-     * L4/L5: образы операторов, правые части И ИХ ПРОИЗВОДНЫЕ совпадают с
+     * L4/L5: the operator images, the right-hand sides AND THEIR DERIVATIVES coincide with
      * `scipy.integrate.quad`.
      *
-     * Здесь единственная в проекте численная проверка формул Лейбница для `(Vu)'`
-     * и `(Vu)''` (отдельной публикации у `(Vu)''` нет, см. docs/REFERENCES.md, разд. 4):
-     * её выполняют проверки `V/<задача>/rhsDeriv` и `V/<задача>/rhsDeriv2`, где
-     * эталон собран из НЕЗАВИСИМО выведенных `K_t`, `K_tt`, `K(t,t)` и ПОЛНОЙ
-     * производной диагонали `d/dt K(t,t) = K_t(t,t) + K_s(t,t)` (вывод выписан в
-     * docstring `volterra_image_deriv` в `tools/verify_with_scipy.py`).
+     * This is the only numerical check in the project of the Leibniz formulas for `(Vu)'`
+     * and `(Vu)''` (there is no separate publication for `(Vu)''`, see docs/REFERENCES.md, sec. 4):
+     * it is performed by the checks `V/<problem>/rhsDeriv` and `V/<problem>/rhsDeriv2`, where
+     * the baseline is assembled from INDEPENDENTLY derived `K_t`, `K_tt`, `K(t,t)` and the FULL
+     * derivative of the diagonal `d/dt K(t,t) = K_t(t,t) + K_s(t,t)` (the derivation is written out in the
+     * docstring of `volterra_image_deriv` in `tools/verify_with_scipy.py`).
      *
-     * Проверки требуются ПО ИМЕНАМ, а не просто «список непуст». Причина
-     * фактическая: до этого слой молча ронял `rhsDeriv`/`rhsDeriv2` в `continue` —
-     * выгруженные данные были, а сверки не было, и тест при этом был зелёным.
-     * Требование к именам делает повторение такого исчезновения невозможным.
+     * The checks are required BY NAME, not merely as "the list is non-empty". The reason is
+     * factual: before that the layer silently dropped `rhsDeriv`/`rhsDeriv2` into a `continue` —
+     * the dumped data were there, the cross-check was not, and the test was green all the same.
+     * The requirement on the names makes a repetition of such a disappearance impossible.
      */
     @Test
     fun operatorImagesMatchQuadpack() {
         val checks = checksOf("L4/L5")
-        assertTrue(checks.isNotEmpty(), "Слой L4/L5 не выполнен")
+        assertTrue(checks.isNotEmpty(), "Layer L4/L5 was not performed")
         val present = checks.map { it.name }.toSet()
         val required = buildList {
             for (problem in FREDHOLM_PROBLEMS) {
@@ -447,58 +447,58 @@ class ScipyCrossVerificationTest {
         val missing = required.filterNot { it in present }
         assertTrue(
             missing.isEmpty(),
-            "В слое L4/L5 отсутствуют обязательные проверки: $missing. Выгруженные данные " +
-                "есть всегда, поэтому пропажа проверки означает, что скрипт снова роняет строки " +
-                "в `continue`. Фактически присутствуют: ${present.sorted()}",
+            "The layer L4/L5 is missing the mandatory checks: $missing. The dumped data " +
+                "are always there, so a missing check means the script again drops lines " +
+                "into a `continue`. Actually present: ${present.sorted()}",
         )
         for (check in checks) assertMeaningful(check)
     }
 
     /**
-     * L6a: эталонный метод Nyström на квадратуре Гаусса–Лежандра воспроизводит
-     * точные решения модельных задач.
+     * L6a: the baseline Nyström method on the Gauss-Legendre quadrature reproduces
+     * the exact solutions of the model problems.
      *
-     * Метод реализован средствами NumPy/SciPy без сплайнов и функционалов проекта
-     * (учебная схема, Atkinson 1997, гл. 4) и служит внешним эталоном. Проверка
-     * подтверждает пригодность самого эталона: если он не воспроизводит точное
-     * решение, сверять им нельзя.
+     * The method is implemented with NumPy/SciPy without the splines and functionals of the project
+     * (a textbook scheme, Atkinson 1997, ch. 4) and serves as an external baseline. The check
+     * confirms the suitability of the baseline itself: if it does not reproduce the exact
+     * solution, it cannot be cross-checked against.
      */
     @Test
     fun referenceNystromReproducesExactSolutions() {
         val checks = checksOf("L6a")
-        assertTrue(checks.isNotEmpty(), "Слой L6a не выполнен")
+        assertTrue(checks.isNotEmpty(), "Layer L6a was not performed")
         for (check in checks) assertMeaningful(check)
     }
 
     /**
-     * L6b: итоговые погрешности `E_h` САМИХ СХЕМ ПРОЕКТА сверены с эталоном.
+     * L6b: the resulting errors `E_h` OF THE PROJECT SCHEMES THEMSELVES are cross-checked against the baseline.
      *
-     * Зачем отдельно от L6a. Слой L6a проверяет ТОЛЬКО оракул (эталон против
-     * точного решения) и не читает ни одного артефакта проекта — зелёный L6a не
-     * говорит о проекте ничего. Именно L6b читает `solution-errors.tsv` и сверяет
-     * выгруженные `E_h` с порогами и наблюдаемым порядком сходимости. До этого
-     * слоя выгруженный файл не читался НИГДЕ, и любая порча его значений проходила
-     * незамеченной.
+     * Why separately from L6a. The layer L6a checks ONLY the oracle (the baseline against
+     * the exact solution) and reads no artifact of the project — a green L6a
+     * says nothing about the project. It is L6b that reads `solution-errors.tsv` and cross-checks
+     * the dumped `E_h` against the limits and the observed convergence order. Before this
+     * layer the dumped file was read NOWHERE, and any corruption of its values went
+     * unnoticed.
      *
-     * Требуется НЕ МЕНЕЕ 12 проверок порогов: две задачи на три порождающие
-     * системы на две схемы. Количество задано явно, чтобы исчезновение части
-     * сочетаний из выгрузки или из таблицы порогов не прошло тихо.
+     * AT LEAST 12 limit checks are required: two problems by three generating
+     * systems by two schemes. The number is stated explicitly so that the disappearance of part of the
+     * combinations from the dump or from the table of limits does not pass silently.
      */
     @Test
     fun projectSolutionErrorsMatchReference() {
         val checks = checksOf("L6b")
-        val limitChecks = checks.filter { it.name.contains("против порогов") }
+        val limitChecks = checks.filter { it.name.contains("E_h") }
         assertTrue(
             limitChecks.size >= 12,
-            "Ожидалось не менее 12 проверок порогов E_h (2 задачи x 3 системы x 2 схемы), " +
-                "получено ${limitChecks.size}. Фактические проверки L6b: ${checks.map { it.name }}",
+            "At least 12 checks of the E_h limits were expected (2 problems x 3 systems x 2 schemes), " +
+                "got ${limitChecks.size}. The actual L6b checks: ${checks.map { it.name }}",
         )
-        // Проверки порядка сходимости обязаны присутствовать тоже: без них схема,
-        // застрявшая на точности грубой сетки, всё ещё прошла бы пороги.
+        // The convergence order checks must be present too: without them a scheme
+        // stuck at the accuracy of a coarse grid would still pass the limits.
         assertTrue(
-            checks.any { it.name.contains("порядок сходимости") },
-            "В слое L6b нет ни одной проверки порядка сходимости: порогов без проверки " +
-                "убывания недостаточно",
+            checks.any { it.name.contains("min p") },
+            "The layer L6b has not a single convergence order check: limits without a check " +
+                "of the decrease are not enough",
         )
         for (check in checks) assertMeaningful(check)
     }

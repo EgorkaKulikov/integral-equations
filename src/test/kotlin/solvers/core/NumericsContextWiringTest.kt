@@ -20,29 +20,29 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * ПРОВОДКА [NumericsContext] через решатели.
+ * WIRING of [NumericsContext] through the solvers.
  *
- * Мотивация. Контекст проходит через пять классов ([solvers.core.SecondKindSolverCore],
- * оба решателя второго рода, `UrysonSolver`/`CollocationCore`/`SplineSpace`,
- * [splines.functionals.FunctionalFamily]), и до появления этих тестов НИ ОДИН тест не
- * строил решатель с НЕдефолтным контекстом. Поэтому ошибка проводки — например, если бы
- * где-то внутри остался `NumericsContext.default()` вместо переданного значения —
- * не проявлялась бы никак: все прогоны шли на одном и том же дефолтном бэкенде.
+ * Motivation. The context passes through five classes ([solvers.core.SecondKindSolverCore],
+ * both second-kind solvers, `UrysonSolver`/`CollocationCore`/`SplineSpace`,
+ * [splines.functionals.FunctionalFamily]), and before these tests NO test
+ * built a solver with a NON-default context. Hence a wiring error — for example, if
+ * a `NumericsContext.default()` were left somewhere inside instead of the passed value —
+ * would not show up at all: every run used one and the same default backend.
  *
- * Задача выбрана СОЗНАТЕЛЬНО хорошо обусловленной (Фредгольм II рода, F2:
- * `K(t,s) = 1/(1+t+s)`, гладкое решение). На уравнениях ПЕРВОГО рода смена бэкенда
- * штатно даёт расхождение до 5.7e-2 из-за плохой обусловленности — там сравнение
- * бэкендов проверяло бы обусловленность задачи, а не проводку контекста.
+ * The problem is chosen DELIBERATELY well-conditioned (Fredholm of the second kind, F2:
+ * `K(t,s) = 1/(1+t+s)`, smooth solution). On equations of the FIRST kind a backend change
+ * routinely gives a discrepancy up to 5.7e-2 because of poor conditioning — there a comparison
+ * of backends would test the conditioning of the problem rather than the context wiring.
  *
- * Контракт самого [NumericsContext] как значения (разделяемый экземпляр по умолчанию,
- * равенство по значению) проверяется в библиотеке `numerical-core` (`NumericsContextTest`).
+ * The contract of [NumericsContext] itself as a value (a shared default instance,
+ * equality by value) is checked in the `numerical-core` library (`NumericsContextTest`).
  */
 @Tag("fast")
 class NumericsContextWiringTest {
 
     private val problem = FredholmProblem.F2
 
-    /** Строит решатель F2 целиком в ОДНОМ контексте (семейство функционалов — тоже). */
+    /** Builds the F2 solver entirely in ONE context (the functional family included). */
     private fun solver(ctx: NumericsContext, n: Int = 16): FredholmSecondKindSolver {
         val grid = Grid.uniform(n)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
@@ -59,16 +59,16 @@ class NumericsContextWiringTest {
         )
     }
 
-    /** Точки сравнения: узлы и внутренние точки, включая оба конца отрезка. */
+    /** Comparison points: nodes and interior points, including both ends of the interval. */
     private val samplePoints = doubleArrayOf(0.0, 0.13, 0.37, 0.5, 0.71, 0.99, 1.0)
 
     /**
-     * Решатель на reference-бэкенде согласуется с решателем на multik.
+     * The solver on the reference backend agrees with the solver on multik.
      *
-     * Это и есть проверка, что переданный бэкенд ДОХОДИТ до всех мест, где решается СЛАУ:
-     * если бы контекст где-то терялся, обе ветви считались бы одним бэкендом и тест
-     * проходил бы тривиально, — поэтому ниже отдельно проверяется, что бэкенды РАЗНЫЕ
-     * и что результаты при этом НЕ побитово равны (то есть разный путь LU реально задействован).
+     * This is the very check that the passed backend REACHES every place where a linear system is
+     * solved: if the context were lost somewhere, both branches would run on one backend and the
+     * test would pass trivially — hence it is checked separately below that the backends DIFFER
+     * and that the results are then NOT bitwise equal (that is, a different LU path is really used).
      */
     @Test
     fun solverAgreesAcrossBackends() {
@@ -79,19 +79,19 @@ class NumericsContextWiringTest {
             val b = reference.eval(t)
             assertTrue(
                 kotlin.math.abs(a - b) <= 1e-9,
-                "t=$t: multik=$a, reference=$b, |разность|=${kotlin.math.abs(a - b)} > 1e-9",
+                "t=$t: multik=$a, reference=$b, |difference|=${kotlin.math.abs(a - b)} > 1e-9",
             )
         }
     }
 
     /**
-     * Контекст РЕАЛЬНО долетает до бэкенда: два бэкенда дают ЧИСЛЕННО РАЗНЫЙ (хоть и
-     * согласованный) результат хотя бы в одной точке.
+     * The context REALLY reaches the backend: two backends give a NUMERICALLY DIFFERENT (though
+     * consistent) result in at least one point.
      *
-     * Без этой проверки предыдущий тест был бы самоподтверждающимся: если бы проводка
-     * была сломана и оба решателя считали дефолтным бэкендом, расхождение было бы РОВНО
-     * нулевым и допуск 1e-9 выполнился бы автоматически. Здесь фиксируется обратное:
-     * пути вычисления различаются, значит параметр `backend` действительно используется.
+     * Without this check the previous test would be self-confirming: if the wiring were
+     * broken and both solvers ran on the default backend, the discrepancy would be EXACTLY
+     * zero and the tolerance 1e-9 would hold automatically. Here the opposite is fixed:
+     * the computation paths differ, hence the `backend` parameter is indeed used.
      */
     @Test
     fun differentBackendsTakeDifferentComputationPaths() {
@@ -100,17 +100,17 @@ class NumericsContextWiringTest {
         val anyBitwiseDifference = samplePoints.any { t -> multik.eval(t) != reference.eval(t) }
         assertTrue(
             anyBitwiseDifference,
-            "Оба бэкенда дали ПОБИТОВО одинаковый результат во всех точках. Либо проводка " +
-                "контекста сломана (оба решателя считают одним бэкендом), либо реализации LU совпали.",
+            "Both backends produced a BITWISE identical result at every point. Either the context " +
+                "wiring is broken (both solvers run on one backend), or the LU implementations coincide.",
         )
     }
 
     /**
-     * `parallel = false` и `parallel = true` дают ПОБИТОВО идентичное решение.
+     * `parallel = false` and `parallel = true` give a BITWISE identical solution.
      *
-     * Для самого [ParallelAssembly] это уже доказано напрямую, но здесь свойство
-     * проверяется СКВОЗЬ решатель: сборка матрицы M идёт через `ctx.parallel`, и если бы
-     * параллельный путь менял порядок накопления, числа разошлись бы в младших битах.
+     * For [ParallelAssembly] itself this is already proved directly, but here the property
+     * is checked THROUGH the solver: the assembly of the matrix M goes via `ctx.parallel`, and if
+     * the parallel path changed the accumulation order, the numbers would differ in the low bits.
      */
     @Test
     fun parallelFlagDoesNotChangeResultBitwise() {
@@ -119,25 +119,25 @@ class NumericsContextWiringTest {
         for (t in samplePoints) {
             val s = sequential.eval(t)
             val p = parallel.eval(t)
-            assertTrue(s == p, "t=$t: seq=$s, par=$p — сборка обязана быть побитово идентичной")
+            assertTrue(s == p, "t=$t: seq=$s, par=$p — the assembly must be bitwise identical")
         }
     }
 
 
 
     /**
-     * НЕГАТИВНЫЙ: решатель и семейство функционалов с РАЗНЫМИ контекстами — громкий отказ.
+     * NEGATIVE: a solver and a functional family with DIFFERENT contexts — a loud failure.
      *
-     * Ровно тот сценарий, ради которого добавлена валидация: семейство решает свои
-     * крошечные СЛАУ одним бэкендом, решатель — другим, и части ОДНОЙ задачи считаются
-     * разными реализациями LU. Раньше это проходило молча.
+     * Exactly the scenario the validation was added for: the family solves its tiny
+     * linear systems on one backend and the solver on another, so parts of ONE problem are
+     * computed by different LU implementations. Previously this passed silently.
      */
     @Test
     fun mismatchedFunctionalsContextFailsLoudly() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = FredholmOperator(problem.kernel, grid, GaussLegendre(8))
-        // Семейство построено на reference, решатель просят считать на multik.
+        // The family is built on reference, the solver is asked to compute on multik.
         val funcs = ProjFunctionals(basis, NumericsContext(backend = Backends.java()))
         val ex = assertFailsWith<IllegalArgumentException> {
             FredholmSecondKindSolver(
@@ -147,14 +147,14 @@ class NumericsContextWiringTest {
             )
         }
         val message = ex.message!!
-        assertTrue(message.contains("funcs"), "Сообщение обязано называть зависимость: $message")
+        assertTrue(message.contains("funcs"), "The message must name the dependency: $message")
         assertTrue(
             message.contains(Backends.java().name) && message.contains(Backends.native().name),
-            "Сообщение обязано называть ОБА бэкенда, чтобы расхождение было видно: $message",
+            "The message must name BOTH backends so that the discrepancy is visible: $message",
         )
     }
 
-    /** Несовпадение по флагу `parallel` тоже отбраковывается: контекст сравнивается целиком. */
+    /** A mismatch in the `parallel` flag is rejected too: the context is compared as a whole. */
     @Test
     fun mismatchedParallelFlagFailsLoudly() {
         val grid = Grid.uniform(8)
@@ -170,7 +170,7 @@ class NumericsContextWiringTest {
         }
     }
 
-    /** Согласованные контексты (в том числе дефолтные у всех участников) проходят. */
+    /** Consistent contexts (including default ones for all participants) pass. */
     @Test
     fun matchingContextsAreAccepted() {
         for (ctx in listOf(
@@ -179,17 +179,17 @@ class NumericsContextWiringTest {
             NumericsContext(backend = Backends.native(), parallel = false),
         )) {
             val solution = solver(ctx, n = 8).base()
-            assertTrue(solution.eval(0.5).isFinite(), "ctx=${ctx.describe()}: решение обязано быть числом")
+            assertTrue(solution.eval(0.5).isFinite(), "ctx=${ctx.describe()}: the solution must be a number")
         }
     }
 
-    // ==== Урысон: у него ДВЕ зависимости с контекстом — funcs И space ==============
+    // ==== Uryson: it has TWO dependencies carrying a context — funcs AND space =====
 
     /**
-     * Решатель Урысона II рода согласован между бэкендами.
+     * The Uryson second-kind solver is consistent across backends.
      *
-     * Отдельно от Фредгольма: у Урысона своя ветвь проводки — через `CollocationCore`
-     * (якобиан и шаг Ньютона) и `SplineSpace`.
+     * Separately from Fredholm: Uryson has its own wiring branch — through `CollocationCore`
+     * (the Jacobian and the Newton step) and `SplineSpace`.
      */
     @Test
     fun urysonSolverAgreesAcrossBackends() {
@@ -209,17 +209,17 @@ class NumericsContextWiringTest {
             val b = reference(t)
             assertTrue(
                 kotlin.math.abs(a - b) <= 1e-9,
-                "Урысон t=$t: multik=$a, reference=$b, |разность|=${kotlin.math.abs(a - b)} > 1e-9",
+                "Uryson t=$t: multik=$a, reference=$b, |difference|=${kotlin.math.abs(a - b)} > 1e-9",
             )
         }
     }
 
     /**
-     * НЕГАТИВНЫЙ для `space`: именно это расхождение нашло ревью.
+     * NEGATIVE for `space`: exactly this discrepancy was found by the review.
      *
-     * `UrysonFirstKindSolver.solveMorozov` считает стабилизатор `Omega` через
-     * `space.ctx.backend`, а систему Гаусса–Ньютона — через свой `ctx.backend`.
-     * До валидации две части одного критерия Морозова могли считаться разными LU.
+     * `UrysonFirstKindSolver.solveMorozov` computes the stabilizer `Omega` via
+     * `space.ctx.backend`, and the Gauss-Newton system via its own `ctx.backend`.
+     * Before the validation, two parts of one Morozov criterion could be computed by different LUs.
      */
     @Test
     fun mismatchedSplineSpaceContextFailsLoudly() {
@@ -227,7 +227,7 @@ class NumericsContextWiringTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val ctx = NumericsContext(backend = Backends.native())
         val funcs = ProjFunctionals(basis, ctx)
-        // space построен на ДРУГОМ бэкенде, чем решатель и семейство.
+        // space is built on a DIFFERENT backend than the solver and the family.
         val space = solvers.uryson.SplineSpace(
             basis, GaussLegendre(8), NumericsContext(backend = Backends.java()),
         )
@@ -235,6 +235,6 @@ class NumericsContextWiringTest {
         val ex = assertFailsWith<IllegalArgumentException> {
             solvers.uryson.UrysonFirstKindSolver(basis, funcs, space, op, ctx = ctx)
         }
-        assertTrue(ex.message!!.contains("space"), "Сообщение обязано назвать 'space': ${ex.message}")
+        assertTrue(ex.message!!.contains("space"), "The message must name 'space': ${ex.message}")
     }
 }

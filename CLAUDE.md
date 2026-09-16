@@ -1,15 +1,15 @@
 # CLAUDE.md
 
-Правила работы с этим репозиторием — в [`AGENTS.md`](AGENTS.md); правила внесения изменений
-для людей — в [`CONTRIBUTING.md`](CONTRIBUTING.md). Прочитай их перед любой правкой; здесь
-правила не дублируются, чтобы не расходились.
+The rules for working with this repository are in [`AGENTS.md`](AGENTS.md); the rules for
+making changes as a human contributor are in [`CONTRIBUTING.md`](CONTRIBUTING.md). Read them
+before any edit; the rules are not duplicated here, so that the two cannot drift apart.
 
-Ключевое для быстрого старта:
+Key points for a quick start:
 
-- `./gradlew fastTest` — секунды; `./gradlew characterizationTest extraCharacterizationTest` —
-  главный гейт численной нейтральности (~1 мин); `./gradlew check` — всё (~9 мин).
-- Библиотеки `numerical-core` (`numerics.*`) и `minimal-splines` (`splines.*`)
-  подключаются только как Maven-артефакты; код сплайнов и численной инфраструктуры
-  здесь не пишется.
-- Численные эталоны и допуски не подгоняются под зелёную сборку —
-  см. `docs/baseline-changes.md`.
+- `./gradlew fastTest` — seconds; `./gradlew characterizationTest extraCharacterizationTest` —
+  the main numerical-neutrality gate (~1 min); `./gradlew check` — everything (~9 min).
+- The libraries `numerical-core` (`numerics.*`) and `minimal-splines` (`splines.*`) are
+  consumed as Maven artifacts only; spline code and numerical infrastructure are not
+  written here.
+- Numerical baselines and tolerances are never tuned to make the build green —
+  see `docs/baseline-changes.md`.

@@ -10,23 +10,23 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * ДИАГНОСТИКА ОБУСЛОВЛЕННОСТИ систем задачи F1 (уравнение Фредгольма ПЕРВОГО рода,
- * регуляризация Вазваза с `alpha = 1e-10`, `c_L = -1/alpha`).
+ * THE CONDITIONING DIAGNOSTICS of the systems of the problem F1 (a Fredholm equation of the FIRST kind,
+ * Wazwaz regularization with `alpha = 1e-10`, `c_L = -1/alpha`).
  *
- * Зачем. Ключи `F1.*` эталона `baseline-eh.tsv` привязаны к реализации LU: любая
- * смена BLAS/LAPACK сдвигает их на величины порядка 1e-3…1e-1 при допуске 1e-9.
- * Чтобы отличить такой сдвиг от регрессии, нужна граница прямой ошибки, которую
- * даёт сама библиотека: `cond_1(A) · omega`, где `omega` — относительная обратная
- * ошибка полученного решения. Если расхождение решений двух реализаций LU лежит в
- * пределах этой границы, обе реализации «одинаково правы», и эталон можно переснимать
- * по протоколу `docs/baseline-changes.md`; если нет — это регрессия.
+ * Why. The `F1.*` keys of the baseline `baseline-eh.tsv` are bound to the LU implementation: any
+ * change of BLAS/LAPACK shifts them by quantities of order 1e-3…1e-1 at a tolerance of 1e-9.
+ * To distinguish such a shift from a regression, a forward error bound is needed, and it is
+ * given by the library itself: `cond_1(A) · omega`, where `omega` is the relative backward
+ * error of the obtained solution. If the discrepancy of the solutions of two LU implementations lies
+ * within this bound, both implementations are "equally right", and the baseline may be re-shot
+ * by the protocol of `docs/baseline-changes.md`; if not, it is a regression.
  *
- * Система строится ТЕМ ЖЕ кодом, что и в [FredholmFirstKindSolver]: внутренний
- * [FredholmSecondKindSolver] с `c_L = -1/alpha` и правой частью `f/alpha` (см. поле
- * `inner` решателя первого рода). Тест пишет таблицу в `build/reports/f1-conditioning.tsv`
- * (источник чисел для записей в `docs/baseline-changes.md`) и утверждает только то, что
- * решение вообще получено с обратной ошибкой уровня машинной точности — то есть LU
- * устойчив, а всё различие между реализациями объясняется числом обусловленности.
+ * The system is built by THE SAME code as in [FredholmFirstKindSolver]: an inner
+ * [FredholmSecondKindSolver] with `c_L = -1/alpha` and the right-hand side `f/alpha` (see the field
+ * `inner` of the first-kind solver). The test writes a table into `build/reports/f1-conditioning.tsv`
+ * (the source of the numbers for the entries in `docs/baseline-changes.md`) and asserts only that
+ * a solution was obtained at all with a backward error at the level of machine accuracy — that is, the LU
+ * is stable, and the whole difference between the implementations is explained by the condition number.
  */
 @Tag("fast")
 class F1ConditioningTest {
@@ -42,19 +42,19 @@ class F1ConditioningTest {
         for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
             for (family in listOf("theta", "xi1", "xi2")) {
                 for (n in listOf(8, 16, 32)) {
-                    // Та же механика, что и у класса `sensitive` характеризационного гейта:
-                    // единственная реализация — [F1SystemConditioning], тест её потребитель.
+                    // The same machinery as for the class `sensitive` of the characterization gate:
+                    // the single implementation is [F1SystemConditioning], the test is its consumer.
                     val m = F1SystemConditioning.measure(system, family, n)
                     rows.add(Row(system, family, n, m.cond, m.omega, m.bound, m.coeffNormInf, m.uNorm))
                 }
             }
         }
-        // Таблица идёт в файл, а не в stdout: 27 строк на каждый прогон засоряют отчёт Gradle.
+        // The table goes into a file and not to stdout: 27 rows per run clutter the Gradle report.
         val report = File("build/reports").apply { mkdirs() }.resolve("f1-conditioning.tsv")
         report.writeText(
             buildString {
                 append("# F1: backend=${Backends.describe()}\n")
-                append("система\tсемейство\tn\tcond_1\tomega\tcond*max(omega,1e-16)\t||c||inf\t||u||inf\n")
+                append("system\tfamily\tn\tcond_1\tomega\tcond*max(omega,1e-16)\t||c||inf\t||u||inf\n")
                 for (r in rows) {
                     append(
                         "%s\t%s\t%d\t%.6e\t%.6e\t%.6e\t%.6e\t%.6e\n".format(
@@ -65,18 +65,18 @@ class F1ConditioningTest {
                 }
             },
         )
-        println("F1: backend=${Backends.describe()}, таблица обусловленности — ${report.path}")
+        println("F1: backend=${Backends.describe()}, the conditioning table — ${report.path}")
         val worstOmega = rows.maxOf { it.omega }
         val minCond = rows.minOf { it.cond }
         val maxCond = rows.maxOf { it.cond }
         println("F1: cond_1 in [%.3e, %.3e], max omega = %.3e".format(minCond, maxCond, worstOmega))
         assertTrue(
             worstOmega < 1e-12,
-            "Обратная ошибка решения F1-системы $worstOmega выходит за уровень машинной точности: LU неустойчив.",
+            "The backward error of the solution of the F1 system $worstOmega goes beyond the level of machine accuracy: the LU is unstable.",
         )
         assertTrue(
             rows.all { it.cond.isFinite() && it.cond > 1.0 },
-            "Оценка обусловленности F1-системы не получена (вырождение или NaN).",
+            "The conditioning estimate of the F1 system was not obtained (a degeneracy or a NaN).",
         )
     }
 }

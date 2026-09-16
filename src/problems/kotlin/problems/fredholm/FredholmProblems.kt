@@ -9,28 +9,28 @@ import solvers.fredholm.FredholmSecondKindSolver
 import solvers.fredholm.KernelF
 
 /**
- * Модельная задача для линейного уравнения Фредгольма: ядро, точное решение и род
- * уравнения. Правая часть НЕ задаётся явно, а строится из точного решения численно
- * (квадратурой) — так тестовые данные остаются согласованными с оператором и
- * квадратурной формулой, а не «зашитыми» константами.
+ * Model problem for the linear Fredholm equation: kernel, exact solution and the kind of
+ * the equation. The right-hand side is NOT given explicitly but built from the exact solution
+ * numerically (by quadrature) — this keeps the test data consistent with the operator and
+ * the quadrature rule instead of hard-wiring constants.
  *
- * Соотношения между точным решением `u*` и правой частью `f`:
- *  - уравнение II рода: `f = u* - K u*`;
- *  - уравнение I рода:  `f = K u*`.
+ * Relations between the exact solution `u*` and the right-hand side `f`:
+ *  - equation of the second kind: `f = u* - K u*`;
+ *  - equation of the first kind:  `f = K u*`.
  *
- * Область интегрирования задаётся не здесь, а сеткой [splines.Grid], передаваемой
- * в оператор: задача описывает только ядро и решение.
+ * The integration domain is defined not here but by the grid [splines.Grid] passed
+ * to the operator: the problem describes only the kernel and the solution.
  *
- * @param name краткое имя задачи, используемое в таблицах и сообщениях тестов.
- * @param kernel ядро `K(t,s)` вместе с аналитическими частными производными.
- * @param exact точное решение `u*(t)` — эталон для вычисления погрешности.
- * @param exactDeriv первая производная точного решения `u*'(t)`; требуется
- *        семействам функционалов де Бура–Фикса `xi^<1>`, `xi^<2>`.
- * @param secondKind `true` — уравнение второго рода, `false` — первого.
- * @param exactDeriv2 вторая производная `u*''(t)`; требуется семейству `xi^<0>`.
- *        Значение по умолчанию (ноль) допустимо ТОЛЬКО когда вторая производная
- *        действительно равна нулю, иначе семейство `xi^<0>` молча получит неверную
- *        правую часть.
+ * @param name short problem name used in tables and test messages.
+ * @param kernel kernel `K(t,s)` together with its analytic partial derivatives.
+ * @param exact exact solution `u*(t)` — the baseline for computing the error.
+ * @param exactDeriv first derivative of the exact solution `u*'(t)`; required
+ *        by the de Boor–Fix functional families `xi^<1>`, `xi^<2>`.
+ * @param secondKind `true` — equation of the second kind, `false` — of the first.
+ * @param exactDeriv2 second derivative `u*''(t)`; required by the family `xi^<0>`.
+ *        The default value (zero) is admissible ONLY when the second derivative
+ *        is indeed zero, otherwise the family `xi^<0>` silently gets a wrong
+ *        right-hand side.
  */
 class FredholmProblem(
     val name: String,
@@ -41,10 +41,10 @@ class FredholmProblem(
     val exactDeriv2: (Double) -> Double = { 0.0 },
 ) {
     /**
-     * Точная правая часть `f(t)`, вычисленная через оператор [op].
+     * Exact right-hand side `f(t)`, computed through the operator [op].
      *
-     * @param t точка вычисления.
-     * @param op оператор Фредгольма, построенный на том же ядре и нужной сетке.
+     * @param t evaluation point.
+     * @param op Fredholm operator built on the same kernel and the required grid.
      */
     fun rhsExact(t: Double, op: FredholmOperator): Double {
         val integral = op.apply(t) { s -> exact(s) }
@@ -52,8 +52,8 @@ class FredholmProblem(
     }
 
     /**
-     * Первая производная правой части `f'(t)`; нужна семействам функционалов,
-     * использующим производную. Для уравнения II рода равна `u*' - d/dt (K u*)`.
+     * First derivative of the right-hand side `f'(t)`; needed by the functional families
+     * that use the derivative. For an equation of the second kind it equals `u*' - d/dt (K u*)`.
      */
     fun rhsExactDeriv(t: Double, op: FredholmOperator): Double {
         val integralD = op.applyDeriv(t) { s -> exact(s) }
@@ -61,8 +61,8 @@ class FredholmProblem(
     }
 
     /**
-     * Вторая производная правой части `f''(t)`; нужна семейству `xi^<0>`.
-     * Для уравнения II рода равна `u*'' - d^2/dt^2 (K u*)`.
+     * Second derivative of the right-hand side `f''(t)`; needed by the family `xi^<0>`.
+     * For an equation of the second kind it equals `u*'' - d^2/dt^2 (K u*)`.
      */
     fun rhsExactDeriv2(t: Double, op: FredholmOperator): Double {
         val integralDD = op.applyDeriv2(t) { s -> exact(s) }
@@ -71,14 +71,14 @@ class FredholmProblem(
 
     companion object {
         /**
-         * Задача с решением из порождающего пространства: `K = e^{t-2s}`, `u* = t^2`.
+         * Problem whose solution lies in the generating space: `K = e^{t-2s}`, `u* = t^2`.
          *
-         * Поскольку `u*` принадлежит `span{1, t, t^2}`, совпадающему с полиномиальной
-         * порождающей системой `phi^B`, метод обязан воспроизводить решение с машинной
-         * точностью. Это делает задачу удобным индикатором ошибок реализации.
+         * Since `u*` belongs to `span{1, t, t^2}`, which coincides with the polynomial
+         * generating system `phi^B`, the method must reproduce the solution to machine
+         * precision. That makes the problem a convenient indicator of implementation errors.
          *
-         * Производные ядра выписаны полностью: `K_t = K`, `K_s = -2K`, `K_tt = K`,
-         * а также `u*'' = 2`.
+         * The kernel derivatives are written out in full: `K_t = K`, `K_s = -2K`, `K_tt = K`,
+         * as well as `u*'' = 2`.
          */
         val F2span = FredholmProblem(
             name = "F2span",
@@ -94,9 +94,9 @@ class FredholmProblem(
         )
 
         /**
-         * Задача с рациональным решением: `K = 1/(1+t+s)`, `u* = 1/(t+1)`.
-         * Решение не лежит ни в одной из порождающих систем, поэтому задача служит
-         * основным инструментом измерения порядка сходимости.
+         * Problem with a rational solution: `K = 1/(1+t+s)`, `u* = 1/(t+1)`.
+         * The solution lies in none of the generating systems, so the problem serves
+         * as the main tool for measuring the convergence order.
          */
         val F2 = FredholmProblem(
             name = "F2",
@@ -112,8 +112,8 @@ class FredholmProblem(
         )
 
         /**
-         * Задача с экспоненциальным решением: `K = e^{-(t-s)^2}`, `u* = e^t`.
-         * Решение согласовано с гиперболической порождающей системой `phi^H`.
+         * Problem with an exponential solution: `K = e^{-(t-s)^2}`, `u* = e^t`.
+         * The solution matches the hyperbolic generating system `phi^H`.
          */
         val F2exp = FredholmProblem(
             name = "F2exp",
@@ -129,10 +129,10 @@ class FredholmProblem(
         )
 
         /**
-         * Некорректная задача ПЕРВОГО рода: `K = e^{-(t-s)^2}`, `u* = e^t`.
-         * Решается методом регуляризации (см. [FredholmFirstKindSolver]).
+         * Ill-posed problem of the FIRST kind: `K = e^{-(t-s)^2}`, `u* = e^t`.
+         * Solved by the regularization method (see [FredholmFirstKindSolver]).
          *
-         * Производные ядра и решения выписаны полностью: `K_s = 2(t-s)K`,
+         * The kernel and solution derivatives are written out in full: `K_s = 2(t-s)K`,
          * `K_tt = (4(t-s)^2 - 2)K`, `u*'' = e^t`.
          */
         val F1 = FredholmProblem(
@@ -151,10 +151,10 @@ class FredholmProblem(
 }
 
 /**
- * Создаёт решатель уравнения второго рода для модельной задачи.
+ * Creates a solver of the equation of the second kind for a model problem.
  *
- * Удобство в том, что правая часть и её производные берутся из самой задачи
- * (вычисляются через точное решение), а множитель перед оператором равен единице.
+ * The convenience is that the right-hand side and its derivatives are taken from the problem
+ * itself (computed through the exact solution), and the multiplier in front of the operator is one.
  */
 fun secondKindSolver(
     problem: FredholmProblem,
@@ -171,9 +171,9 @@ fun secondKindSolver(
 )
 
 /**
- * Создаёт решатель уравнения ПЕРВОГО рода для модельной задачи.
+ * Creates a solver of the equation of the FIRST kind for a model problem.
  *
- * @param alpha параметр регуляризации (см. [FredholmFirstKindSolver.DEFAULT_REGULARIZATION]).
+ * @param alpha regularization parameter (see [FredholmFirstKindSolver.DEFAULT_REGULARIZATION]).
  */
 fun firstKindSolver(
     problem: FredholmProblem,

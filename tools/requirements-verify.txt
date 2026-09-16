@@ -1,12 +1,12 @@
-# Окружение внешней сверки со SciPy/NumPy (задача Gradle `setupScipyVerification`).
+# Environment for the external SciPy/NumPy cross-check (Gradle task `setupScipyVerification`).
 #
-# Версии зафиксированы ЖЁСТКО и намеренно. Сверка — единственная проверка проекта,
-# не замкнутая на его собственный код, поэтому она обязана быть воспроизводимой:
-# при плавающих версиях расхождение невозможно было бы отличить от смены поведения
-# самой SciPy (менялись, например, реализации quad и linalg.solve).
+# The versions are pinned STRICTLY and deliberately. The cross-check is the only project
+# verification that is not closed over the project's own code, so it must be reproducible:
+# with floating versions a discrepancy could not be told apart from a change in the
+# behaviour of SciPy itself (the implementations of quad and linalg.solve, for example, changed).
 #
-# Обновление версий — осознанное действие: после него прогон `./gradlew scipyVerify`
-# должен остаться зелёным, а новые версии — попасть в этот файл (их печатает сам
-# скрипт сверки и записывает в поле `environment` машиночитаемого отчёта).
+# Updating the versions is a deliberate action: afterwards the `./gradlew scipyVerify` run must
+# stay green and the new versions must land in this file (the cross-check script prints them
+# itself and records them in the `environment` field of the machine-readable report).
 scipy==1.18.0
 numpy==2.5.1

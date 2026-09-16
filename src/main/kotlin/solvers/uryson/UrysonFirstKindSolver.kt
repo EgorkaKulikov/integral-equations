@@ -9,31 +9,31 @@ import solvers.core.reportConvergence
 import solvers.core.FirstKindSolution
 
 /**
- * Регуляризованная сплайн-коллокация для нелинейного уравнения Урысона ПЕРВОГО рода
+ * Regularized spline collocation for the nonlinear Uryson equation of the FIRST kind
  * `\int_a^b K(t,s,x(s)) ds = f(t)`.
  *
- * Задача некорректна, поэтому минимизируется функционал Тихонова
- * `||Theta_h(U x_h) - Theta_h(f^delta)||^2 + alpha c^T R_h c`, где стабилизатор
- * `R_h` задан нормой пространства `W^{1,2}`. Минимизация выполняется итерациями
- * Гаусса–Ньютона, а параметр `alpha` выбирается по принципу невязки Морозова.
- * Источники — в `docs/REFERENCES.md`.
+ * The problem is ill-posed, so the Tikhonov functional
+ * `||Theta_h(U x_h) - Theta_h(f^delta)||^2 + alpha c^T R_h c` is minimized, the stabilizer
+ * `R_h` being given by the norm of the space `W^{1,2}`. The minimization is carried out by
+ * Gauss–Newton iterations, and the parameter `alpha` is chosen by Morozov's discrepancy principle.
+ * The sources are in `docs/REFERENCES.md`.
  *
- * Решатель не знает о модельных задачах: зашумлённые данные передаются готовым
- * вектором `theta_j(f^delta)`, который строится средствами пакета `problems.uryson`.
+ * The solver knows nothing about model problems: the noisy data is supplied as a ready
+ * vector `theta_j(f^delta)`, which is built by the `problems.uryson` package.
  *
- * @param tau коэффициент запаса в принципе Морозова; теория требует лишь `tau > 1`.
- * @param gnTol критерий останова Гаусса–Ньютона по норме шага.
- * @param gnMaxIter предел числа итераций Гаусса–Ньютона при фиксированном `alpha`.
- * @param throwOnDivergence поведение при недостижении сходимости Гаусса–Ньютона:
- *        `true` (по умолчанию — как у всех остальных решателей) — исключение,
- *        `false` — возврат последнего приближения. Политика относится к ПУБЛИЧНОМУ
- *        вызову [solveFixedAlpha]. Гомотопия [solveMorozov] от неё отказывается
- *        ЯВНО, передавая `false` на своём вызове: она проходит путь по убывающему
- *        `alpha` десятками шагов с тёплым стартом, и недостижение шагового критерия
- *        на ОТДЕЛЬНОМ `alpha` — штатная часть этого пути (некорректная задача,
- *        промежуточные `alpha` заведомо плохо обусловлены), а не ошибка: итоговое
- *        `alpha` выбирается по принципу невязки Морозова уже из пройденных.
- *        Предупреждение в лог пишется в любом случае.
+ * @param tau safety factor in Morozov's principle; the theory only requires `tau > 1`.
+ * @param gnTol stopping criterion of Gauss–Newton on the step norm.
+ * @param gnMaxIter limit on the number of Gauss–Newton iterations at a fixed `alpha`.
+ * @param throwOnDivergence behaviour when Gauss–Newton fails to converge:
+ *        `true` (the default — as in all the other solvers) — an exception,
+ *        `false` — the last approximation is returned. The policy applies to the PUBLIC
+ *        call [solveFixedAlpha]. The homotopy [solveMorozov] opts out of it
+ *        EXPLICITLY by passing `false` at its own call: it walks a path of decreasing
+ *        `alpha` in dozens of steps with a warm start, and failing the step criterion
+ *        at an INDIVIDUAL `alpha` is a routine part of that path (the problem is ill-posed,
+ *        intermediate `alpha` are bound to be ill-conditioned), not an error: the final
+ *        `alpha` is then chosen by Morozov's discrepancy principle among those visited.
+ *        A warning is written to the log in any case.
  */
 public class UrysonFirstKindSolver(
     public val basis: MinimalSplineBasis,
@@ -47,51 +47,51 @@ public class UrysonFirstKindSolver(
     public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     init {
-        // КРИТИЧНО именно здесь: [solveMorozov] считает стабилизатор `Omega` через
-        // `space.omegaReg` (то есть через `space.ctx.backend`), а систему Гаусса–Ньютона —
-        // через собственный `ctx.backend`. При расхождении две части ОДНОГО критерия
-        // Морозова считались бы разными реализациями LU — молча.
+        // CRITICAL precisely here: [solveMorozov] computes the stabilizer `Omega` through
+        // `space.omegaReg` (i.e. through `space.ctx.backend`), and the Gauss–Newton system
+        // through its own `ctx.backend`. Should they differ, two parts of ONE Morozov
+        // criterion would be computed by different LU implementations — silently.
         NumericsContext.requireSame("UrysonFirstKindSolver", ctx, "funcs", funcs.ctx)
         NumericsContext.requireSame("UrysonFirstKindSolver", ctx, "space", space.ctx)
     }
 
     public companion object {
         /**
-         * Коэффициент запаса в принципе невязки Морозова.
+         * Safety factor in Morozov's discrepancy principle.
          *
-         * Теория требует только `tau > 1`; конкретное значение — выбор реализации:
-         * чем оно ближе к единице, тем меньше сглаживание, но тем выше чувствительность
-         * к неточности оценки уровня шума.
+         * The theory only requires `tau > 1`; the particular value is an implementation choice:
+         * the closer it is to one, the less smoothing, but the higher the sensitivity
+         * to an inaccurate noise level estimate.
          */
         public const val DEFAULT_TAU: Double = 1.1
 
-        /** Критерий останова Гаусса–Ньютона по равномерной норме шага. */
+        /** Stopping criterion of Gauss–Newton on the uniform step norm. */
         public const val DEFAULT_GN_TOLERANCE: Double = 1e-10
 
         /**
-         * Предел итераций Гаусса–Ньютона при фиксированном `alpha`. Метод применяется
-         * внутри гомотопии по параметру регуляризации, где каждый следующий запуск
-         * стартует с предыдущего решения, поэтому большого числа итераций не требуется.
+         * Limit on Gauss–Newton iterations at a fixed `alpha`. The method is applied
+         * inside a homotopy in the regularization parameter, where each next run
+         * starts from the previous solution, so a large number of iterations is not needed.
          */
         public const val DEFAULT_GN_MAX_ITERATIONS: Int = 50
 
-        /** Верхняя граница показателя степени в логарифмической сетке параметра `alpha`. */
+        /** Upper bound of the exponent in the logarithmic grid of the parameter `alpha`. */
         private const val ALPHA_MAX_EXPONENT = 2.0
 
-        /** Нижняя граница показателя степени в логарифмической сетке параметра `alpha`. */
+        /** Lower bound of the exponent in the logarithmic grid of the parameter `alpha`. */
         private const val ALPHA_MIN_EXPONENT = -12.0
 
         /**
-         * Число шагов гомотопии по `alpha`. Вместе с границами показателя задаёт шаг
-         * сетки `10^{-0.25}`: достаточно мелко, чтобы точка Морозова определялась
-         * устойчиво, и достаточно грубо, чтобы весь путь считался за разумное время.
+         * Number of homotopy steps in `alpha`. Together with the exponent bounds it fixes the
+         * grid step `10^{-0.25}`: fine enough for the Morozov point to be determined
+         * robustly, and coarse enough for the whole path to be computed in reasonable time.
          */
         private const val ALPHA_PATH_STEPS = 56
 
         /**
-         * Порог, ниже которого тёплый старт считается вырожденным и заменяется
-         * проекцией постоянной функции. Нужен для ядер с `dK/du(t,s,0) = 0`, где
-         * из нулевого приближения якобиан обращается в ноль.
+         * Threshold below which the warm start is deemed degenerate and replaced by the
+         * projection of a constant function. Needed for kernels with `dK/du(t,s,0) = 0`, where
+         * the Jacobian vanishes at a zero initial guess.
          */
         private const val DEGENERATE_START_THRESHOLD = 1e-8
     }
@@ -102,32 +102,32 @@ public class UrysonFirstKindSolver(
     private val weights = space.weights
     private val gramR = space.gramR
 
-    /** Вектор значений функционалов `theta_j(f)` для произвольной правой части. */
+    /** Vector of functional values `theta_j(f)` for an arbitrary right-hand side. */
     public fun thetaOf(f: (Double) -> Double): DoubleArray =
         DoubleArray(n + 2) { funcs.valueFunctional(it - 2).applyTo(f) }
 
     /**
-     * Решает регуляризованную задачу при ФИКСИРОВАННОМ `alpha` методом Гаусса–Ньютона.
+     * Solves the regularized problem at a FIXED `alpha` by the Gauss–Newton method.
      *
-     * Шаг определяется системой
+     * The step is defined by the system
      * `(B^T W_h B + alpha R_h) delta = -B^T W_h (Xi - theta(f^delta)) - alpha R_h c`.
      *
-     * Политика реакции на недостижение сходимости берётся из [throwOnDivergence];
-     * гомотопия [solveMorozov] вызывает внутреннюю перегрузку и отказывается от неё явно.
+     * The policy for failure to converge is taken from [throwOnDivergence];
+     * the homotopy [solveMorozov] calls the internal overload and opts out of it explicitly.
      *
-     * @param thetaFDelta вектор `theta_j(f^delta)` зашумлённых данных.
-     * @param alpha параметр регуляризации, строго положительный.
-     * @param c0 начальное приближение коэффициентов.
+     * @param thetaFDelta vector `theta_j(f^delta)` of the noisy data.
+     * @param alpha regularization parameter, strictly positive.
+     * @param c0 initial guess for the coefficients.
      */
     public fun solveFixedAlpha(thetaFDelta: DoubleArray, alpha: Double, c0: DoubleArray): DoubleArray =
         solveFixedAlpha(thetaFDelta, alpha, c0, throwOnDivergence)
 
     /**
-     * Реализация шага по фиксированному `alpha` с ЯВНОЙ политикой расходимости.
+     * Implementation of the step at a fixed `alpha` with an EXPLICIT divergence policy.
      *
-     * Отдельная перегрузка нужна ровно затем, чтобы [solveMorozov] мог пройти путь по
-     * параметру регуляризации с `throwOnDivergence = false`, не меняя политику,
-     * заказанную вызывающим для публичного [solveFixedAlpha].
+     * A separate overload is needed exactly so that [solveMorozov] can walk the path in the
+     * regularization parameter with `throwOnDivergence = false` without changing the policy
+     * requested by the caller for the public [solveFixedAlpha].
      */
     private fun solveFixedAlpha(
         thetaFDelta: DoubleArray,
@@ -135,7 +135,7 @@ public class UrysonFirstKindSolver(
         c0: DoubleArray,
         throwOnDivergence: Boolean,
     ): DoubleArray {
-        require(alpha > 0.0) { "Параметр регуляризации alpha должен быть положительным, получено alpha=$alpha" }
+        require(alpha > 0.0) { "regularization parameter alpha must be positive, got alpha=$alpha" }
         val c = c0.copyOf()
         var lastStep = Double.NaN
         repeat(gnMaxIter) {
@@ -155,18 +155,18 @@ public class UrysonFirstKindSolver(
         reportConvergence(
             converged = false,
             throwOnDivergence = throwOnDivergence,
-            methodName = "Гаусс–Ньютон (Урысон, I род, alpha=$alpha)",
+            methodName = "Gauss-Newton (Uryson, first kind, alpha=$alpha)",
             iterations = gnMaxIter,
             maxIterations = gnMaxIter,
             residual = lastStep,
             tolerance = gnTol,
-            hint = "На отдельном alpha это ожидаемо внутри гомотопии по параметру " +
-                "регуляризации; итоговое alpha выбирается по принципу невязки Морозова",
+            hint = "at an individual alpha this is expected inside the homotopy in the regularization " +
+                "parameter; the final alpha is chosen by Morozov's discrepancy principle",
         )
         return c
     }
 
-    /** Дискретная невязка `res_h = ||Theta_h(U x_h) - Theta_h(f^delta)||` во взвешенной норме. */
+    /** Discrete residual `res_h = ||Theta_h(U x_h) - Theta_h(f^delta)||` in the weighted norm. */
     public fun residual(c: DoubleArray, thetaFDelta: DoubleArray): Double {
         val xi = core.xiVector(c)
         var s = 0.0
@@ -178,34 +178,34 @@ public class UrysonFirstKindSolver(
     }
 
     /**
-     * Выбирает `alpha` по принципу невязки Морозова: наибольшее значение, при котором
+     * Chooses `alpha` by Morozov's discrepancy principle: the largest value at which
      * `res_h(alpha) <= tau * C_theta * sqrt(b - a) * delta`.
      *
-     * Реализовано гомотопией по УБЫВАЮЩЕМУ `alpha` с тёплым стартом: решение при
-     * очередном значении служит начальным приближением для следующего. Для некорректной
-     * задачи это заметно стабилизирует Гаусса–Ньютона и делает невязку монотонной.
+     * Implemented as a homotopy in DECREASING `alpha` with a warm start: the solution at
+     * one value serves as the initial guess for the next. For an ill-posed
+     * problem this markedly stabilizes Gauss–Newton and makes the residual monotone.
      *
-     * Если цель недостижима на всём пути (например, на слишком грубой сетке),
-     * возвращается решение с наименьшей достигнутой невязкой — без «раскачки» решения.
+     * If the target is unreachable along the whole path (on too coarse a grid, say),
+     * the solution with the smallest residual attained is returned — without "rocking" the solution.
      *
-     * НЕЯВНАЯ ЗАВИСИМОСТЬ ОЦЕНКИ ШУМА ОТ ТИПА [funcs]. Множитель
-     * `funcs.cChi()` в `barDelta` — коэффициент усиления возмущения входных
-     * данных функционалами `theta_j`. Он корректен ИМЕННО потому, что тип
-     * параметра [funcs] ограничен [ProjFunctionals] — семейством функционалов-
-     * ЗНАЧЕНИЙ (`usesDerivative` там есть константа `false`). Для них
-     * `cChi()` действительно равен норме (квази)проектора на возмущениях значений.
+     * IMPLICIT DEPENDENCE OF THE NOISE ESTIMATE ON THE TYPE OF [funcs]. The factor
+     * `funcs.cChi()` in `barDelta` is the amplification factor of a perturbation of the input
+     * data by the functionals `theta_j`. It is correct PRECISELY because the type of the
+     * parameter [funcs] is restricted to [ProjFunctionals] — a family of VALUE
+     * functionals (`usesDerivative` there is the constant `false`). For them
+     * `cChi()` is indeed the norm of the (quasi-)projector on perturbations of values.
      *
-     * Расширение типа [funcs] до общего `FunctionalFamily` ПОТРЕБУЕТ пересмотра
-     * этой оценки: для семейств с производными (xi) `cChi()` оценкой усиления
-     * шума не является и ведёт себя по `h` качественно противоположно (см. KDoc
-     * `splines.functionals.FunctionalFamily.cChi` и `numerics.functionals.DerivFunctional`).
+     * Widening the type of [funcs] to the generic `FunctionalFamily` WILL REQUIRE revisiting
+     * this estimate: for families with derivatives (xi) `cChi()` is not an amplification
+     * estimate and behaves in `h` in a qualitatively opposite way (see the KDoc of
+     * `splines.functionals.FunctionalFamily.cChi` and `numerics.functionals.DerivFunctional`).
      *
-     * @param thetaFDelta вектор `theta_j(f^delta)` зашумлённых данных.
-     * @param delta уровень шума в норме `L^2`; при `delta = 0` путь проходится целиком.
+     * @param thetaFDelta vector `theta_j(f^delta)` of the noisy data.
+     * @param delta noise level in the `L^2` norm; at `delta = 0` the whole path is walked.
      */
     public fun solveMorozov(thetaFDelta: DoubleArray, delta: Double): FirstKindSolution {
-        // Корректность cChi() как коэффициента усиления шума держится на том, что
-        // funcs — ProjFunctionals (функционалы-значения). См. KDoc метода.
+        // The correctness of cChi() as a noise amplification factor rests on funcs being
+        // a ProjFunctionals (value functionals). See the KDoc of the method.
         val barDelta = funcs.cChi() * Math.sqrt(grid.b - grid.a) * delta
         val target = tau * barDelta
         val initialGuess = funcs.projectorCoeffs({ 1.0 })
@@ -223,12 +223,12 @@ public class UrysonFirstKindSolver(
             } else {
                 c
             }
-            // Расходимость на ОТДЕЛЬНОМ alpha — штатная часть пути, а не ошибка:
-            // политика решателя здесь отключается явно (см. KDoc [throwOnDivergence]).
+            // Divergence at an INDIVIDUAL alpha is a routine part of the path, not an error:
+            // the solver policy is disabled here explicitly (see the KDoc of [throwOnDivergence]).
             c = solveFixedAlpha(thetaFDelta, alpha, start, throwOnDivergence = false)
             val res = residual(c, thetaFDelta)
             if (delta == 0.0) {
-                // Шума нет: критерий Морозова вырождается, идём до наименьшего alpha.
+                // No noise: the Morozov criterion degenerates, we go down to the smallest alpha.
                 val coeffs = c.copyOf()
                 chosen = FirstKindSolution(
                     coeffs, { t -> basis.evalSpline(coeffs, t) }, alpha, res, space.omegaReg(coeffs),
@@ -252,6 +252,6 @@ public class UrysonFirstKindSolver(
         }
         return chosen
             ?: bestFallback
-            ?: error("Путь по параметру регуляризации пуст: проверьте ALPHA_PATH_STEPS.")
+            ?: error("the path in the regularization parameter is empty: check ALPHA_PATH_STEPS.")
     }
 }

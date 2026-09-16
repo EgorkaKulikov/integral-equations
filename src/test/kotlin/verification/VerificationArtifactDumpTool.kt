@@ -3,25 +3,25 @@ package verification
 import kotlin.test.Test
 
 /**
- * ГЕНЕРАТОР ДАННЫХ ДЛЯ РУЧНОГО РАЗБОРА (не проверка).
+ * A DATA GENERATOR FOR MANUAL ANALYSIS (not a check).
  *
- * Выгружает внутренние артефакты вычислений в `build/verification/` задачей Gradle
- * `dumpVerificationArtifacts`, не запуская сверку. Нужен, когда расхождение уже
- * обнаружено и требуется исследовать выгруженные числа вручную (или прогнать по ним
- * собственный скрипт), не дожидаясь тестового прогона.
+ * It dumps the internal computation artifacts into `build/verification/` by the Gradle task
+ * `dumpVerificationArtifacts`, without running the cross-check. It is needed when a discrepancy is already
+ * detected and the dumped numbers have to be investigated by hand (or processed by one's
+ * own script), without waiting for a test run.
  *
- * Для АВТОМАТИЧЕСКОЙ сверки этот класс не нужен: смоук-тест
- * [ScipyCrossVerificationTest] готовит артефакты сам через [VerificationArtifacts],
- * поэтому не зависит от того, запускалась ли перед ним данная задача.
+ * For the AUTOMATIC cross-check this class is not needed: the smoke test
+ * [ScipyCrossVerificationTest] prepares the artifacts itself through [VerificationArtifacts],
+ * so it does not depend on whether this task was run before it.
  *
- * Из обычного `test` исключён (см. `build.gradle.kts`): это не проверка, а генератор.
+ * It is excluded from the ordinary `test` (see `build.gradle.kts`): this is not a check but a generator.
  */
 class VerificationArtifactDumpTool {
 
     @Test
     fun dumpAllArtifacts() {
         val files = VerificationArtifacts.dumpAll()
-        println("Выгружено файлов: ${files.size}")
-        for (file in files) println("  ${file.absolutePath} (${file.length()} байт)")
+        println("Files dumped: ${files.size}")
+        for (file in files) println("  ${file.absolutePath} (${file.length()} bytes)")
     }
 }

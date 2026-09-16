@@ -14,26 +14,26 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Тесты КОМБИНИРОВАННОГО оператора Nyström для уравнения Вольтерры.
+ * Tests of the COMBINED Nyström operator for the Volterra equation.
  *
- * ВНИМАНИЕ: в отличие от уравнения Фредгольма, для Вольтерры теоретических оценок
- * суперсходимости в известной литературе НЕТ (переменный верхний предел даёт
- * t-зависимые веса и усечение последней ячейки).
+ * ATTENTION: unlike the Fredholm equation, for Volterra there are NO theoretical
+ * superconvergence estimates in the known literature (the variable upper limit gives
+ * t-dependent weights and a truncation of the last cell).
  *
- * ЗАФИКСИРОВАННОЕ ЧИСЛЕННОЕ НАБЛЮДЕНИЕ (измерено на модельных задачах, базис B,
- * семейство theta, сетки n = 8, 16, 32):
+ * THE RECORDED NUMERICAL OBSERVATION (measured on the model problems, basis B,
+ * family theta, grids n = 8, 16, 32):
  *
- *  - для уравнения Фредгольма комбинированный оператор поднимает наблюдаемый порядок
- *    примерно с 4.2 до 7.0, что согласуется с опубликованной оценкой O(h^7);
- *  - для уравнения Вольтерры такого эффекта НЕТ. На задаче V2 комбинированный
- *    оператор даже уступает классической квадратуре (1.3e-5 против 1.0e-5 при n=8),
- *    на V2exp и V2span немного выигрывает (примерно в 1.5–1.7 раза), а наблюдаемый
- *    порядок обоих вариантов остаётся около 3.8.
+ *  - for the Fredholm equation the combined operator raises the observed order
+ *    from about 4.2 to 7.0, which agrees with the published estimate O(h^7);
+ *  - for the Volterra equation there is NO such effect. On the problem V2 the combined
+ *    operator is even worse than the classical quadrature (1.3e-5 against 1.0e-5 at n=8),
+ *    on V2exp and V2span it wins slightly (by about 1.5-1.7 times), while the observed
+ *    order of both variants stays around 3.8.
  *
- * Поэтому тесты НЕ утверждают превосходства комбинированного оператора для Вольтерры:
- * они проверяют лишь корректность реализации (конечность, сходимость при измельчении,
- * согласованность итерированного варианта). Утверждать здесь суперсходимость было бы
- * подгонкой выводов под теорию, полученную для другого класса уравнений.
+ * Therefore the tests do NOT claim a superiority of the combined operator for Volterra:
+ * they check only the correctness of the implementation (finiteness, convergence under refinement,
+ * the consistency of the iterated variant). Claiming superconvergence here would be
+ * fitting the conclusions to a theory obtained for another class of equations.
  */
 @Tag("fast")
 class CombinedNystromVolterraTest {
@@ -55,12 +55,12 @@ class CombinedNystromVolterraTest {
     }
 
     /**
-     * Комбинированный оператор даёт результат ТОГО ЖЕ ПОРЯДКА ТОЧНОСТИ, что и классическая
-     * квадратура (в пределах одного десятичного порядка в обе стороны).
+     * The combined operator gives a result OF THE SAME ORDER OF ACCURACY as the classical
+     * quadrature (within one decimal order in both directions).
      *
-     * Проверяется именно сопоставимость, а не превосходство: как отмечено в описании
-     * класса, для уравнения Вольтерры выигрыша от комбинированного оператора не
-     * наблюдается, и тест фиксирует это положение дел честно.
+     * What is checked is exactly comparability and not superiority: as noted in the description of the
+     * class, for the Volterra equation no gain from the combined operator is
+     * observed, and the test records this state of affairs honestly.
      */
     @Test
     fun combinedIsComparableToClassical() {
@@ -72,14 +72,14 @@ class CombinedNystromVolterraTest {
                 val combinedError = errorEh(exact, solver.combinedNystrom().eval, grid)
                 assertTrue(
                     combinedError < 10.0 * classicalError && classicalError < 10.0 * combinedError,
-                    "${problem.name}, n=$n: комбинированный ($combinedError) и классический " +
-                        "($classicalError) должны быть сопоставимы по точности",
+                    "${problem.name}, n=$n: the combined ($combinedError) and the classical " +
+                        "($classicalError) must be comparable in accuracy",
                 )
             }
         }
     }
 
-    /** Результаты конечны и сходятся при измельчении сетки. */
+    /** The results are finite and converge under grid refinement. */
     @Test
     fun combinedConvergesUnderRefinement() {
         val problem = VolterraProblem.V2
@@ -88,11 +88,11 @@ class CombinedNystromVolterraTest {
             val (solver, grid) = solverFor(problem, n)
             errorEh(exact, solver.combinedNystrom().eval, grid)
         }
-        assertTrue(errors.all { it.isFinite() }, "Все значения должны быть конечны: $errors")
-        assertTrue(errors[1] < errors[0] && errors[2] < errors[1], "Ошибка должна убывать: $errors")
+        assertTrue(errors.all { it.isFinite() }, "All the values must be finite: $errors")
+        assertTrue(errors[1] < errors[0] && errors[2] < errors[1], "The error must decrease: $errors")
     }
 
-    /** Итерированный вариант не хуже исходного. */
+    /** The iterated variant is no worse than the original one. */
     @Test
     fun iteratedCombinedIsNotWorse() {
         val problem = VolterraProblem.V2
@@ -103,7 +103,7 @@ class CombinedNystromVolterraTest {
             val iteratedError = errorEh(exact, solver.iteratedCombinedNystrom().eval, grid)
             assertTrue(
                 iteratedError <= combinedError * 1.001,
-                "n=$n: итерированный ($iteratedError) не должен быть хуже исходного ($combinedError)",
+                "n=$n: the iterated one ($iteratedError) must not be worse than the original one ($combinedError)",
             )
         }
     }

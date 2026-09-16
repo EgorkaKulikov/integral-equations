@@ -19,17 +19,17 @@ import solvers.fredholm.FredholmOperator
 import solvers.fredholm.FredholmSecondKindSolver
 
 /**
- * Демонстрационная печать таблиц сходимости для линейных уравнений Фредгольма.
+ * Demonstration printout of convergence tables for linear Fredholm equations.
  *
- * Это не часть библиотеки, а иллюстрация её применения: код собирает решатели на
- * последовательности сгущающихся сеток, вычисляет погрешность `E_h` и наблюдаемый
- * порядок `p_h` и выводит результат в консоль.
+ * This is not part of the library but an illustration of its use: the code builds solvers on
+ * a sequence of refined grids, computes the error `E_h` and the observed
+ * order `p_h`, and prints the result to the console.
  */
 object Tables {
-    /** Последовательность сеток: каждое следующее значение вдвое мельче предыдущего. */
+    /** Sequence of grids: each next value is twice as fine as the previous one. */
     private val GRID_SIZES = listOf(8, 16, 32, 64)
 
-    /** Квадратура для всех демонстраций: порядок заведомо выше порядка аппроксимации. */
+    /** Quadrature for all demonstrations: the order is deliberately above the approximation order. */
     private val quad = GaussLegendre(8)
 
     private fun makeSolver(
@@ -54,8 +54,8 @@ object Tables {
     }
 
     /**
-     * Создаёт семейство функционалов по его краткому имени.
-     * @throws IllegalArgumentException при неизвестном имени (защита от опечаток).
+     * Creates a functional family from its short name.
+     * @throws IllegalArgumentException on an unknown name (protection against typos).
      */
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
         "theta" -> ProjFunctionals(basis)
@@ -64,15 +64,15 @@ object Tables {
         "xi2" -> DeBoorFixFunctionals(basis, 2)
         "mu" -> AveragingFunctionals(basis)
         "lambda" -> ThreePointFunctionals(basis)
-        else -> throw IllegalArgumentException("Неизвестное семейство функционалов: '$name'")
+        else -> throw IllegalArgumentException("unknown functional family: '$name'")
     }
 
-    /** Сходимость трёх семейств де Бура–Фикса (r = 0, 1, 2) на базисах B, H, T. */
+    /** Convergence of the three de Boor–Fix families (r = 0, 1, 2) on the bases B, H, T. */
     fun tableDeBoorFix(problem: FredholmProblem) {
-        println("\n--- ${problem.name}: функционалы де Бура--Фикса xi<0>, xi<1>, xi<2>, базисы B/H/T ---")
-        val schemes = listOf("база", "Слоан", "Кулк", "ит.Кулк")
+        println("\n--- ${problem.name}: de Boor--Fix functionals xi<0>, xi<1>, xi<2>, bases B/H/T ---")
+        val schemes = listOf("base", "Sloan", "Kulk", "it.Kulk")
         for (familyName in listOf("xi0", "xi1", "xi2")) {
-            println("  семейство $familyName:")
+            println("  family $familyName:")
             for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
                 val errors = schemes.map { ArrayList<Double>() }
                 for (n in GRID_SIZES) {
@@ -84,7 +84,7 @@ object Tables {
                     errors[3].add(errorEh(exact, solver.iteratedKulkarni().eval, grid))
                 }
                 val observedOrders = schemes.indices.map { orders(errors[it]) }
-                println("   базис ${system.name}:")
+                println("   basis ${system.name}:")
                 for (i in GRID_SIZES.indices) {
                     println(
                         "     n=%4d | ".format(GRID_SIZES[i]) +
@@ -97,9 +97,9 @@ object Tables {
         }
     }
 
-    /** Базовая схема с функционалами theta на трёх порождающих системах: E_h, p_h, C_h. */
+    /** Base scheme with the theta functionals on the three generating systems: E_h, p_h, C_h. */
     fun tablePhi(problem: FredholmProblem) {
-        println("\n--- ${problem.name}: theta, базисы B/H/T (E_h, p_h, C_h) ---")
+        println("\n--- ${problem.name}: theta, bases B/H/T (E_h, p_h, C_h) ---")
         for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
             val errors = ArrayList<Double>()
             val steps = ArrayList<Double>()
@@ -109,9 +109,9 @@ object Tables {
                 errors.add(errorEh({ t -> problem.exact(t) }, solver.base().eval, grid))
             }
             val observedOrders = orders(errors)
-            println("  базис ${system.name}:")
+            println("  basis ${system.name}:")
             for (i in GRID_SIZES.indices) {
-                // C_h = E_h / h^3: асимптотическая константа при теоретическом порядке 3.
+                // C_h = E_h / h^3: the asymptotic constant at the theoretical order 3.
                 val constant = errors[i] / Math.pow(steps[i], 3.0)
                 println(
                     "   n=%4d h=%s E_h=%s p_h=%s C_h=%s".format(
@@ -123,13 +123,13 @@ object Tables {
         }
     }
 
-    /** Сравнение схем: базовая, Слоан, Кулкарни, итерированный Кулкарни. */
+    /** Comparison of the schemes: base, Sloan, Kulkarni, iterated Kulkarni. */
     fun tableMethods(problem: FredholmProblem, system: GeneratingSystem) {
         println(
-            "\n--- ${problem.name}: базис ${system.name}, theta: " +
-                "база/Слоан/Кулкарни/итер.Кулкарни (E_h, p_h) ---",
+            "\n--- ${problem.name}: basis ${system.name}, theta: " +
+                "base/Sloan/Kulkarni/iter.Kulkarni (E_h, p_h) ---",
         )
-        val names = listOf("база", "Слоан", "Кулк", "ит.Кулк")
+        val names = listOf("base", "Sloan", "Kulk", "it.Kulk")
         val errors = names.map { ArrayList<Double>() }
         for (n in GRID_SIZES) {
             val (solver, grid) = makeSolver(problem, system, "theta", n)
@@ -142,9 +142,9 @@ object Tables {
         printComparison(names, errors)
     }
 
-    /** Сравнение семейств функционалов theta / xi / mu / lambda на базовой схеме. */
+    /** Comparison of the functional families theta / xi / mu / lambda on the base scheme. */
     fun tableFamilies(problem: FredholmProblem, system: GeneratingSystem) {
-        println("\n--- ${problem.name}: базис ${system.name}, базовая схема, семейства (E_h, p_h) ---")
+        println("\n--- ${problem.name}: basis ${system.name}, base scheme, families (E_h, p_h) ---")
         for (familyName in listOf("theta", "xi", "mu", "lambda")) {
             val errors = ArrayList<Double>()
             for (n in GRID_SIZES) {
@@ -162,16 +162,16 @@ object Tables {
     }
 
     /**
-     * Сравнение схем Nyström: классическая («голая» квадратура) и комбинированный
-     * оператор `L_n = P_chi L + (I - P_chi) L^N_h`, к которому и относятся
-     * опубликованные оценки суперсходимости (см. `docs/REFERENCES.md`).
+     * Comparison of the Nyström schemes: the classical one ("bare" quadrature) and the combined
+     * operator `L_n = P_chi L + (I - P_chi) L^N_h`, to which the published superconvergence
+     * estimates apply (see `docs/REFERENCES.md`).
      */
     fun tableNystrom(problem: FredholmProblem, system: GeneratingSystem) {
         println(
-            "\n--- ${problem.name}: базис ${system.name}, theta: " +
-                "база/Слоан/Nyström/итер.Nyström/комб.Nyström/итер.комб. (E_h, p_h) ---",
+            "\n--- ${problem.name}: basis ${system.name}, theta: " +
+                "base/Sloan/Nyström/iter.Nyström/comb.Nyström/iter.comb (E_h, p_h) ---",
         )
-        val names = listOf("база", "Слоан", "Nyst", "ит.Nyst", "комб.Nyst", "ит.комб")
+        val names = listOf("base", "Sloan", "Nyst", "it.Nyst", "comb.Nyst", "it.comb")
         val errors = names.map { ArrayList<Double>() }
         for (n in GRID_SIZES) {
             val (solver, grid) = makeSolver(problem, system, "theta", n)
@@ -187,16 +187,16 @@ object Tables {
     }
 
     /**
-     * Уравнение первого рода, решаемое методом регуляризации.
+     * Equation of the first kind, solved by the regularization method.
      *
-     * Публикуются только базовая схема и итерация Слоана: схема Кулкарни использует
-     * матрицу `M2`, элементы которой растут как `alpha^{-2}`, и при `alpha = 1e-10`
-     * численно неприменима.
+     * Only the base scheme and the Sloan iteration are published: the Kulkarni scheme uses
+     * the matrix `M2`, whose entries grow as `alpha^{-2}`, and at `alpha = 1e-10`
+     * it is numerically inapplicable.
      */
     fun tableFirstKind() {
         val alpha = 1e-10
-        println("\n--- F1 (регуляризация, alpha=$alpha), базис H, theta: база/Слоан ---")
-        println("    Примечание: обусловленность растёт как alpha^{-1}; alpha подобрано экспериментально.")
+        println("\n--- F1 (regularization, alpha=$alpha), basis H, theta: base/Sloan ---")
+        println("    Note: the conditioning grows as alpha^{-1}; alpha was tuned experimentally.")
         val problem = FredholmProblem.F1
         for (n in listOf(8, 16, 32)) {
             val grid = Grid.uniform(n)
@@ -206,11 +206,11 @@ object Tables {
             val exact = { t: Double -> problem.exact(t) }
             val baseError = errorEh(exact, solver.base().eval, grid)
             val sloanError = errorEh(exact, solver.sloan().eval, grid)
-            println("   n=%4d E_h(база)=%s E_h(Слоан)=%s".format(n, Fmt.e(baseError), Fmt.e(sloanError)))
+            println("   n=%4d E_h(base)=%s E_h(Sloan)=%s".format(n, Fmt.e(baseError), Fmt.e(sloanError)))
         }
     }
 
-    /** Печатает построчное сравнение нескольких схем с их наблюдаемыми порядками. */
+    /** Prints a line-by-line comparison of several schemes with their observed orders. */
     private fun printComparison(names: List<String>, errors: List<List<Double>>) {
         val observedOrders = names.indices.map { orders(errors[it]) }
         for (i in GRID_SIZES.indices) {
@@ -225,18 +225,18 @@ object Tables {
 }
 
 /**
- * Точка входа демонстрации: печатает таблицы сходимости для двух задач второго рода
- * и одной задачи первого рода.
+ * Entry point of the demonstration: prints convergence tables for two problems of the second kind
+ * and one problem of the first kind.
  *
- * Корректность вычислительного ядра проверяется тестами (`./gradlew fastTest`), а не
- * этой программой.
+ * The correctness of the computational core is verified by tests (`./gradlew fastTest`), not
+ * by this program.
  */
 fun main() {
     println("=".repeat(72))
-    println("Уравнения Фредгольма: таблицы сходимости")
+    println("Fredholm equations: convergence tables")
     println("=".repeat(72))
 
-    // Две задачи второго рода: рациональное решение и экспоненциальное.
+    // Two problems of the second kind: with a rational and with an exponential solution.
     val secondKindExamples = listOf(
         FredholmProblem.F2 to GeneratingSystem.B,
         FredholmProblem.F2exp to GeneratingSystem.B,
@@ -250,5 +250,5 @@ fun main() {
     }
 
     Tables.tableFirstKind()
-    println("\nРасчёт завершён.")
+    println("\nComputation finished.")
 }

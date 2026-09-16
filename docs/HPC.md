@@ -1,59 +1,62 @@
-# Вычислительная эффективность и HPC-готовность
+# Computational efficiency and HPC readiness
 
-Документ описывает, как кодовая база адаптирована под требование о вычислительной
-эффективности и пригодности для высокопроизводительных вычислительных сред.
+The document describes how the code base is adapted to the requirement of computational
+efficiency and of suitability for high-performance computing environments.
 
-## Целевой режим
+## Target regime
 
-Плотные матрицы, размер системы `dim = n + 2` (n — число узлов сетки). Практический
-предел на настольной машине — порядка N ~ 10³: сложность O(N³) даёт при N = 258
-около 0.13 с на полное решение, при N ~ 10³ — единицы секунд, а при N ~ 10⁴ речь
-идёт уже о часах. Узкие места: (1) сборка матриц проекционно-коллокационных схем,
-(2) плотная линейная алгебра O(N³).
+Dense matrices, system size `dim = n + 2` (n being the number of grid nodes). The practical
+limit on a desktop machine is of the order N ~ 10³: an O(N³) complexity gives about 0.13 s
+per full solution at N = 258, a few seconds at N ~ 10³, and already hours at N ~ 10⁴. The
+bottlenecks are: (1) assembly of the matrices of the projection-collocation schemes,
+(2) dense linear algebra of O(N³).
 
-## Архитектура ускорения
+## Acceleration architecture
 
-Два уровня ускорения — нативный BLAS для плотной линейной алгебры и многоядерная
-сборка матриц — реализованы в библиотеке `numerical-core` (`numerics.LinearAlgebra`
-поверх multik/OpenBLAS с эталоном `numerics.ReferenceLinearAlgebra`;
-`numerics.ParallelAssembly` через `IntStream.parallel()`; SPI бэкендов
-`numerics.backend.LinAlgBackend`/`Backends` с автоматическим откатом на
-`ReferenceBackend` и точкой расширения под GPU). Их устройство, гарантии семантики и
-выбор бэкенда свойством `-Dnumerics.backend=multik|reference` описаны в
+Two levels of acceleration — native BLAS for dense linear algebra and multi-core matrix
+assembly — are implemented in the library `numerical-core` (`numerics.LinearAlgebra` on top of
+multik/OpenBLAS with the reference implementation `numerics.ReferenceLinearAlgebra`;
+`numerics.ParallelAssembly` through `IntStream.parallel()`; the backend SPI
+`numerics.backend.LinAlgBackend`/`Backends` with an automatic fallback to
+`ReferenceBackend` and an extension point for a GPU). Their design, the semantic guarantees and
+the selection of a backend by the property `-Dnumerics.backend=multik|reference` are described
+in
 [`numerical-core/docs/PERFORMANCE.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/PERFORMANCE.md).
 
-Здесь, в решателях, параллельная сборка подключена в горячих местах:
-`matrixM`/`matrixM2` (Fredholm, Volterra), B-матрица и якобианы Ньютона/Кулкарни
-(Uryson). Намеренно оставлены последовательными (документировано в коде):
-симметричная сборка матрицы Грама (перекрёстные записи), scatter-add аккумуляция и
-конечно-разностный якобиан Ньютона–Нюстрёма (общий изменяемый вектор `x`). Флаг
-параллелизма приходит через `NumericsContext.parallel` и на результат не влияет:
-сборка побитово идентична (`solvers.core.NumericsContextWiringTest`).
+Here, in the solvers, parallel assembly is enabled in the hot spots:
+`matrixM`/`matrixM2` (Fredholm, Volterra), the B matrix and the Newton/Kulkarni Jacobians
+(Uryson). Deliberately left sequential (as documented in the code): the symmetric assembly of
+the Gram matrix (cross writes), the scatter-add accumulation and the finite-difference
+Newton–Nyström Jacobian (a shared mutable vector `x`). The parallelism flag arrives through
+`NumericsContext.parallel` and does not affect the result: the assembly is bitwise identical
+(`solvers.core.NumericsContextWiringTest`).
 
-Все наблюдаемые выходы решателей защищены характеризационным тестом, фиксирующим
-1366 численных значений с относительным допуском 1e-9
-(`characterization.EhCharacterizationTest`); эталон снят на бэкенде multik и к нему
-привязан (см. `docs/TESTING.md`).
+All observable outputs of the solvers are protected by a characterization test that records
+1366 numerical values with a relative tolerance of 1e-9
+(`characterization.EhCharacterizationTest`); the baseline was captured on the multik backend
+and is bound to it (see `docs/TESTING.md`).
 
-## Бенчмарк
+## Benchmark
 
 ```
 ./gradlew runBenchmark
 ```
 
-Выводит две таблицы:
-- (A) масштабирование: время полного решения (построение решателя, сборка матрицы,
-  решение СЛАУ) в зависимости от N, с медианой, минимумом, максимумом и разбросом;
-- (B) масштабируемость сборки матрицы по числу потоков 1, 2, 4, 8, ... с ускорением,
-  эффективностью и оценкой последовательной доли по формуле Карпа–Флэтта.
+It prints two tables:
+- (A) scaling: the time of a full solution (construction of the solver, assembly of the matrix,
+  solution of the linear system) as a function of N, with the median, the minimum, the maximum
+  and the spread;
+- (B) scalability of the matrix assembly over 1, 2, 4, 8, ... threads, with the speedup,
+  the efficiency and an estimate of the serial fraction by the Karp–Flatt formula.
 
-Число потоков задаётся ЯВНО через выделенный `ForkJoinPool`, а не берётся из общего
-пула: иначе оно не является управляемым параметром эксперимента. Прогрев выполняется
-перед каждой серией измерений. Бенчмарк печатает конфигурацию окружения, включая
-активный бэкенд линейной алгебры, и умеет выгружать результаты в CSV.
+The number of threads is set EXPLICITLY through a dedicated `ForkJoinPool` rather than taken
+from the common pool: otherwise it would not be a controllable parameter of the experiment.
+A warm-up is performed before every measurement series. The benchmark prints the configuration
+of the environment, including the active linear-algebra backend, and is able to export the
+results to CSV.
 
-Актуальные измерения и оговорки об их ограничениях приведены в README, раздел
-«Производительность». Важное уточнение по методике: ранее построение решателя
-выполнялось до запуска таймера, поэтому предвычислительная фаза (доминирующая при
-больших N) в замер не попадала и время «полного решения» оказывалось существенно
-заниженным.
+The current measurements and the caveats about their limitations are given in the README,
+section "Performance". An important clarification on the methodology: previously the
+construction of the solver was performed before the timer was started, so the precomputation
+phase (which dominates at large N) did not enter the measurement and the time of a "full
+solution" turned out to be substantially understated.

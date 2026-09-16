@@ -22,63 +22,63 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * ПОРЯДОК СХОДИМОСТИ как проверяемое свойство (средство «По» в `docs/REFERENCES.md`).
+ * THE CONVERGENCE ORDER as a checkable property (the means "Po" in `docs/REFERENCES.md`).
  *
- * ЗАЧЕМ ЭТОТ ТЕСТ СУЩЕСТВУЕТ, если уже есть `baseline-eh.tsv` на 1366 значений.
- * Характеризационный эталон фиксирует ЧИСЛА на сетках n = 8 и 16. Регрессия, которая
- * срезает порядок с 4 до 3, но почти не меняет значения на грубых сетках, проходит
- * его молча — и именно так дефект `kulkarniQuasi` (кусочно-линейная реконструкция
- * итеранта, срезавшая порядок с ~3.8 до ~1.9) прожил незамеченным. Здесь проверяется
- * не значение, а СКОРОСТЬ его убывания: `p = log2(E_n / E_2n)`.
+ * WHY THIS TEST EXISTS when there is already `baseline-eh.tsv` with 1366 values.
+ * The characterization baseline records the NUMBERS on the grids n = 8 and 16. A regression that
+ * cuts the order from 4 to 3 but barely changes the values on coarse grids passes
+ * it silently — and that is exactly how the `kulkarniQuasi` defect (a piecewise linear reconstruction
+ * of the iterate, cutting the order from ~3.8 to ~1.9) lived unnoticed. Here what is checked
+ * is not the value but the RATE of its decrease: `p = log2(E_n / E_2n)`.
  *
- * ЧТО ИЗМЕРЯЕТСЯ. Для каждого сочетания «уравнение x схема x порождающая система x
- * семейство функционалов» строится последовательность погрешностей `E_h` на сетках
- * [GRID_SIZES] и по ней — эмпирические порядки. Ожидаемое значение задано ЯВНОЙ
- * ТАБЛИЦЕЙ [expected] с допуском [ORDER_TOLERANCE]; таблица снята фактическим
- * прогоном и сверена с `docs/REFERENCES.md` (см. ниже).
+ * WHAT IS MEASURED. For every combination "equation x scheme x generating system x
+ * functional family" a sequence of errors `E_h` is built on the grids
+ * [GRID_SIZES] and from it the empirical orders. The expected value is given by the EXPLICIT
+ * TABLE [expected] with the tolerance [ORDER_TOLERANCE]; the table was shot by an actual
+ * run and reconciled with `docs/REFERENCES.md` (see below).
  *
- * НАБОРЫ И ТЕГИ. Полная матрица (168 сочетаний до n = 64) — тег `slow` и отдельная
- * задача `./gradlew convergenceOrderTest` (замеры двух прогонов: 91 с и 105 с wall-clock,
- * то есть 1.5-2 мин — вилка, а не точное число). Сокращённый поднабор
- * (базис B, семейства `theta`/`mu`, сетки до n = 32) и проверка точности на span — тег
- * `fast` (замер: 3.0-3.5 с и 1.8-2.2 с), они гоняются на каждой правке.
+ * SUITES AND TAGS. The full matrix (168 combinations up to n = 64) has the `slow` tag and a separate
+ * task `./gradlew convergenceOrderTest` (measurements of two runs: 91 s and 105 s wall-clock,
+ * that is 1.5-2 min — a range, not an exact number). The reduced subset
+ * (the basis B, the families `theta`/`mu`, grids up to n = 32) and the check of exactness on span have the tag
+ * `fast` (measurement: 3.0-3.5 s and 1.8-2.2 s), they are run on every edit.
  *
- * СВЕРКА С `docs/REFERENCES.md` (раздел 3, «Замечание о порядках сходимости»).
- * Расхождений более 0.5 между фактом и документацией НЕ ОБНАРУЖЕНО:
- *  * классический Nyström «порядок не повышает», в документации указано ~4.2 для
- *    Фредгольма с базисом B и семейством theta — измерено 4.21;
- *  * комбинированный Nyström (Фредгольм) — опубликованная оценка `O(h^7)`,
- *    в документации ~7.0 — измерено 7.04; итерированный вариант `O(h^8)` — измерено 8.13;
- *  * комбинированный Nyström (Вольтерра) — «выигрыша не наблюдается, около 3.8» —
- *    измерено 3.90 (расхождение 0.10, в пределах допуска);
- *  * итерация Слоана (Фредгольм) — в документации «наблюдаемые 4.2...4.3» — измерено 4.26;
- *  * базовая коллокация — теоретические 3 — измерено 3.0...3.1.
- * Для схемы Кулкарни на квазиинтерполянтах (`mu`, `lambda`) опубликованного порядка
- * НЕТ (в `REFERENCES.md` она помечена «без источника, численное наблюдение»), поэтому
- * таблица здесь фиксирует именно наблюдение, а не подтверждает теорию.
+ * RECONCILIATION WITH `docs/REFERENCES.md` (section 3, "A remark on the convergence orders").
+ * Discrepancies above 0.5 between the fact and the documentation were NOT FOUND:
+ *  * the classical Nyström "does not raise the order", the documentation gives ~4.2 for
+ *    Fredholm with the basis B and the family theta — measured 4.21;
+ *  * the combined Nyström (Fredholm) — the published estimate `O(h^7)`,
+ *    ~7.0 in the documentation — measured 7.04; the iterated variant `O(h^8)` — measured 8.13;
+ *  * the combined Nyström (Volterra) — "no gain is observed, about 3.8" —
+ *    measured 3.90 (a discrepancy of 0.10, within the tolerance);
+ *  * the Sloan iteration (Fredholm) — "the observed 4.2...4.3" in the documentation — measured 4.26;
+ *  * the base collocation — the theoretical 3 — measured 3.0...3.1.
+ * For the Kulkarni scheme on quasi-interpolants (`mu`, `lambda`) there is NO published order
+ * (in `REFERENCES.md` it is marked "without a source, a numerical observation"), so
+ * the table here records exactly the observation and does not confirm a theory.
  *
- * ### СВЕРКА С ОПУБЛИКОВАННЫМИ ТАБЛИЦАМИ (внешний источник, а не собственный прогон)
+ * ### RECONCILIATION WITH THE PUBLISHED TABLES (an external source, not our own run)
  *
- * Сверка выполнена по `src/test/resources/verification/published-values.tsv` (ключи `*.ph`,
- * извлечённые скриптом из .tex-таблиц статьи). Итог: из 56 строк таблицы [expected]
- * внешним источником ПОДТВЕРЖДЕНЫ 24; расхождений более 0.5 НЕТ (худшее — 0.44).
+ * The reconciliation is done against `src/test/resources/verification/published-values.tsv` (the keys `*.ph`,
+ * extracted by a script from the .tex tables of the article). The outcome: of the 56 rows of the table [expected]
+ * 24 are CONFIRMED by the external source; there are NO discrepancies above 0.5 (the worst is 0.44).
  *
- * КАК СРАВНИВАЛОСЬ. Опубликованное `p_h` с ключом `nN` — это порядок на КОНКРЕТНОЙ
- * паре `N -> 2N`, а не асимптотика, поэтому бралась самая мелкая пара, ОБЕ погрешности
- * которой лежат выше порога доверия СТРОКИ. Без этого условия сравнение бессмысленно,
- * и это НЕ подгонка: в самой публикации `F.F2.B.theta.n32.iterKulkarni.ph = 0` при
- * `Eh(n32) = Eh(n64) = 4.441e-16` — то есть авторы тоже упёрлись в машинный нуль, и их
- * число 0 описывает арифметику, а не схему. Тот же фильтр по `NOISE_FLOOR` применяет
- * и `verification.PublishedValuesTest.checkOrders`.
+ * HOW THE COMPARISON WAS DONE. A published `p_h` with the key `nN` is the order on a CONCRETE
+ * pair `N -> 2N` and not an asymptotic value, so the finest pair was taken whose BOTH errors
+ * lie above the trust threshold OF THE ROW. Without this condition the comparison is meaningless,
+ * and this is NOT fitting: in the publication itself `F.F2.B.theta.n32.iterKulkarni.ph = 0` at
+ * `Eh(n32) = Eh(n64) = 4.441e-16` — that is, the authors also ran into machine zero, and their
+ * number 0 describes the arithmetic and not the scheme. The same `NOISE_FLOOR` filter is applied
+ * by `verification.PublishedValuesTest.checkOrders` too.
  *
- * СТРОКИ, ПОДТВЕРЖДЁННЫЕ ПУБЛИКАЦИЕЙ (ожидание теста → опубликовано, отклонение):
+ * ROWS CONFIRMED BY THE PUBLICATION (the expectation of the test → published, deviation):
  *  * `F.theta.base` 3.00→3.02 (0.02); `F.mu.base` 2.95→2.94 (0.01);
  *    `F.lambda.base` 3.10→3.07 (0.03); `F.xi1.base` 3.00→2.96 (0.04);
  *  * `F.theta.sloan` 4.30→4.26 (0.04); `F.xi1.sloan` 3.00→2.99 (0.01);
  *  * `F.theta.kulkarni` 7.35→7.35 (0.00); `F.xi1.kulkarni` 5.90→5.88 (0.02);
  *  * `F.xi1.iterKulkarni` 5.95→5.94 (0.01);
- *    **`F.theta.iterKulkarni` 8.60→8.55 (0.05)** — именно этот ключ доказывает, что строка
- *    измерима и раньше была ошибочно помечена `Saturates`;
+ *    **`F.theta.iterKulkarni` 8.60→8.55 (0.05)** — it is exactly this key that proves that the row
+ *    is measurable and was previously marked `Saturates` by mistake;
  *  * `F.theta.nystrom` 4.20→4.21 (0.01); `F.theta.iterNystrom` 4.20→4.20 (0.00);
  *  * `V.theta.base` 3.00→3.01; `V.mu.base` 2.95→2.94; `V.lambda.base` 3.00→3.03;
  *    `V.xi1.base` 3.00→2.96;
@@ -86,140 +86,140 @@ import kotlin.test.assertTrue
  *  * `V.theta.kulkarni` 3.90→3.92; `V.xi1.kulkarni` 4.00→4.00;
  *  * `V.theta.iterKulkarni` 4.15→4.13; `V.xi1.iterKulkarni` 3.75→3.75;
  *  * `V.theta.nystrom` 3.90→3.84 (0.06);
- *    `V.theta.iterNystrom` 4.30→4.74 (0.44) — ХУДШЕЕ расхождение. Причина измерена,
- *    а не предположена: у этой схемы порядок заметно колеблется от уровня к уровню
- *    (наш замер по трём парам: 4.27, 4.74, 4.26 — точно так же, как в публикации),
- *    и опубликованное 4.74 — тот самый выброс на паре 16->32. Схема воспроизводится
- *    точно, расхождение — свойство выбора одного числа на строку, а не дефект.
+ *    `V.theta.iterNystrom` 4.30→4.74 (0.44) — the WORST discrepancy. The cause is measured
+ *    and not assumed: for this scheme the order oscillates noticeably from level to level
+ *    (our measurement over three pairs: 4.27, 4.74, 4.26 — exactly as in the publication),
+ *    and the published 4.74 is that very outlier on the pair 16->32. The scheme is reproduced
+ *    exactly, the discrepancy is a property of picking one number per row and not a defect.
  *
- * СТРОКИ БЕЗ ВНЕШНЕГО ПОДТВЕРЖДЕНИЯ (32 из 56) — взяты ТОЛЬКО из фактического
- * прогона и закрепляют текущее поведение, а не подтверждают его правильность:
- *  * все 8 строк `combNystrom`/`iterCombNystrom` (в таблицах статьи этих схем нет);
- *  * все схемы семейств `mu`/`lambda`, кроме `base`: публикация даёт для них только
- *    базовую коллокацию (`table-families.tex`);
- *  * `F.mu.iterKulkarni` — вторая бывшая `Saturates`-строка: прямого ключа нет,
- *    ожидание 8.6 взято из замера (8.23...8.84) и согласуется с подтверждённым 8.55 у `theta`.
+ * ROWS WITHOUT EXTERNAL CONFIRMATION (32 of 56) — taken ONLY from an actual
+ * run and fixing the current behaviour rather than confirming that it is right:
+ *  * all 8 rows `combNystrom`/`iterCombNystrom` (these schemes are absent from the tables of the article);
+ *  * all the schemes of the families `mu`/`lambda` except `base`: the publication gives for them only
+ *    the base collocation (`table-families.tex`);
+ *  * `F.mu.iterKulkarni` — the second former `Saturates` row: there is no direct key,
+ *    the expectation 8.6 is taken from a measurement (8.23...8.84) and agrees with the confirmed 8.55 of `theta`.
  *
- * ГРАНИЦЫ ОХВАТА (осознанные, а не по недосмотру):
- *  * задачи — по одной на уравнение: `F2` (`K = 1/(1+t+s)`, `u* = 1/(t+1)`) и `V2`.
- *    Обе выбраны потому, что их решение не лежит НИ В ОДНОЙ порождающей системе, то
- *    есть порядок измерим для всех трёх базисов одним и тем же способом. Задача
- *    `V2win` (наблюдаемые порядки ~3/4/5/6) в матрицу не входит: она содержательна
- *    сама по себе, но её ядро `K = t - s` вырождено на диагонали, и порядки на ней
- *    другие — это отдельная таблица, а не строка этой;
- *  * `F2span`/`V2span` исключены из измерения порядка ПО ПОСТРОЕНИЮ: их решение
- *    `u* = t^2` лежит в span системы B, и погрешность там — чистый шум округления
- *    (1e-14...1.6e-13), не зависящий от шага сетки. Посчитанный по нему «порядок» — это
- *    log2 отношения двух случайных величин: он НЕ NaN, а произвольное число любого знака
- *    (наблюдалось −2.1 при E = 1.9e-14 и 8.2e-14) — и именно поэтому бессмыслен. NaN
- *    `orders` вернёт только при точном нуле. Для этих задач действует отдельная проверка
- *    [spanProblemsAreReproducedExactly] — «погрешность ниже [SPAN_EXACTNESS_TOLERANCE]»;
- *  * семейство `xi1` ([DeBoorFixFunctionals]) НЕ сочетается с четырьмя Nyström-схемами:
- *    `nystromSupport()` начинается с `require(!funcs.usesDerivative)`, а `xi1` —
- *    единственное семейство матрицы с `usesDerivative = true`. Эти 12 сочетаний на
- *    уравнение исключены не выбором, а контрактом кода.
+ * THE BOUNDS OF THE COVERAGE (deliberate, not by an oversight):
+ *  * the problems — one per equation: `F2` (`K = 1/(1+t+s)`, `u* = 1/(t+1)`) and `V2`.
+ *    Both are chosen because their solution lies in NO generating system, that
+ *    is, the order is measurable for all three bases in one and the same way. The problem
+ *    `V2win` (observed orders ~3/4/5/6) is not in the matrix: it is substantial
+ *    in itself, but its kernel `K = t - s` is degenerate on the diagonal, and the orders on it
+ *    are different — that is a separate table, not a row of this one;
+ *  * `F2span`/`V2span` are excluded from the order measurement BY CONSTRUCTION: their solution
+ *    `u* = t^2` lies in the span of the system B, and the error there is pure rounding noise
+ *    (1e-14...1.6e-13), independent of the grid step. An "order" computed from it is
+ *    the log2 of a ratio of two random quantities: it is NOT NaN but an arbitrary number of any sign
+ *    (−2.1 was observed at E = 1.9e-14 and 8.2e-14) — and that is exactly why it is meaningless. NaN
+ *    is returned by `orders` only at an exact zero. For these problems a separate check applies,
+ *    [spanProblemsAreReproducedExactly] — "the error is below [SPAN_EXACTNESS_TOLERANCE]";
+ *  * the family `xi1` ([DeBoorFixFunctionals]) does NOT combine with the four Nyström schemes:
+ *    `nystromSupport()` starts with `require(!funcs.usesDerivative)`, and `xi1` is
+ *    the only family of the matrix with `usesDerivative = true`. These 12 combinations per
+ *    equation are excluded not by choice but by the contract of the code.
  */
 class ConvergenceOrderTest {
 
     private companion object {
 
-        /** Допуск сравнения наблюдаемого порядка с табличным. */
+        /** The tolerance of the comparison of the observed order with the tabulated one. */
         const val ORDER_TOLERANCE = 0.4
 
         /**
-         * Допуск для НЕПОСЛЕДНИХ пар сеток (преасимптотический режим).
+         * The tolerance for NON-LAST grid pairs (the preasymptotic regime).
          *
-         * Проверяются ВСЕ пригодные пары, а не только последняя, иначе деградация на грубых
-         * сетках проходит молча. Но на грубых сетках схема ещё НЕ вышла на асимптотику,
-         * и тот же допуск 0.4 давал бы ложные срабатывания на исправном коде.
+         * ALL suitable pairs are checked, not only the last one, otherwise a degradation on coarse
+         * grids passes silently. But on coarse grids the scheme has NOT yet reached the asymptotics,
+         * and the same tolerance 0.4 would give false positives on healthy code.
          *
-         * ЗНАЧЕНИЕ ВЫБРАНО ПО ЗАМЕРУ, а не назначено. По 303 ранним парам исправного
-         * кода худший недобор порядка — −0.578 (`V/H/mu/nystrom`, пара 8->16: 3.17 при
-         * асимптотических 3.75); хуже −0.5 — три случая, хуже −0.6 — ни одного. Порог 0.8
-         * даёт запас 0.22 от худшего факта и при этом вчетверо меньше того недобора (4...7),
-         * который даёт целевая регрессия `kulkarniQuasi`, то есть её ловит с большим запасом.
+         * THE VALUE IS CHOSEN BY MEASUREMENT and not assigned. Over 303 early pairs of healthy
+         * code the worst shortfall of the order is −0.578 (`V/H/mu/nystrom`, the pair 8->16: 3.17 against
+         * the asymptotic 3.75); worse than −0.5 there are three cases, worse than −0.6 none. The threshold 0.8
+         * gives a margin of 0.22 over the worst fact and is at the same time four times smaller than the shortfall (4...7)
+         * produced by the target regression `kulkarniQuasi`, that is, it catches it with a large margin.
          */
         const val PREASYMPTOTIC_TOLERANCE = 0.8
 
         /**
-         * Порог машинной точности: как только погрешность опускается ниже, измельчение
-         * ПРЕКРАЩАЕТСЯ. Дальше убывает не ошибка метода, а шум округления, и порядок,
-         * посчитанный по такой паре, характеризует арифметику, а не схему.
+         * The machine accuracy threshold: as soon as the error goes below it, the refinement
+         * STOPS. Beyond that it is not the error of the method that decreases but the rounding noise, and the order
+         * computed from such a pair characterizes the arithmetic and not the scheme.
          */
         const val MACHINE_PRECISION_FLOOR = 1e-13
 
         /**
-         * Нижняя граница ДОВЕРИЯ к погрешности при вычислении порядка.
+         * The lower bound of TRUST in an error when computing the order.
          *
-         * Порог выше [MACHINE_PRECISION_FLOOR] намеренно. «Плато» округления на задачах
-         * матрицы лежит в диапазоне 9.5e-14...2.2e-13: попав в него, погрешность перестаёт
-         * убывать при измельчении ВОВСЕ (наблюдались строки вида `1.5510e-13 1.5521e-13
-         * 1.5521e-13`). Значение с этого плато формально выше порога остановки, но состоит
-         * из шума округления, и порядок, посчитанный ПРОТИВ него, занижен на единицы
-         * (наблюдалось 6.34 -> 0.82 у одной и той же схемы). Поэтому пара `(E_n, E_2n)`
-         * считается пригодной, только если ОБЕ погрешности не ниже этого порога.
+         * The threshold is above [MACHINE_PRECISION_FLOOR] on purpose. The rounding "plateau" on the problems
+         * of the matrix lies in the range 9.5e-14...2.2e-13: having got into it, the error stops
+         * decreasing under refinement AT ALL (rows of the form `1.5510e-13 1.5521e-13
+         * 1.5521e-13` were observed). A value from this plateau is formally above the stopping threshold, but consists
+         * of rounding noise, and an order computed AGAINST it is understated by units
+         * (6.34 -> 0.82 was observed for one and the same scheme). Therefore a pair `(E_n, E_2n)`
+         * is considered suitable only if BOTH errors are not below this threshold.
          *
-         * ПОЧЕМУ ИМЕННО 2.7e-13, а не круглое число. Порог выбран по ЗАМЕРУ, в самом
-         * широком зазоре гистограммы: наибольшее значение с плато шума — 2.2171e-13,
-         * наименьшее содержательное значение — 3.3329e-13, и 2.7e-13 отстоит от обоих
-         * примерно на 20 %. Любое «круглое» 2e-13 или 3e-13 прижималось бы к одной из
-         * границ и делало классификацию хрупкой.
+         * WHY EXACTLY 2.7e-13 and not a round number. The threshold is chosen BY MEASUREMENT, in the
+         * widest gap of the histogram: the largest value from the noise plateau is 2.2171e-13,
+         * the smallest substantial value is 3.3329e-13, and 2.7e-13 is about 20 % away from
+         * both. Any "round" 2e-13 or 3e-13 would press against one of the
+         * bounds and make the classification fragile.
          */
         const val TRUSTED_ERROR_FLOOR = 2.7e-13
 
         /**
-         * Верхняя граница погрешности на самой грубой сетке для сочетаний, помеченных
-         * [Expected.Saturates]: у них уже второй уровень измельчения уходит под
-         * [TRUSTED_ERROR_FLOOR], и порядок измерить нечем. Наблюдаемый максимум по таким
-         * сочетаниям — 1.1e-11, порог даёт запас на порядок. Ради чего он нужен: при
-         * деградации схемы (например, возврате кусочно-линейной реконструкции в
-         * `kulkarniQuasi`) погрешность на n = 8 подскакивает на 6-8 порядков, и проверка
-         * срабатывает даже там, где порядок не определён.
+         * The upper bound of the error on the coarsest grid for the combinations marked
+         * [Expected.Saturates]: for them already the second refinement level goes below
+         * [TRUSTED_ERROR_FLOOR], and there is nothing to measure the order with. The observed maximum over such
+         * combinations is 1.1e-11, the threshold gives a margin of an order of magnitude. What it is needed for: on a
+         * degradation of a scheme (for example, a return of the piecewise linear reconstruction in
+         * `kulkarniQuasi`) the error at n = 8 jumps by 6-8 orders, and the check
+         * fires even where the order is undefined.
          */
         const val SATURATED_MAX_COARSE_ERROR = 1e-10
 
         /**
-         * Порог для задач, решение которых лежит в span порождающей системы.
+         * The threshold for the problems whose solution lies in the span of the generating system.
          *
-         * Исходное требование — «ниже 1e-10», но буквальное 1e-10 здесь — ПОЧТИ ПУСТАЯ ПРОВЕРКА:
-         * фактический максимум по всем 64 сочетаниям равен 1.5521e-13
-         * (`F/lambda/kulkarni/n=16`), то есть запас был 645-кратным. Деградация точности на span
-         * в сотни раз прошла бы молча.
+         * The original requirement is "below 1e-10", but a literal 1e-10 here is AN ALMOST EMPTY CHECK:
+         * the actual maximum over all 64 combinations equals 1.5521e-13
+         * (`F/lambda/kulkarni/n=16`), that is, the margin was 645-fold. A degradation of the accuracy on span
+         * by hundreds of times would pass silently.
          *
-         * Порог 5e-13 — три фактических максимума (3.2x). Запас нужен не «на всякий случай»:
-         * сама величина есть накопленная ошибка округления в решении СЛАУ, и она закономерно
-         * плавает между бэкендами и версиями JDK. При этом 5e-13 в 200 раз строже прежнего
-         * порога и срабатывает задолго до того, как погрешность станет содержательной.
+         * The threshold 5e-13 is three actual maxima (3.2x). The margin is needed not "just in case":
+         * the quantity itself is the accumulated rounding error in the solution of the linear system, and it naturally
+         * drifts between backends and JDK versions. At the same time 5e-13 is 200 times stricter than the former
+         * threshold and fires long before the error becomes substantial.
          */
         const val SPAN_EXACTNESS_TOLERANCE = 5e-13
 
         /**
-         * Предел длины списка падений в сообщении об ошибке.
+         * The limit on the length of the list of failures in the error message.
          *
-         * Само усечение неизбежно: при полной деградации сообщение вырастает до десятков
-         * килобайт и теряет читаемость. Важно другое — чтобы факт усечения был ОТМЕЧЕН:
-         * см. [reportIfAny].
+         * The truncation itself is unavoidable: on a complete degradation the message grows to tens of
+         * kilobytes and loses readability. What matters is something else — that the fact of the truncation be MARKED:
+         * see [reportIfAny].
          */
         const val FAILURE_REPORT_LIMIT = 8000
 
-        /** Порядок квадратуры Гаусса — тот же, что в характеризационных эталонах. */
+        /** The order of the Gauss quadrature — the same as in the characterization baselines. */
         const val QUADRATURE_ORDER = 8
 
-        /** Последовательность сеток полной матрицы. */
+        /** The sequence of grids of the full matrix. */
         val GRID_SIZES = listOf(8, 16, 32, 64)
 
         /**
-         * Последовательность сеток быстрого поднабора: n = 64 стоит около 6 с на одно
-         * сочетание для Вольтерры и в бюджет `fastTest` не укладывается.
+         * The sequence of grids of the fast subset: n = 64 costs about 6 s per
+         * combination for Volterra and does not fit into the budget of `fastTest`.
          *
-         * СЕТКА n = 32 ЗДЕСЬ ОБЯЗАТЕЛЬНА, хотя и вдвое дороже пары 8/16. Замер: на паре
-         * 8->16 схема `combNystrom` с семейством `mu` даёт порядок 6.24 при асимптотических
-         * 6.65 — она ещё не вышла на асимптотику, и даже одностороннее сравнение с допуском
-         * 0.4 падало бы на исправном коде. На паре 16->32 та же схема даёт 6.66.
+         * THE GRID n = 32 IS MANDATORY HERE, although it is twice as expensive as the pair 8/16. Measurement: on the pair
+         * 8->16 the scheme `combNystrom` with the family `mu` gives the order 6.24 against the asymptotic
+         * 6.65 — it has not yet reached the asymptotics, and even a one-sided comparison with the tolerance
+         * 0.4 would fail on healthy code. On the pair 16->32 the same scheme gives 6.66.
          */
         val FAST_GRID_SIZES = listOf(8, 16, 32)
 
-        /** Сетки проверки точности на span: двух достаточно, погрешность там от n не зависит. */
+        /** The grids of the exactness check on span: two are enough, the error there does not depend on n. */
         val SPAN_GRID_SIZES = listOf(8, 16)
 
         const val FREDHOLM = "F"
@@ -228,52 +228,52 @@ class ConvergenceOrderTest {
         val SYSTEMS = listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)
         val FAMILIES = listOf("theta", "xi1", "mu", "lambda")
 
-        /** Схемы, строящие приближение ВНУТРИ сплайнового пространства. */
+        /** The schemes building an approximation INSIDE the spline space. */
         val SPLINE_SPACE_SCHEMES = listOf("base", "sloan", "kulkarni", "iterKulkarni")
 
         /**
-         * Быстрый поднабор: базис B и два семейства.
+         * The fast subset: the basis B and two families.
          *
-         * Почему не одно `theta`, как предлагалось в задании. `theta` — ПРОЕКТОР, и
-         * `kulkarni()` уходит для него в ветвь `kulkarniProjector` (прямое решение СЛАУ).
-         * Ветвь `kulkarniQuasi` — та самая, ради регрессии в которой сформулирован
-         * критерий приёмки, — вызывается ТОЛЬКО для квазиинтерполянтов. Поднабор из
-         * одного `theta` не отреагировал бы на неё вовсе. Добавление `mu` стоит ~2 с и
-         * закрывает эту дыру.
+         * Why not a single `theta`, as was proposed in the assignment. `theta` is a PROJECTOR, and
+         * `kulkarni()` goes for it into the branch `kulkarniProjector` (a direct linear solve).
+         * The branch `kulkarniQuasi` — the very one for the regression in which the acceptance
+         * criterion was formulated — is called ONLY for quasi-interpolants. A subset of
+         * a single `theta` would not react to it at all. Adding `mu` costs ~2 s and
+         * closes this hole.
          */
         val FAST_FAMILIES = listOf("theta", "mu")
     }
 
-    /** Ожидание для одного сочетания: либо числовой порядок, либо выход на машинную точность. */
+    /** The expectation for one combination: either a numerical order, or a saturation at machine accuracy. */
     private sealed interface Expected {
 
         /**
-         * Порог доверия НА ЭТУ СТРОКУ, а не общий на всю таблицу.
+         * The trust threshold FOR THIS ROW, and not a common one for the whole table.
          *
-         * Почему порог НЕ может быть единым. Схемы матрицы различаются по абсолютному
-         * уровню погрешности на девять порядков: `base` даёт 1e-4, а `iterKulkarni`
-         * на Фредгольме — уже 3e-12 на самой ГРУБОЙ сетке. Общий порог 2.7e-13,
-         * подобранный по плато шума большинства схем, ЛЕЖАЛ ВЫШЕ всего диапазона
-         * сходимости двух самых точных строк — и их измеримый порядка 8.6 просто
-         * отбрасывался как «шум». Порог на строку убирает эту слепую зону.
+         * Why the threshold CANNOT be a single one. The schemes of the matrix differ in the absolute
+         * level of the error by nine orders: `base` gives 1e-4, while `iterKulkarni`
+         * on Fredholm already gives 3e-12 on the COARSEST grid. The common threshold 2.7e-13,
+         * chosen by the noise plateau of most schemes, LAY ABOVE the whole convergence
+         * range of the two most accurate rows — and their measurable order 8.6 was simply
+         * discarded as "noise". A per-row threshold removes this blind spot.
          */
         val trustFloor: Double
 
-        /** Ожидаемый эмпирический порядок; сравнение — с допуском [ORDER_TOLERANCE]. */
+        /** The expected empirical order; the comparison is with the tolerance [ORDER_TOLERANCE]. */
         data class Order(
             val p: Double,
             override val trustFloor: Double = TRUSTED_ERROR_FLOOR,
         ) : Expected
 
         /**
-         * Сочетание выходит на машинную точность раньше, чем накопится пригодная пара
-         * погрешностей: порядок НЕ ИЗМЕРИМ. Проверяется величина погрешности на грубой сетке.
+         * The combination saturates at machine accuracy before a suitable pair of errors
+         * accumulates: the order is NOT MEASURABLE. The magnitude of the error on a coarse grid is checked.
          *
-         * ПОСЛЕ ФИКСА ПОРОГА НА СТРОКУ этот вариант НЕ ИСПОЛЬЗУЕТСЯ ни одной строкой
-         * таблицы: обе бывшие `Saturates`-строки оказались ИЗМЕРИМЫМИ (см. комментарий
-         * к `F.theta.iterKulkarni`). Тип сохранён намеренно: схема, дошедшая до машинного
-         * нуля на первой же сетке, физически возможна, и тогда проверять порядок будет
-         * действительно нечем.
+         * AFTER THE FIX OF THE PER-ROW THRESHOLD this variant is NOT USED by any row
+         * of the table: both former `Saturates` rows turned out to be MEASURABLE (see the comment
+         * on `F.theta.iterKulkarni`). The type is kept on purpose: a scheme that reaches machine
+         * zero already on the first grid is physically possible, and then there will indeed be
+         * nothing to check the order with.
          */
         data class Saturates(
             override val trustFloor: Double = TRUSTED_ERROR_FLOOR,
@@ -281,33 +281,33 @@ class ConvergenceOrderTest {
     }
 
     /**
-     * ЯВНАЯ ТАБЛИЦА ОЖИДАЕМЫХ ПОРЯДКОВ. Ключ — `уравнение.семейство.схема`.
+     * THE EXPLICIT TABLE OF EXPECTED ORDERS. The key is `equation.family.scheme`.
      *
-     * ПОЧЕМУ КЛЮЧ НЕ СОДЕРЖИТ ПОРОЖДАЮЩУЮ СИСТЕМУ. Это не упрощение, а ИЗМЕРЕННЫЙ ФАКТ:
-     * по всем 56 строкам разброс наблюдаемого порядка между системами B, H и T не
-     * превышает 0.31 (типично 0.02...0.10), то есть порядок определяется схемой и
-     * семейством функционалов, а не выбором `{1,t,t^2}` / `{1,sinh,cosh}` / `{1,sin,cos}`.
-     * Единая строка на три системы делает это утверждение ПРОВЕРЯЕМЫМ: если какая-то
-     * правка сделает одну из систем хуже других, строка упадёт.
+     * WHY THE KEY DOES NOT CONTAIN THE GENERATING SYSTEM. This is not a simplification but a MEASURED FACT:
+     * over all 56 rows the spread of the observed order between the systems B, H and T does not
+     * exceed 0.31 (typically 0.02...0.10), that is, the order is determined by the scheme and the
+     * functional family, and not by the choice of `{1,t,t^2}` / `{1,sinh,cosh}` / `{1,sin,cos}`.
+     * A single row for three systems makes this statement CHECKABLE: if some
+     * edit makes one of the systems worse than the others, the row will fail.
      *
-     * Значения — округлённая середина наблюдённого по трём системам разброса
-     * (фактический прогон, бэкенд multik, сетки 8/16/32/64). Худший запас до границы
-     * допуска — 0.31 у `V.theta.iterNystrom` (наблюдалось 3.99...4.55: у этой схемы на
-     * Вольтерре порядок заметно колеблется от уровня к уровню).
+     * The values are the rounded middle of the spread observed over the three systems
+     * (an actual run, the multik backend, the grids 8/16/32/64). The worst margin to the bound
+     * of the tolerance is 0.31 for `V.theta.iterNystrom` (3.99...4.55 was observed: for this scheme on
+     * Volterra the order oscillates noticeably from level to level).
      */
     private val expected: Map<String, Expected> = mapOf(
-        // --- Фредгольм, задача F2 -------------------------------------------------
+        // --- Fredholm, problem F2 -------------------------------------------------
         "F.theta.base" to Expected.Order(3.0),
         "F.theta.sloan" to Expected.Order(4.3),
         "F.theta.kulkarni" to Expected.Order(7.35),
-        // СТРОКА С ПОНИЖЕННЫМ ПОРОГОМ ДОВЕРИЯ. Раньше здесь стоял `Saturates`, и это была
-        // ОШИБКА: порядок здесь ИЗМЕРИМ (E_8 = 2.99e-12, E_16 = 7.77e-15 → p = 8.59), просто обе
-        // погрешности лежали ниже общего порога 2.7e-13 и отбрасывались как «шум».
-        // Подмена на «E_8 < 1e-10» была слабее факта в 33 раза: деградация в 30 раз прошла бы молча.
-        // Порог 1e-15: выше абсолютного машинного нуля задачи (~1e-16), но ниже наименьшей
-        // содержательной погрешности строки (7.55e-15 по трём системам) с запасом в 7 раз.
-        // ОЖИДАНИЕ 8.6 ПОДТВЕРЖДЕНО ПУБЛИКАЦИЕЙ: `F.F2.B.theta.n8.iterKulkarni.ph` = 8.55
-        // (`published-values.tsv`, `table-t2-fredholm.tex`); измерено 8.44...8.79 по трём системам.
+        // A ROW WITH A LOWERED TRUST THRESHOLD. There used to be a `Saturates` here, and that was
+        // a MISTAKE: the order here IS MEASURABLE (E_8 = 2.99e-12, E_16 = 7.77e-15 → p = 8.59), it is just that both
+        // errors lay below the common threshold 2.7e-13 and were discarded as "noise".
+        // The substitution by "E_8 < 1e-10" was 33 times weaker than the fact: a 30-fold degradation would pass silently.
+        // The threshold 1e-15: above the absolute machine zero of the problem (~1e-16), but below the smallest
+        // substantial error of the row (7.55e-15 over the three systems) with a 7-fold margin.
+        // THE EXPECTATION 8.6 IS CONFIRMED BY THE PUBLICATION: `F.F2.B.theta.n8.iterKulkarni.ph` = 8.55
+        // (`published-values.tsv`, `table-t2-fredholm.tex`); measured 8.44...8.79 over the three systems.
         "F.theta.iterKulkarni" to Expected.Order(8.6, trustFloor = 1e-15),
         "F.theta.nystrom" to Expected.Order(4.2),
         "F.theta.iterNystrom" to Expected.Order(4.2),
@@ -320,10 +320,10 @@ class ConvergenceOrderTest {
         "F.mu.base" to Expected.Order(2.95),
         "F.mu.sloan" to Expected.Order(3.9),
         "F.mu.kulkarni" to Expected.Order(6.3),
-        // То же самое, что и у `F.theta.iterKulkarni`: было `Saturates`, фактически порядок измерим
-        // (E_8 = 8.21e-12, E_16 = 1.99e-14 → p = 8.69; по трём системам 8.23...8.84). Публикацией не
-        // закреплено НАПРЯМУЮ (в таблицах нет `mu` с `iterKulkarni`), но согласуется с 8.55
-        // у `theta`: у квазиинтерполянта тот же механизм суперсходимости.
+        // The same as for `F.theta.iterKulkarni`: it was `Saturates`, in fact the order is measurable
+        // (E_8 = 8.21e-12, E_16 = 1.99e-14 → p = 8.69; over the three systems 8.23...8.84). It is not fixed by the
+        // publication DIRECTLY (the tables have no `mu` with `iterKulkarni`), but it agrees with the 8.55
+        // of `theta`: a quasi-interpolant has the same superconvergence mechanism.
         "F.mu.iterKulkarni" to Expected.Order(8.6, trustFloor = 1e-15),
         "F.mu.nystrom" to Expected.Order(3.9),
         "F.mu.iterNystrom" to Expected.Order(3.9),
@@ -337,7 +337,7 @@ class ConvergenceOrderTest {
         "F.lambda.iterNystrom" to Expected.Order(3.9),
         "F.lambda.combNystrom" to Expected.Order(6.85),
         "F.lambda.iterCombNystrom" to Expected.Order(7.25),
-        // --- Вольтерра, задача V2 -------------------------------------------------
+        // --- Volterra, problem V2 -------------------------------------------------
         "V.theta.base" to Expected.Order(3.0),
         "V.theta.sloan" to Expected.Order(3.9),
         "V.theta.kulkarni" to Expected.Order(3.9),
@@ -369,21 +369,21 @@ class ConvergenceOrderTest {
     )
 
     // ------------------------------------------------------------------------
-    // Тесты
+    // Tests
     // ------------------------------------------------------------------------
 
     /**
-     * ПОЛНАЯ МАТРИЦА: 2 уравнения x 3 системы x 4 семейства x (4 + 4) схем за вычетом
-     * запрещённых сочетаний `xi1` x Nyström — 168 сочетаний, сетки 8/16/32/64.
+     * THE FULL MATRIX: 2 equations x 3 systems x 4 families x (4 + 4) schemes minus
+     * the forbidden combinations `xi1` x Nyström — 168 combinations, the grids 8/16/32/64.
      *
-     * Сравнение ДВУСТОРОННЕЕ: порядок обязан не только не упасть, но и не «улучшиться»
-     * необъяснимо — рост порядка на 0.5 означает, что схема считает не то, что раньше,
-     * и это столь же весомый повод разобраться.
+     * The comparison is TWO-SIDED: the order must not only not drop, but also not "improve"
+     * inexplicably — a growth of the order by 0.5 means that the scheme computes something other than before,
+     * and this is an equally weighty reason to investigate.
      *
-     * Фактическое время прогона САМОГО ЭТОГО метода — 79...99 с по двум замерам
-     * (остальное время задачи — два `fast`-метода и старт JVM), поэтому тег `slow`;
-     * отдельная задача `./gradlew convergenceOrderTest` делает набор исполнимым, не
-     * дожидаясь починки всего `slowTest`.
+     * The actual run time of THIS METHOD ITSELF is 79...99 s over two measurements
+     * (the rest of the task time is two `fast` methods and the JVM start), hence the `slow` tag;
+     * a separate task `./gradlew convergenceOrderTest` makes the suite runnable without
+     * waiting for the whole `slowTest` to be repaired.
      */
     @Test
     @Tag("slow")
@@ -410,24 +410,24 @@ class ConvergenceOrderTest {
         }
         assertTrue(
             checked == 168,
-            "Матрица должна содержать 168 сочетаний (2 уравнения x 3 системы x " +
-                "(4 семейства x 4 схемы + 3 семейства без производной x 4 схемы Nyström)), " +
-                "проверено $checked",
+            "The matrix must contain 168 combinations (2 equations x 3 systems x " +
+                "(4 families x 4 schemes + 3 families without a derivative x 4 Nyström schemes)), " +
+                "checked $checked",
         )
-        reportIfAny(failures, checked, "Порядок сходимости не соответствует таблице")
+        reportIfAny(failures, checked, "The convergence order does not match the table")
     }
 
     /**
-     * БЫСТРЫЙ ПОДНАБОР: базис B, семейства `theta` и `mu`, сетки 8/16/32 — 32 сочетания
-     * (2 уравнения x 2 семейства x 8 схем; оба семейства без производной, поэтому все восемь
-     * схем доступны), замер 3.0-3.5 с. Запускается на каждой правке в составе `fastTest`.
+     * THE FAST SUBSET: the basis B, the families `theta` and `mu`, the grids 8/16/32 — 32 combinations
+     * (2 equations x 2 families x 8 schemes; both families are without a derivative, so all eight
+     * schemes are available), measured 3.0-3.5 s. Run on every edit as part of `fastTest`.
      *
-     * Сравнение ОДНОСТОРОННЕЕ — `p >= ожидаемый - допуск`. Это не послабление, а
-     * следствие того, что на сетках до n = 32 схема ещё не всегда вышла на асимптотику:
-     * например, у `V/B/theta/iterNystrom` порядок на паре 16->32 равен 4.74 при
-     * асимптотических 4.3, и двустороннее сравнение падало бы на исправном коде.
-     * Ловить нужно ДЕГРАДАЦИЮ, а любая деградация порядок только СНИЖАЕТ. Точное
-     * соответствие таблице проверяет [convergenceOrdersMatchExpectedTable].
+     * The comparison is ONE-SIDED — `p >= expected - tolerance`. This is not a relaxation but a
+     * consequence of the fact that on grids up to n = 32 the scheme has not always reached the asymptotics yet:
+     * for example, for `V/B/theta/iterNystrom` the order on the pair 16->32 equals 4.74 against
+     * the asymptotic 4.3, and a two-sided comparison would fail on healthy code.
+     * What has to be caught is a DEGRADATION, and any degradation only LOWERS the order. The exact
+     * match with the table is checked by [convergenceOrdersMatchExpectedTable].
      */
     @Test
     @Tag("fast")
@@ -453,29 +453,29 @@ class ConvergenceOrderTest {
         }
         assertTrue(
             checked == 32,
-            "Быстрый поднабор должен содержать 32 сочетания (2 уравнения x 2 семейства x 8 схем), " +
-                "проверено $checked",
+            "The fast subset must contain 32 combinations (2 equations x 2 families x 8 schemes), " +
+                "checked $checked",
         )
-        reportIfAny(failures, checked, "Порядок сходимости деградировал относительно таблицы")
+        reportIfAny(failures, checked, "The convergence order degraded relative to the table")
     }
 
     /**
-     * Задачи `F2span`/`V2span`: решение `u* = t^2` лежит в span полиномиальной системы B,
-     * поэтому схемы, строящие приближение ВНУТРИ сплайнового пространства, обязаны
-     * воспроизводить его с погрешностью ниже [SPAN_EXACTNESS_TOLERANCE].
+     * The problems `F2span`/`V2span`: the solution `u* = t^2` lies in the span of the polynomial system B,
+     * so the schemes building an approximation INSIDE the spline space must
+     * reproduce it with an error below [SPAN_EXACTNESS_TOLERANCE].
      *
-     * ПОЧЕМУ НЕ ИЗМЕРЯЕТСЯ ПОРЯДОК. Погрешность здесь — шум округления решения СЛАУ
-     * (1e-14...1.6e-13), от шага сетки она не зависит. `orders` при этом вернёт НЕ NaN,
-     * а log2 отношения двух шумов — любое число (например, −2.1); NaN был бы только при
-     * точном нуле. Сравнивать такое число с таблицей ожиданий невозможно, и проверяется
-     * ВЕЛИЧИНА погрешности.
+     * WHY THE ORDER IS NOT MEASURED. The error here is the rounding noise of the linear solve
+     * (1e-14...1.6e-13), it does not depend on the grid step. `orders` will then return NOT NaN
+     * but the log2 of a ratio of two noises — any number (−2.1, say); NaN would occur only at
+     * an exact zero. Comparing such a number with the table of expectations is impossible, so the
+     * MAGNITUDE of the error is checked.
      *
-     * ОГРАНИЧЕНИЯ ПРОВЕРКИ, обе — свойства метода, а не дефекты:
-     *  * только система B: `u* = t^2` не лежит в span `{1, sinh, cosh}` и `{1, sin, cos}`,
-     *    и на системах H/T погрешность закономерно равна обычным ~4e-5;
-     *  * только схемы [SPLINE_SPACE_SCHEMES]: приближение Nyström лежит ВНЕ сплайнового
-     *    пространства (`u^N_h = f + L^N_h u`), точность на span оно не наследует — фактически
-     *    наблюдается ~5e-5, что согласуется с его собственным порядком 4.
+     * THE LIMITATIONS OF THE CHECK, both being properties of the method and not defects:
+     *  * only the system B: `u* = t^2` does not lie in the span of `{1, sinh, cosh}` and `{1, sin, cos}`,
+     *    and on the systems H/T the error naturally equals the usual ~4e-5;
+     *  * only the schemes [SPLINE_SPACE_SCHEMES]: the Nyström approximation lies OUTSIDE the spline
+     *    space (`u^N_h = f + L^N_h u`), it does not inherit the exactness on span — in fact
+     *    ~5e-5 is observed, which agrees with its own order 4.
      */
     @Test
     @Tag("fast")
@@ -511,9 +511,9 @@ class ConvergenceOrderTest {
                         spanErrors.getOrPut("$equation/$familyName/$scheme") { mutableListOf() } += error
                     }
                 }
-                // Сообщение собирается ПОСЛЕ обхода всех сеток семейства: полная
-                // последовательность погрешностей нужна во ВСЕХ ветвях падения,
-                // а не только там, где считается порядок.
+                // The message is assembled AFTER walking all the grids of the family: the full
+                // sequence of errors is needed in ALL failure branches,
+                // and not only where the order is computed.
                 for (scheme in SPLINE_SPACE_SCHEMES) {
                     val series = spanErrors["$equation/$familyName/$scheme"] ?: continue
                     val worst = series.max()
@@ -522,23 +522,23 @@ class ConvergenceOrderTest {
                             "n=${SPAN_GRID_SIZES[it]}: ${fmtError(series[it])}"
                         }
                         failures += "$equation/span/B/$familyName/$scheme: " +
-                            "наибольшая E_h=${fmtError(worst)} должна быть ниже " +
+                            "the largest E_h=${fmtError(worst)} must be below " +
                             "${fmtError(SPAN_EXACTNESS_TOLERANCE)} " +
-                            "(u* = t^2 лежит в span порождающей системы B). E_h [$seq]"
+                            "(u* = t^2 lies in the span of the generating system B). E_h [$seq]"
                     }
                 }
             }
         }
         assertTrue(
             checked == 64,
-            "Проверка на span должна охватывать 64 сочетания " +
-                "(2 уравнения x 4 семейства x 2 сетки x 4 схемы), проверено $checked",
+            "The check on span must cover 64 combinations " +
+                "(2 equations x 4 families x 2 grids x 4 schemes), checked $checked",
         )
-        reportIfAny(failures, checked, "Точность на span порождающей системы не достигнута")
+        reportIfAny(failures, checked, "The exactness on the span of the generating system is not attained")
     }
 
     // ------------------------------------------------------------------------
-    // Измерение
+    // Measurement
     // ------------------------------------------------------------------------
 
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
@@ -546,12 +546,12 @@ class ConvergenceOrderTest {
         "xi1" -> DeBoorFixFunctionals(basis, 1)
         "mu" -> AveragingFunctionals(basis, 0.5)
         "lambda" -> ThreePointFunctionals(basis, 0.5)
-        else -> error("Неизвестное семейство функционалов: $name")
+        else -> error("Unknown functional family: $name")
     }
 
     /**
-     * Схемы решателя Фредгольма. Nyström-схемы отбрасываются для семейств с производной:
-     * это контракт кода (`require(!funcs.usesDerivative)`), а не выбор теста.
+     * The schemes of the Fredholm solver. The Nyström schemes are discarded for families with a derivative:
+     * this is the contract of the code (`require(!funcs.usesDerivative)`), not a choice of the test.
      */
     private fun fredholmSchemes(
         solver: solvers.fredholm.FredholmSecondKindSolver,
@@ -572,7 +572,7 @@ class ConvergenceOrderTest {
         )
     }
 
-    /** Схемы решателя Вольтерры; то же ограничение на семейства с производной. */
+    /** The schemes of the Volterra solver; the same restriction on families with a derivative. */
     private fun volterraSchemes(
         solver: solvers.volterra.VolterraSecondKindSolver,
         funcs: FunctionalFamily,
@@ -593,15 +593,15 @@ class ConvergenceOrderTest {
     }
 
     /**
-     * Погрешности `E_h` всех схем на последовательности сеток.
+     * The errors `E_h` of all the schemes on a sequence of grids.
      *
-     * Решатель строится ОДИН РАЗ на сетку и переиспользуется всеми схемами: сборка
-     * матриц `M`/`M2` — самая дорогая часть, и её повторение на каждую схему умножило
-     * бы время прогона примерно на восемь.
+     * The solver is built ONCE per grid and reused by all the schemes: the assembly
+     * of the matrices `M`/`M2` is the most expensive part, and repeating it per scheme would multiply
+     * the run time by about eight.
      *
-     * Измельчение для конкретной схемы прекращается, как только её погрешность
-     * опустилась ниже [MACHINE_PRECISION_FLOOR]: дальше порядок определяется
-     * шумом округления, а не методом.
+     * The refinement for a concrete scheme stops as soon as its error
+     * has gone below [MACHINE_PRECISION_FLOOR]: beyond that the order is determined by
+     * rounding noise and not by the method.
      */
     private fun collectErrors(
         equation: String,
@@ -643,17 +643,17 @@ class ConvergenceOrderTest {
     }
 
     // ------------------------------------------------------------------------
-    // Проверка и диагностика
+    // Checking and diagnostics
     // ------------------------------------------------------------------------
 
     /**
-     * ВСЕ пригодные пары `(индекс, порядок)` в порядке измельчения: те, у которых обе
-     * погрешности не ниже [floor] и порядок не `NaN`.
+     * ALL suitable pairs `(index, order)` in the order of refinement: those whose both
+     * errors are not below [floor] and whose order is not `NaN`.
      *
-     * ВОЗВРАЩАЮТСЯ ВСЕ ПАРЫ, а не последняя. Раньше бралась только последняя пара
-     * (самая близкая к асимптотике), и это оставляло дыру: преасимптотическая деградация
-     * — та, что портит точность на грубых сетках, но выходит на тот же наклон к n = 64,
-     * — проходила молча, хотя именно на грубых сетках библиотекой и пользуются.
+     * ALL PAIRS ARE RETURNED, not the last one. Previously only the last pair was taken
+     * (the closest to the asymptotics), and that left a hole: a preasymptotic degradation
+     * — the one that spoils the accuracy on coarse grids but reaches the same slope by n = 64
+     * — passed silently, although it is exactly on coarse grids that the library is used.
      */
     private fun trustedOrders(errs: List<Double>, floor: Double): List<Pair<Int, Double>> {
         val ps = orders(errs)
@@ -663,9 +663,9 @@ class ConvergenceOrderTest {
     }
 
     /**
-     * Сверяет одно сочетание с таблицей и, при расхождении, добавляет в [failures] строку
-     * с ПОЛНОЙ последовательностью погрешностей и всеми порядками: без них по сообщению
-     * невозможно понять, схема сломалась или измерение вырождено.
+     * Cross-checks one combination against the table and, on a discrepancy, adds to [failures] a row
+     * with the FULL sequence of errors and all the orders: without them it is impossible to understand from the
+     * message whether the scheme broke or the measurement is degenerate.
      */
     private fun checkCombination(
         key: String,
@@ -676,7 +676,7 @@ class ConvergenceOrderTest {
         failures: MutableList<String>,
     ) {
         val expectation = expected[key] ?: run {
-            failures += "$label: ключ '$key' отсутствует в таблице ожидаемых порядков. " +
+            failures += "$label: the key '$key' is absent from the table of expected orders. " +
                 diagnostics(gridSizes, errs, TRUSTED_ERROR_FLOOR)
             return
         }
@@ -686,111 +686,111 @@ class ConvergenceOrderTest {
         val trusted = trustedPairs.lastOrNull()
         when (expectation) {
             is Expected.Saturates -> {
-                // ПОРЯДОК ПРОВЕРОК ВАЖЕН. Сначала — величина погрешности, потом — наличие
-                // измеримого порядка. При деградации схемы верны ОБА условия сразу (ошибка
-                // выросла на порядки И появился измеримый порядок), и сообщить надо про
-                // деградацию, а не предлагать обновить таблицу под сломанный код.
+                // THE ORDER OF THE CHECKS MATTERS. First the magnitude of the error, then the presence
+                // of a measurable order. On a degradation of a scheme BOTH conditions hold at once (the error
+                // grew by orders AND a measurable order appeared), and what has to be reported is the
+                // degradation, rather than proposing to update the table to fit broken code.
                 val coarse = errs.first()
                 if (!(coarse < SATURATED_MAX_COARSE_ERROR)) {
                     val orderPart = if (trusted == null) {
                         ""
                     } else {
-                        " Погрешность перестала упираться в машинную точность: появился измеримый " +
-                            "порядок ${fmtOrder(trusted.second)} — признак ДЕГРАДАЦИИ схемы."
+                        " The error stopped running into machine accuracy: a measurable order " +
+                            "${fmtOrder(trusted.second)} appeared — a sign of a DEGRADATION of the scheme."
                     }
-                    failures += "$label: таблица объявляет выход на машинную точность, поэтому " +
-                        "проверяется погрешность на грубой сетке: ${fmtError(coarse)} должна быть ниже " +
+                    failures += "$label: the table declares a saturation at machine accuracy, so " +
+                        "the error on a coarse grid is checked: ${fmtError(coarse)} must be below " +
                         "${fmtError(SATURATED_MAX_COARSE_ERROR)}.$orderPart $diagnostics"
                     return
                 }
                 if (trusted != null) {
-                    failures += "$label: таблица объявляет выход на машинную точность без измеримого " +
-                        "порядка, но пригодная пара погрешностей нашлась (p=${fmtOrder(trusted.second)}) при " +
-                        "прежнем уровне погрешности. Это изменение поведения — обновите таблицу " +
-                        "осознанно. $diagnostics"
+                    failures += "$label: the table declares a saturation at machine accuracy without a measurable " +
+                        "order, but a suitable pair of errors was found (p=${fmtOrder(trusted.second)}) at " +
+                        "the former error level. This is a change of behaviour — update the table " +
+                        "deliberately. $diagnostics"
                 }
             }
 
             is Expected.Order -> {
                 if (trusted == null) {
-                    failures += "$label: таблица ожидает порядок ${fmtOrder(expectation.p)}, но ни одной " +
-                        "пары погрешностей выше порога доверия ${fmtError(floor)} нет — " +
-                        "измерить порядок нечем. $diagnostics"
+                    failures += "$label: the table expects the order ${fmtOrder(expectation.p)}, but there is not a single " +
+                        "pair of errors above the trust threshold ${fmtError(floor)} — " +
+                        "there is nothing to measure the order with. $diagnostics"
                     return
                 }
-                // ПРОВЕРЯЮТСЯ ВСЕ ПРИГОДНЫЕ ПАРЫ, а не только последняя: иначе деградация
-                // на грубых сетках проходит молча, если последняя пара в допуске.
+                // ALL SUITABLE PAIRS ARE CHECKED, not only the last one: otherwise a degradation
+                // on coarse grids passes silently if the last pair is within the tolerance.
                 val (lastIndex, _) = trusted
                 for ((index, observed) in trustedPairs) {
                     val isLast = index == lastIndex
-                    // РАННИЕ ПАРЫ — ПО ОСЛАБЛЕННОМУ ПРАВИЛУ, и это не послабление ради зелёного
-                    // теста, а свойство метода: на паре 8->16 схема ещё не вышла на асимптотику.
-                    // Замер по 303 ранним парам ИСПРАВНОГО кода: худший недобор — −0.578
-                    // (`V/H/mu/nystrom`, пара 8->16), всего три случая хуже −0.5 и ни одного хуже −0.6.
-                    // Отсюда [PREASYMPTOTIC_TOLERANCE] = 0.8: вдвое от обычного допуска, с запасом 0.22
-                    // до худшего факта. Мутация `kulkarniQuasi` даёт недобор 4...7, то есть ловится.
-                    // Рост порядка на ранних парах НЕ проверяется вовсе: у `V/*/xi1/iterKulkarni`
-                    // он штатно достигает 4.94 при асимптотических 3.75 — выброс на грубой сетке,
-                    // а не улучшение схемы.
+                    // THE EARLY PAIRS GO BY A RELAXED RULE, and this is not a relaxation for the sake of a green
+                    // test but a property of the method: on the pair 8->16 the scheme has not reached the asymptotics yet.
+                    // A measurement over 303 early pairs of HEALTHY code: the worst shortfall is −0.578
+                    // (`V/H/mu/nystrom`, the pair 8->16), three cases in total worse than −0.5 and none worse than −0.6.
+                    // Hence [PREASYMPTOTIC_TOLERANCE] = 0.8: twice the usual tolerance, with a margin of 0.22
+                    // to the worst fact. The `kulkarniQuasi` mutation gives a shortfall of 4...7, that is, it is caught.
+                    // A growth of the order on early pairs is NOT checked at all: for `V/*/xi1/iterKulkarni`
+                    // it regularly reaches 4.94 against the asymptotic 3.75 — an outlier on a coarse grid,
+                    // and not an improvement of the scheme.
                     val tolerance = if (isLast) ORDER_TOLERANCE else PREASYMPTOTIC_TOLERANCE
                     val degraded = observed < expectation.p - tolerance
                     val improved = isLast && observed > expectation.p + ORDER_TOLERANCE
                     if (!degraded && !(improved && !oneSided)) continue
                     val pair = "${gridSizes[index]}->${gridSizes[index + 1]}"
-                    val direction = if (degraded) "НИЖЕ" else "ВЫШЕ"
+                    val direction = if (degraded) "BELOW" else "ABOVE"
                     val rule = when {
-                        !isLast -> "для преасимптотической пары требуется " +
-                            "p >= ${fmtOrder(expectation.p - PREASYMPTOTIC_TOLERANCE)}"
-                        oneSided -> "требуется p >= ${fmtOrder(expectation.p - ORDER_TOLERANCE)}"
-                        else -> "требуется ${fmtOrder(expectation.p)} +- $ORDER_TOLERANCE"
+                        !isLast -> "for a preasymptotic pair p >= " +
+                            "${fmtOrder(expectation.p - PREASYMPTOTIC_TOLERANCE)} is required"
+                        oneSided -> "p >= ${fmtOrder(expectation.p - ORDER_TOLERANCE)} is required"
+                        else -> "${fmtOrder(expectation.p)} +- $ORDER_TOLERANCE is required"
                     }
-                    failures += "$label: наблюдаемый порядок ${fmtOrder(observed)} (пара n=$pair) $direction " +
-                        "ожидаемого ${fmtOrder(expectation.p)}, $rule. $diagnostics"
+                    failures += "$label: the observed order ${fmtOrder(observed)} (pair n=$pair) is $direction " +
+                        "the expected ${fmtOrder(expectation.p)}, $rule. $diagnostics"
                 }
             }
         }
     }
 
     /**
-     * Полная диагностика сочетания: погрешности по сеткам и все порядки между ними.
+     * The full diagnostics of a combination: the errors over the grids and all the orders between them.
      *
-     * @param floor порог доверия ЭТОЙ строки: пометка `[шум]` обязана совпадать с тем,
-     *        что фактически отброшено при проверке, иначе диагностика вводит в заблуждение.
+     * @param floor the trust threshold OF THIS row: the mark `[noise]` must coincide with what
+     *        was actually discarded during the check, otherwise the diagnostics is misleading.
      */
     private fun diagnostics(gridSizes: List<Int>, errs: List<Double>, floor: Double): String {
         val ps = orders(errs)
         val errorPart = errs.indices.joinToString(", ") { "n=${gridSizes[it]}: ${fmtError(errs[it])}" }
         val orderPart = if (errs.size < 2) {
-            "порядков нет (измерен один уровень)"
+            "there are no orders (one level measured)"
         } else {
             (0 until errs.size - 1).joinToString(", ") { i ->
                 val trusted = errs[i] >= floor && errs[i + 1] >= floor
-                val mark = if (trusted) "" else " [шум]"
+                val mark = if (trusted) "" else " [noise]"
                 "${gridSizes[i]}->${gridSizes[i + 1]}: ${fmtOrder(ps[i])}$mark"
             }
         }
-        return "E_h [$errorPart]; порядки [$orderPart]"
+        return "E_h [$errorPart]; orders [$orderPart]"
     }
 
     /**
-     * Единый отчёт о падениях.
+     * A single report of the failures.
      *
-     * @param subject что именно не сошлось. Параметр, а не константа: span-проверка НЕ
-     *        измеряет порядок, и заголовок «порядок не соответствует таблице» был там просто
-     *        неверен — читатель искал бы строку в таблице `expected`, которой там нет.
+     * @param subject what exactly did not match. A parameter and not a constant: the span check does NOT
+     *        measure the order, and the heading "the order does not match the table" was simply
+     *        wrong there — the reader would look for a row in the table `expected` that is not there.
      */
     private fun reportIfAny(failures: List<String>, checked: Int, subject: String) {
         val body = failures.joinToString("\n")
-        // Усечение ОТМЕЧАЕТСЯ ЯВНО: молчаливо обрезанный отчёт выглядит как полный,
-        // и последние сочетания можно просто не заметить.
+        // The truncation is MARKED EXPLICITLY: a silently truncated report looks like a full one,
+        // and the last combinations may simply go unnoticed.
         val shown = if (body.length <= FAILURE_REPORT_LIMIT) {
             body
         } else {
             body.take(FAILURE_REPORT_LIMIT) +
-                "\n[ВЫВОД УСЕЧЁН: показаны первые $FAILURE_REPORT_LIMIT из ${body.length} символов; " +
-                "полный список — в XML-отчёте build/test-results]"
+                "\n[OUTPUT TRUNCATED: the first $FAILURE_REPORT_LIMIT of ${body.length} characters are shown; " +
+                "the full list is in the XML report build/test-results]"
         }
-        assertTrue(failures.isEmpty(), "$subject (${failures.size} из $checked сочетаний):\n$shown")
+        assertTrue(failures.isEmpty(), "$subject (${failures.size} of $checked combinations):\n$shown")
     }
 
     private fun fmtError(x: Double): String = String.format(Locale.ROOT, "%.4e", x)

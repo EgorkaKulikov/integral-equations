@@ -16,30 +16,30 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * КОНТРАКТ ОТЧЁТНОСТИ ньютоновских итераций решателя Урысона (пункт 8.4 спека).
+ * THE REPORTING CONTRACT of the Newton iterations of the Uryson solver (item 8.4 of the spec).
  *
- * Проверяются три утверждения, которые до правки НЕ выполнялись ни в одной из трёх
- * итерационных схем (`solveBase`, `kulkarni`, `nystrom`):
+ * Three statements are checked that before the fix held in NONE of the three
+ * iterative schemes (`solveBase`, `kulkarni`, `nystrom`):
  *
- *  1. `iterations` — число ФАКТИЧЕСКИ выполненных шагов Ньютона, а не число проверок
- *     критерия. Раньше счётчик увеличивался ДО проверки невязки, поэтому при
- *     мгновенной сходимости наружу уходила единица при нуле шагов (замер: `cL = 0`
- *     давал `iterations = 1` при неизменном векторе коэффициентов).
- *  2. `residual` относится к ВОЗВРАЩАЕМОЙ точке. Раньше при выходе по критерию шага
- *     возвращалась невязка в точке ДО шага, то есть систематически ЗАВЫШЕННАЯ.
- *     Оба фактических случая выхода по шагу (базовая схема, задача B, n=8):
- *     при `tol = 1e-2` сообщалось `2.1409e-2` вместо `4.9945e-5` (в 429 раз хуже),
- *     при `tol = 1e-10` — `2.7402e-10` вместо `4.4409e-15` (в 6.2e4 раз хуже).
- *  3. `converged` достоверен: он выставляется по ФАКТИЧЕСКОЙ невязке, а не по тому,
- *     какой критерий прервал цикл. Раньше малый шаг объявлялся успехом безусловно,
- *     поэтому схема сообщала `converged = true` при невязке ВЫШЕ затребованного `tol`.
+ *  1. `iterations` is the number of Newton steps ACTUALLY performed, and not the number of checks
+ *     of the criterion. Previously the counter was incremented BEFORE the residual check, so on
+ *     an instant convergence a one went out at zero steps (measurement: `cL = 0`
+ *     gave `iterations = 1` with an unchanged coefficient vector).
+ *  2. `residual` refers to the RETURNED point. Previously, on exiting by the step criterion,
+ *     the residual at the point BEFORE the step was returned, that is, a systematically OVERSTATED one.
+ *     Both actual cases of exiting by the step (the base scheme, problem B, n=8):
+ *     at `tol = 1e-2` `2.1409e-2` was reported instead of `4.9945e-5` (429 times worse),
+ *     at `tol = 1e-10` `2.7402e-10` instead of `4.4409e-15` (6.2e4 times worse).
+ *  3. `converged` is trustworthy: it is set by the ACTUAL residual, and not by which
+ *     criterion interrupted the loop. Previously a small step was declared a success unconditionally,
+ *     so a scheme reported `converged = true` with a residual ABOVE the requested `tol`.
  *
- * ЗАЩИТА ОТ ВЫРОЖДЕНИЯ. Три теста ниже перебирают конфигурации и проверяют условие
- * не в каждой из них (например, только там, где схема сошлась, или только там, где
- * выход произошёл по шагу). Такой перебор МОЛЧА обнуляется, если поведение изменится
- * и подходящих конфигураций не останется: тест продолжит быть зелёным, ничего не
- * проверяя. Поэтому каждый из них считает ФАКТИЧЕСКИ ПРОВЕРЕННЫЕ случаи и требует,
- * чтобы их было больше нуля.
+ * PROTECTION AGAINST DEGENERATION. The three tests below iterate over configurations and check the condition
+ * not in each of them (for example, only where the scheme converged, or only where
+ * the exit happened by the step). Such an iteration is SILENTLY zeroed if the behaviour changes
+ * and no suitable configurations are left: the test will keep being green while checking
+ * nothing. Therefore each of them counts the cases ACTUALLY CHECKED and requires
+ * that there be more than zero of them.
  */
 @Tag("fast")
 class UrysonNewtonReportingTest {
@@ -47,17 +47,17 @@ class UrysonNewtonReportingTest {
     private val quad = GaussLegendre(8)
 
     /**
-     * Допуск сравнения сообщённой невязки с независимо пересчитанной.
+     * The tolerance of the comparison of the reported residual with an independently recomputed one.
      *
-     * Оба числа считаются одним и тем же кодом (`CollocationCore.xiVector`) в одной
-     * и той же точке, поэтому фактически совпадают побитово; допуск оставлен на случай
-     * иного порядка суммирования при смене бэкенда. Он на много порядков меньше
-     * зафиксированных выше расхождений (429 и 6.2e4 раза), поэтому старое поведение
-     * этот тест заведомо не прошло бы.
+     * Both numbers are computed by one and the same code (`CollocationCore.xiVector`) at one
+     * and the same point, so in fact they coincide bitwise; the tolerance is left for the case of
+     * a different summation order on a change of backend. It is many orders smaller than
+     * the discrepancies recorded above (429 and 6.2e4 times), so the old behaviour
+     * would certainly not have passed this test.
      */
     private val residualMatchTolerance = 1e-12
 
-    /** Нижняя граница допуска базовой схемы — `UrysonSecondKindSolver.NEWTON_TOLERANCE_FLOOR`. */
+    /** The lower bound of the tolerance of the base scheme — `UrysonSecondKindSolver.NEWTON_TOLERANCE_FLOOR`. */
     private val newtonToleranceFloor = 1e-13
 
     private fun solverFor(
@@ -81,15 +81,15 @@ class UrysonNewtonReportingTest {
         )
     }
 
-    /** Вектор `theta_j(f)` — он же начальное приближение базовой схемы. */
+    /** The vector `theta_j(f)` — also the initial approximation of the base scheme. */
     private fun thetaOf(solver: UrysonSecondKindSolver): DoubleArray {
         val n = solver.grid.n
         return DoubleArray(n + 2) { solver.funcs.chi(it - 2).apply(solver.rhs, { 0.0 }, { 0.0 }) }
     }
 
     /**
-     * НЕЗАВИСИМЫЙ пересчёт невязки базовой схемы `F(c) = c - theta(f) - cL Xi(c)`
-     * в заданной точке — эталон для проверки поля `residual`.
+     * An INDEPENDENT recomputation of the residual of the base scheme `F(c) = c - theta(f) - cL Xi(c)`
+     * at a given point — the baseline for checking the field `residual`.
      */
     private fun baseResidualAt(solver: UrysonSecondKindSolver, coeffs: DoubleArray): Double {
         val core = CollocationCore(solver.basis, solver.funcs, solver.op)
@@ -100,31 +100,31 @@ class UrysonNewtonReportingTest {
         )
     }
 
-    /** Итог воспроизведения базовой схемы: то же, что вернул решатель, плюс НАБЛЮДЕНИЯ за циклом. */
+    /** The outcome of reproducing the base scheme: the same as what the solver returned, plus OBSERVATIONS of the loop. */
     private class Replay(
         val steps: Int,
         val residual: Double,
         val converged: Boolean,
-        /** Сколько раз ФАКТИЧЕСКИ вызывался расчёт шага — независимый счётчик шагов. */
+        /** How many times the step computation was ACTUALLY called — an independent step counter. */
         val stepCalls: Int,
-        /** Норма последнего шага: если она ниже допуска, цикл вышел ПО ШАГУ. */
+        /** The norm of the last step: if it is below the tolerance, the loop exited BY THE STEP. */
         val lastStepNorm: Double,
         val coeffs: DoubleArray,
     )
 
     /**
-     * Воспроизводит базовую схему ЧЕРЕЗ ТОТ ЖЕ хелпер [runNewtonIterations], но с
-     * обёртками, наблюдающими за циклом: считает вызовы расчёта шага и запоминает
-     * норму последнего шага.
+     * Reproduces the base scheme THROUGH THE SAME helper [runNewtonIterations], but with
+     * wrappers observing the loop: it counts the calls of the step computation and remembers
+     * the norm of the last step.
      *
-     * Нужно для двух вещей, недоступных снаружи по публичному API:
-     *  - узнать, каким из двух критериев вышел цикл (без этого нельзя утверждать,
-     *    что предмет правки — выход ПО ШАГУ — вообще был затронут);
-     *  - получить НЕЗАВИСИМЫЙ от поля `performedSteps` счётчик выполненных шагов.
+     * Needed for two things unavailable from the outside through the public API:
+     *  - to find out by which of the two criteria the loop exited (without this one cannot claim
+     *    that the subject of the fix — the exit BY THE STEP — was touched at all);
+     *  - to get a counter of the performed steps INDEPENDENT of the field `performedSteps`.
      *
-     * Верность воспроизведения не постулируется, а ПРОВЕРЯЕТСЯ: каждый тест,
-     * использующий этот метод, сверяет `steps` и `residual` с тем, что вернул
-     * настоящий `solveBase()`.
+     * The correctness of the reproduction is not postulated but CHECKED: every test
+     * using this method compares `steps` and `residual` with what the real
+     * `solveBase()` returned.
      */
     private fun replayBase(solver: UrysonSecondKindSolver, tol: Double): Replay {
         val n = solver.grid.n
@@ -157,16 +157,16 @@ class UrysonNewtonReportingTest {
     }
 
     /**
-     * МГНОВЕННАЯ СХОДИМОСТЬ: при `cL = 0` уравнение превращается в `x = f`, а
-     * начальное приближение базовой схемы `c_0 = theta(f)` УЖЕ является решением.
-     * Значит, ни одного шага Ньютона не требуется, и честный счётчик обязан дать 0.
+     * INSTANT CONVERGENCE: at `cL = 0` the equation turns into `x = f`, and
+     * the initial approximation of the base scheme `c_0 = theta(f)` is ALREADY the solution.
+     * Hence not a single Newton step is needed, and an honest counter must give 0.
      *
-     * Это не искусственная конфигурация ради теста, а вырожденный случай самого
-     * уравнения (нулевой множитель перед интегральным оператором), достижимый через
-     * штатный публичный конструктор.
+     * This is not an artificial configuration for the sake of the test but a degenerate case of the
+     * equation itself (a zero factor in front of the integral operator), reachable through
+     * the regular public constructor.
      *
-     * Утверждение усилено проверкой, что вектор коэффициентов НЕ СДВИНУЛСЯ побитово:
-     * иначе «ноль шагов» можно было бы сообщать и после фактически сделанного шага.
+     * The statement is strengthened by a check that the coefficient vector did NOT SHIFT bitwise:
+     * otherwise "zero steps" could also be reported after a step was actually made.
      */
     @Test
     fun instantConvergenceReportsZeroNewtonSteps() {
@@ -174,54 +174,54 @@ class UrysonNewtonReportingTest {
         val expectedCoeffs = thetaOf(solver)
 
         val newton = solver.solveBase()
-        assertTrue(newton.converged, "При cL = 0 базовая схема обязана сойтись")
+        assertTrue(newton.converged, "At cL = 0 the base scheme must converge")
         assertEquals(
             0,
             newton.iterations,
-            "Начальное приближение УЖЕ решение: шагов Ньютона ноль, получено ${newton.iterations}",
+            "The initial approximation is ALREADY the solution: zero Newton steps, got ${newton.iterations}",
         )
-        assertEquals(0.0, newton.residual, "Невязка в точном решении обязана быть нулевой")
+        assertEquals(0.0, newton.residual, "The residual at the exact solution must be zero")
         for (i in expectedCoeffs.indices) {
             assertEquals(
                 expectedCoeffs[i].toRawBits(),
                 newton.coeffs[i].toRawBits(),
-                "Коэффициент $i изменился, значит шаг всё-таки был выполнен",
+                "Coefficient $i changed, hence a step was performed after all",
             )
         }
 
-        // Схема Кулкарни при cL = 0 приходит к тому же: G_K(c) = theta(f).
+        // The Kulkarni scheme at cL = 0 comes to the same: G_K(c) = theta(f).
         val kulkarni = solver.kulkarni()
         assertEquals(
             0,
             kulkarni.iterations,
-            "Кулкарни при cL = 0 шагов не делает, получено ${kulkarni.iterations}",
+            "Kulkarni at cL = 0 makes no steps, got ${kulkarni.iterations}",
         )
         assertEquals(0.0, kulkarni.residual)
 
-        // Nyström СОЗНАТЕЛЬНО стартует не с theta(f), а с проекции постоянной функции,
-        // поэтому один шаг здесь ОБЯЗАН быть — и он ровно один, а не два.
+        // Nyström DELIBERATELY starts not from theta(f) but from the projection of a constant function,
+        // so one step here MUST happen — and it is exactly one, not two.
         val nystrom = solver.nystrom()
         assertEquals(
             1,
             nystrom.iterations,
-            "Nyström стартует с проекции единицы: нужен ровно один шаг, получено ${nystrom.iterations}",
+            "Nyström starts from the projection of one: exactly one step is needed, got ${nystrom.iterations}",
         )
     }
 
     /**
-     * ВЫХОД ПО КРИТЕРИЮ ШАГА: сообщённая невязка обязана относиться к ВОЗВРАЩАЕМОЙ
-     * точке. Проверяется независимым пересчётом.
+     * EXIT BY THE STEP CRITERION: the reported residual must refer to the RETURNED
+     * point. This is checked by an independent recomputation.
      *
-     * ПОЧЕМУ НУЖЕН СЧЁТЧИК `stepExits`. Для конфигураций, вышедших ПО НЕВЯЗКЕ,
-     * утверждение ТАВТОЛОГИЧНО: сообщённое число и есть та самая невязка, посчитанная
-     * тем же кодом в той же точке, — совпадение гарантировано независимо от правки.
-     * Содержательным тест становится ТОЛЬКО на конфигурациях, вышедших ПО ШАГУ:
-     * именно там старый код возвращал невязку предыдущей точки. Поэтому тест
-     * подсчитывает такие конфигурации и требует, чтобы их было больше нуля, — иначе
-     * он молча выродился бы в проверку тождества.
+     * WHY THE COUNTER `stepExits` IS NEEDED. For the configurations that exited BY THE RESIDUAL
+     * the statement is TAUTOLOGICAL: the reported number is that very residual, computed
+     * by the same code at the same point — a match is guaranteed regardless of the fix.
+     * The test becomes substantial ONLY on the configurations that exited BY THE STEP:
+     * it is there that the old code returned the residual of the previous point. Therefore the test
+     * counts such configurations and requires that there be more than zero of them — otherwise
+     * it would silently degenerate into a check of an identity.
      *
-     * Допуски подобраны замером: на `tol = 1e-2` и `tol = 1e-10` базовая схема для
-     * задачи B выходит именно по норме шага (кубическая нелинейность при `cL = 1`).
+     * The tolerances are chosen by measurement: at `tol = 1e-2` and `tol = 1e-10` the base scheme for
+     * problem B exits exactly by the step norm (a cubic nonlinearity at `cL = 1`).
      */
     @Test
     fun reportedResidualIsMeasuredAtReturnedPoint() {
@@ -229,55 +229,55 @@ class UrysonNewtonReportingTest {
         var stepExits = 0
         for (tol in listOf(1e-2, 1e-5, 1e-10, 1e-12)) {
             for (problem in listOf(UrysonProblem.A, UrysonProblem.B)) {
-                val label = "задача ${problem.name}, tol=$tol"
+                val label = "problem ${problem.name}, tol=$tol"
                 val newton = solverFor(problem, n = 8, tol = tol).solveBase()
                 val solver = solverFor(problem, n = 8, tol = tol)
                 val recomputed = baseResidualAt(solver, newton.coeffs)
                 val scale = maxOf(abs(recomputed), abs(newton.residual), 1e-300)
                 assertTrue(
                     abs(newton.residual - recomputed) / scale < residualMatchTolerance,
-                    "$label: сообщена невязка ${newton.residual}, " +
-                        "а в ВОЗВРАЩАЕМОЙ точке она равна $recomputed",
+                    "$label: the reported residual is ${newton.residual}, " +
+                        "while at the RETURNED point it equals $recomputed",
                 )
                 checked++
 
-                // Классифицируем критерий выхода воспроизведением цикла.
+                // We classify the exit criterion by reproducing the loop.
                 val replay = replayBase(solverFor(problem, n = 8, tol = tol), tol)
                 assertEquals(
                     newton.iterations,
                     replay.steps,
-                    "$label: воспроизведение цикла разошлось с solveBase по числу шагов",
+                    "$label: the reproduction of the loop diverged from solveBase in the number of steps",
                 )
                 if (replay.steps > 0 && replay.lastStepNorm < maxOf(tol, newtonToleranceFloor)) {
                     stepExits++
                 }
             }
         }
-        assertTrue(checked > 0, "Тест выродился: ни одна конфигурация не проверена")
+        assertTrue(checked > 0, "The test degenerated: not a single configuration was checked")
         assertTrue(
             stepExits > 0,
-            "Тест выродился: НИ ОДНА конфигурация не вышла по критерию ШАГА, а именно этот " +
-                "случай и есть предмет правки — на выходе по невязке утверждение тавтологично. " +
-                "Подберите допуски заново (замером подтверждены tol=1e-2 и tol=1e-10 на задаче B)",
+            "The test degenerated: NOT A SINGLE configuration exited by the STEP criterion, and it is exactly this " +
+                "case that is the subject of the fix — on an exit by the residual the statement is tautological. " +
+                "Choose the tolerances anew (tol=1e-2 and tol=1e-10 on problem B are confirmed by measurement)",
         )
     }
 
     /**
-     * ДОСТОВЕРНОСТЬ ФЛАГА `converged`: если сходимость объявлена, невязка ОБЯЗАНА быть
-     * ниже затребованного допуска.
+     * THE TRUSTWORTHINESS OF THE `converged` FLAG: if convergence is declared, the residual MUST be
+     * below the requested tolerance.
      *
-     * Это не следствие, а самостоятельный контракт, обеспеченный кодом: при выходе по
-     * норме шага невязка пересчитывается в новой точке и СРАВНИВАЕТСЯ с допуском.
-     * Малый шаг сам по себе успехом не считается — он штатно возникает на плохо
-     * обусловленном якобиане и на приближённом разностном якобиане схемы `nystrom`.
+     * This is not a consequence but a standalone contract ensured by the code: on an exit by
+     * the step norm the residual is recomputed at the new point and COMPARED with the tolerance.
+     * A small step by itself is not considered a success — it regularly arises with a poorly
+     * conditioned Jacobian and with the approximate difference Jacobian of the `nystrom` scheme.
      *
-     * До правки противоречие воспроизводилось фактически на всех трёх схемах (замер,
-     * n=8, задача B): базовая при `tol = 1e-2` сообщала `2.14e-2 > 1e-2`, схема
-     * Кулкарни при `tol = 1e-5` — `3.19e-5 > 1e-5`, Nyström при `tol = 1e-8` —
-     * `2.56e-8 > 1e-8`. Все три случая включены в перебор ниже.
+     * Before the fix the contradiction was reproduced in fact on all three schemes (measurement,
+     * n=8, problem B): the base one at `tol = 1e-2` reported `2.14e-2 > 1e-2`, the Kulkarni
+     * scheme at `tol = 1e-5` `3.19e-5 > 1e-5`, Nyström at `tol = 1e-8`
+     * `2.56e-8 > 1e-8`. All three cases are included in the iteration below.
      *
-     * Счётчик `checked` обязателен: без него отказ схем сходиться (`continue` по
-     * каждой конфигурации) обнулил бы тест, оставив его зелёным.
+     * The counter `checked` is mandatory: without it a refusal of the schemes to converge (a `continue` on
+     * every configuration) would zero the test, leaving it green.
      */
     @Test
     fun convergedResultNeverReportsResidualAboveTolerance() {
@@ -294,8 +294,8 @@ class UrysonNewtonReportingTest {
                     if (!solution.converged) continue
                     assertTrue(
                         solution.residual < tol,
-                        "Задача ${problem.name}, tol=$tol, схема $name: сходимость объявлена, " +
-                            "но сообщена невязка ${solution.residual} выше допуска",
+                        "Problem ${problem.name}, tol=$tol, scheme $name: convergence is declared, " +
+                            "but the reported residual ${solution.residual} is above the tolerance",
                     )
                     checked++
                 }
@@ -303,25 +303,25 @@ class UrysonNewtonReportingTest {
         }
         assertTrue(
             checked > 0,
-            "Тест выродился: ни одна схема не сообщила о сходимости, поэтому утверждение " +
-                "не проверено ни разу",
+            "The test degenerated: no scheme reported convergence, so the statement " +
+                "was never checked",
         )
     }
 
     /**
-     * СЧЁТЧИК РАВЕН ЧИСЛУ ФАКТИЧЕСКИ ВЫПОЛНЕННЫХ ШАГОВ — сверка с НЕЗАВИСИМЫМ счётом.
+     * THE COUNTER EQUALS THE NUMBER OF STEPS ACTUALLY PERFORMED — a comparison with an INDEPENDENT count.
      *
-     * Независимый счёт — это число вызовов лямбды расчёта шага: она вызывается ровно
-     * один раз на каждый выполненный шаг, и её счётчик живёт в тесте, а не в хелпере.
-     * Поэтому сверка не зависит от того, как хелпер считает сам, и ловит расхождение
-     * даже на единицу.
+     * The independent count is the number of calls of the step computation lambda: it is called exactly
+     * once per performed step, and its counter lives in the test, not in the helper.
+     * Therefore the comparison does not depend on how the helper counts itself, and catches a divergence
+     * even by one.
      *
-     * ПОЧЕМУ НЕ МОНОТОННОСТЬ ПО `tol`. Прежняя редакция этого теста проверяла, что
-     * ужесточение допуска не уменьшает число шагов, и утверждала, что «ловит сдвиг
-     * счётчика на единицу». Это было НЕВЕРНО: старая семантика отличается от новой
-     * РАВНОМЕРНЫМ сдвигом на единицу, а монотонность к постоянному сдвигу инвариантна,
-     * поэтому мутацию тест не ловил по построению. Сверка с независимым счётом от
-     * сдвига не инвариантна и ловит его сразу.
+     * WHY NOT MONOTONICITY IN `tol`. The former edition of this test checked that
+     * tightening the tolerance does not decrease the number of steps, and claimed that it "catches a shift
+     * of the counter by one". That was WRONG: the old semantics differs from the new one by a
+     * UNIFORM shift by one, and monotonicity is invariant to a constant shift,
+     * so the test did not catch the mutation by construction. A comparison with an independent count is
+     * not invariant to the shift and catches it at once.
      */
     @Test
     fun stepCountEqualsNumberOfPerformedSteps() {
@@ -329,45 +329,45 @@ class UrysonNewtonReportingTest {
         var withSteps = 0
         for (tol in listOf(1e-1, 1e-2, 1e-5, 1e-10, 1e-12)) {
             for (problem in listOf(UrysonProblem.A, UrysonProblem.B)) {
-                val label = "задача ${problem.name}, tol=$tol"
+                val label = "problem ${problem.name}, tol=$tol"
                 val reported = solverFor(problem, n = 8, tol = tol).solveBase()
                 val replay = replayBase(solverFor(problem, n = 8, tol = tol), tol)
 
                 assertEquals(
                     replay.stepCalls,
                     replay.steps,
-                    "$label: хелпер сообщил ${replay.steps} шагов, а расчёт шага вызывался " +
-                        "${replay.stepCalls} раз",
+                    "$label: the helper reported ${replay.steps} steps, while the step computation was called " +
+                        "${replay.stepCalls} times",
                 )
                 assertEquals(
                     replay.stepCalls,
                     reported.iterations,
-                    "$label: solveBase сообщил ${reported.iterations} шагов, а фактически шаг " +
-                        "выполнялся ${replay.stepCalls} раз",
+                    "$label: solveBase reported ${reported.iterations} steps, while the step was actually " +
+                        "performed ${replay.stepCalls} times",
                 )
                 checked++
                 if (replay.stepCalls > 0) withSteps++
             }
         }
-        assertTrue(checked > 0, "Тест выродился: ни одна конфигурация не проверена")
+        assertTrue(checked > 0, "The test degenerated: not a single configuration was checked")
         assertTrue(
             withSteps > 0,
-            "Тест выродился: во всех конфигурациях шагов оказалось ноль, поэтому сверка " +
-                "счётчиков не различает семантики",
+            "The test degenerated: in all the configurations the number of steps turned out to be zero, so the comparison " +
+                "of the counters does not distinguish the semantics",
         )
     }
 
     /**
-     * ЗАСТОЙ: малый шаг при большой невязке НЕ объявляется сходимостью.
+     * STALLING: a small step at a large residual is NOT declared a convergence.
      *
-     * Штатные задачи A и B этого режима не дают — перебор 216 сочетаний
-     * (задача × базис × сетка × допуск) дал НОЛЬ случаев. Поэтому режим проверяется
-     * прямым вызовом [runNewtonIterations] с вырожденными `F` и шагом: невязка держится
-     * равной `5.0`, а шаг — `1e-15`. Такая подстановка не подменяет физику задачи,
-     * а изолирует ровно то управляющее решение, которое здесь проверяется.
+     * The regular problems A and B do not produce this regime — an iteration over 216 combinations
+     * (problem × basis × grid × tolerance) gave ZERO cases. Therefore the regime is checked by
+     * a direct call of [runNewtonIterations] with degenerate `F` and step: the residual is kept
+     * equal to `5.0`, and the step to `1e-15`. Such a substitution does not replace the physics of the problem
+     * but isolates exactly the control decision that is checked here.
      *
-     * Именно этот случай отделяет обеспеченный кодом контракт от эмпирического
-     * наблюдения: без сравнения с допуском `converged` был бы `true` при невязке `5.0`.
+     * It is exactly this case that separates a contract ensured by the code from an empirical
+     * observation: without the comparison with the tolerance `converged` would be `true` at a residual of `5.0`.
      */
     @Test
     fun negligibleStepWithLargeResidualIsNotConvergence() {
@@ -381,14 +381,14 @@ class UrysonNewtonReportingTest {
         )
         assertFalse(
             run.converged,
-            "Шаг пренебрежимо мал, но невязка 5.0 выше допуска 1e-8: это НЕ сходимость",
+            "The step is negligibly small, but the residual 5.0 is above the tolerance 1e-8: this is NOT a convergence",
         )
-        assertTrue(run.stalled, "Случай обязан быть помечен как ЗАСТОЙ, а не как исчерпание предела")
-        assertEquals(1, run.performedSteps, "Застой распознаётся сразу после первого же шага")
-        assertEquals(5.0, run.residual, "Невязка обязана быть сообщена фактическая")
-        assertTrue(run.performedSteps < 100, "Предел итераций НЕ исчерпан — счёт прерван досрочно")
+        assertTrue(run.stalled, "The case must be marked as STALLING, and not as an exhaustion of the limit")
+        assertEquals(1, run.performedSteps, "Stalling is recognized right after the very first step")
+        assertEquals(5.0, run.residual, "The residual reported must be the actual one")
+        assertTrue(run.performedSteps < 100, "The iteration limit is NOT exhausted — the run was interrupted early")
 
-        // Контроль в обратную сторону: тот же выход по шагу, но невязка МАЛА, — успех.
+        // A control in the opposite direction: the same exit by the step, but the residual is SMALL — a success.
         val converging = doubleArrayOf(10.0)
         val ok = runNewtonIterations(
             x = converging,
@@ -397,8 +397,8 @@ class UrysonNewtonReportingTest {
             residualAt = { current -> doubleArrayOf(abs(current[0])) },
             stepAt = { current, _ -> doubleArrayOf(-current[0]) },
         )
-        assertTrue(ok.converged, "Малый шаг при НУЛЕВОЙ невязке обязан считаться сходимостью")
-        assertFalse(ok.stalled, "Успешный исход застоем не является")
-        assertEquals(0.0, ok.residual, "Невязка обязана быть измерена в возвращаемой точке")
+        assertTrue(ok.converged, "A small step at a ZERO residual must be considered a convergence")
+        assertFalse(ok.stalled, "A successful outcome is not a stalling")
+        assertEquals(0.0, ok.residual, "The residual must be measured at the returned point")
     }
 }

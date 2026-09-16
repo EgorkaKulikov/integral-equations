@@ -4,38 +4,38 @@ import java.io.File
 import kotlin.test.Test
 
 /**
- * Служебный инструмент: снимает ДОПОЛНИТЕЛЬНЫЙ характеризационный снимок
- * (комбинированный Nyström, неравномерные сетки, отрезок, отличный от `[0,1]`).
- * Состав матрицы описан в [ExtraCharacterizationMatrix].
+ * A utility tool: shoots the ADDITIONAL characterization snapshot
+ * (the combined Nyström, non-uniform grids, an interval other than `[0,1]`).
+ * The composition of the matrix is described in [ExtraCharacterizationMatrix].
  *
- * Это НЕ проверочный тест: он ничего не утверждает и всегда завершается успешно.
- * Результат — файл `build/baseline/baseline-extra.tsv`, который после осмотра
- * копируется в `src/test/resources/characterization/baseline-extra.tsv` и становится
- * эталоном для [ExtraCharacterizationTest].
+ * This is NOT a checking test: it asserts nothing and always finishes successfully.
+ * The result is the file `build/baseline/baseline-extra.tsv`, which after inspection
+ * is copied into `src/test/resources/characterization/baseline-extra.tsv` and becomes
+ * the baseline for [ExtraCharacterizationTest].
  *
- * Запуск: `./gradlew captureExtraBaseline`.
+ * Run: `./gradlew captureExtraBaseline`.
  *
- * УСТРОЙСТВО ЗАПИСИ (с 2026-09-15 такое же у [BaselineSnapshotTool] — именно отсюда оно
- * туда и перенесено; до того это были три различия со старым инструментом):
- *  - имя файла ДЕТЕРМИНИРОВАНО и не содержит имени потока JUnit, иначе оно зависело бы
- *    от планировщика, а сравнение снимков приходилось бы делать шаблоном;
- *  - файл ПЕРЕЗАПИСЫВАЕТСЯ, а не дописывается: при `appendText` повторный запуск
- *    без ручной очистки каталога удваивает содержимое;
- *  - строки ОТСОРТИРОВАНЫ по ключу (сортировкой в [ExtraCharacterizationMatrix.collect]),
- *    поэтому дифф двух снимков показывает изменение чисел, а не перестановку строк.
+ * THE DESIGN OF THE WRITING (since 2026-09-15 the same in [BaselineSnapshotTool] — it was moved
+ * there from here; before that these were three differences from the old tool):
+ *  - the file name is DETERMINISTIC and does not contain the name of the JUnit thread, otherwise it would depend
+ *    on the scheduler, and a comparison of snapshots would have to be done by a pattern;
+ *  - the file is OVERWRITTEN and not appended to: with `appendText` a repeated run
+ *    without a manual cleanup of the directory doubles the contents;
+ *  - the rows are SORTED by key (by the sorting in [ExtraCharacterizationMatrix.collect]),
+ *    so a diff of two snapshots shows a change of the numbers and not a permutation of the rows.
  */
 class ExtraBaselineSnapshotTool {
 
-    /** Снимает всю дополнительную матрицу одним файлом. */
+    /** Shoots the whole additional matrix into one file. */
     @Test
     fun captureExtraSnapshot() {
         val rows = ExtraCharacterizationMatrix.collect()
-        // См. [BaselineSnapshotTool]: каталог задаётся свойством ради двух снимков подряд.
+        // See [BaselineSnapshotTool]: the directory is set by a property for the sake of two snapshots in a row.
         val dir = File(System.getProperty("baseline.output.dir")?.takeIf { it.isNotBlank() } ?: "build/baseline").apply { mkdirs() }
         val target = File(dir, "baseline-extra.tsv")
-        // Одна операция записи вместо тысячи дозаписей: и быстрее, и исключает
-        // частично записанный файл при падении посреди снятия.
+        // One write operation instead of a thousand appends: it is both faster and excludes
+        // a partially written file on a failure in the middle of the shooting.
         target.writeText(rows.joinToString(separator = "") { (key, value) -> "$key\t$value\n" })
-        println("Снимок дополнительной матрицы: ${rows.size} строк -> ${target.absolutePath}")
+        println("Snapshot of the additional matrix: ${rows.size} rows -> ${target.absolutePath}")
     }
 }

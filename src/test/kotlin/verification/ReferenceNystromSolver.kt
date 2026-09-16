@@ -5,53 +5,53 @@ import kotlin.math.abs
 import kotlin.math.cos
 
 /**
- * ЭТАЛОННЫЙ метод Нюстрёма для СВЕРКИ. НЕ ЧАСТЬ БИБЛИОТЕКИ.
+ * A BASELINE Nyström method FOR CROSS-CHECKING. NOT PART OF THE LIBRARY.
  *
- * Назначение и почему он существует отдельно
+ * The purpose and why it exists separately
  * ------------------------------------------
- * Все штатные проверки проекта написаны на его же коде и потому подтверждают лишь
- * внутреннюю согласованность. Этот класс — независимая реализация классического
- * метода Нюстрёма (учебная схема, [Atkinson 1997], гл. 4) для уравнения Фредгольма
- * второго рода
+ * All the regular checks of the project are written on its own code and therefore confirm only
+ * internal consistency. This class is an independent implementation of the classical
+ * Nyström method (a textbook scheme, [Atkinson 1997], ch. 4) for the Fredholm equation
+ * of the second kind
  *
  *     u(t) - lambda * ∫_a^b K(t,s) u(s) ds = f(t),
  *
- * которая служит ВНЕШНИМ эталоном внутри тестового прогона: с ней сверяются решения
- * схем проекта, не выходя в Python (сверка со SciPy — отдельный контур,
- * `tools/verify_with_scipy.py`, слои L6a/L6b).
+ * which serves as an EXTERNAL baseline inside the test run: the solutions of the project
+ * schemes are cross-checked against it without going out to Python (the cross-check with SciPy is a separate loop,
+ * `tools/verify_with_scipy.py`, the layers L6a/L6b).
  *
- * НЕЗАВИСИМОСТЬ — ГЛАВНОЕ ТРЕБОВАНИЕ, а не пожелание
+ * INDEPENDENCE IS THE MAIN REQUIREMENT, not a wish
  * ---------------------------------------------------
- * Эталон, использующий проверяемый код, замыкается сам на себя: ошибка, лежащая в
- * общем для обоих звене, сократится и станет невидимой. Поэтому здесь СОЗНАТЕЛЬНО
- * НЕ используется ничего из `src/main`:
+ * A baseline using the code under test closes on itself: an error lying in the
+ * link common to both will cancel and become invisible. Therefore nothing from `src/main`
+ * is DELIBERATELY used here:
  *
- *  - НЕТ сплайнового базиса (`MinimalSplineBasis`) и аппроксимационных функционалов
- *    (`ProjFunctionals`, `AveragingFunctionals`) — метод Нюстрёма их не требует
- *    в принципе: неизвестными служат значения решения в узлах квадратуры;
- *  - НЕТ `numerics.GaussLegendre` — узлы и веса вычисляются здесь ([legendreNodes]);
- *  - НЕТ `LinearAlgebra`/`DenseOps`/бэкендов проекта — СЛАУ решается здесь
- *    ([solveDense]) методом Гаусса с выбором главного элемента по столбцу;
- *  - НЕТ `Grid`: сетка проекта к схеме Нюстрёма отношения не имеет.
+ *  - there is NO spline basis (`MinimalSplineBasis`) and no approximation functionals
+ *    (`ProjFunctionals`, `AveragingFunctionals`) — the Nyström method does not require them
+ *    in principle: the unknowns are the values of the solution at the quadrature nodes;
+ *  - there is NO `numerics.GaussLegendre` — the nodes and weights are computed here ([legendreNodes]);
+ *  - there is NO `LinearAlgebra`/`DenseOps`/project backends — the linear system is solved here
+ *    ([solveDense]) by Gaussian elimination with column pivoting;
+ *  - there is NO `Grid`: the grid of the project has nothing to do with the Nyström scheme.
  *
- * Единственный вход извне — сами `kernel`, `rhs`, `lambda`, `a`, `b`: это ПОСТАНОВКА
- * задачи, а не средство её решения. Формально независимость подтверждается тем, что
- * список импортов файла состоит только из `kotlin.math`.
+ * The only input from outside is `kernel`, `rhs`, `lambda`, `a`, `b` themselves: this is the STATEMENT
+ * of the problem, not a means of solving it. Formally the independence is confirmed by the fact that
+ * the import list of the file consists only of `kotlin.math`.
  *
- * Достижимая точность
+ * The attainable accuracy
  * -------------------
- * На гладких ядрах квадратура Гаусса–Лежандра сходится экспоненциально, поэтому уже
- * при [nodeCount] = 64 решение воспроизводится на уровне 1e-14…1e-15 — на порядки
- * точнее схем проекта на сетках n = 8..32. Это и делает его пригодным эталоном:
- * измеряемая величина (погрешность схемы проекта) заведомо больше погрешности
- * самого эталона.
+ * On smooth kernels the Gauss-Legendre quadrature converges exponentially, so already
+ * at [nodeCount] = 64 the solution is reproduced at the level of 1e-14…1e-15 — orders of magnitude
+ * more accurate than the project schemes on the grids n = 8..32. This is what makes it a suitable baseline:
+ * the quantity being measured (the error of a project scheme) is certainly larger than the error
+ * of the baseline itself.
  *
- * @param kernel ядро `K(t,s)`.
- * @param rhs правая часть `f(t)`.
- * @param lambda параметр при интегральном операторе.
- * @param a левая граница отрезка.
- * @param b правая граница отрезка.
- * @param nodeCount число узлов квадратуры (>= 2).
+ * @param kernel the kernel `K(t,s)`.
+ * @param rhs the right-hand side `f(t)`.
+ * @param lambda the parameter at the integral operator.
+ * @param a the left bound of the interval.
+ * @param b the right bound of the interval.
+ * @param nodeCount the number of quadrature nodes (>= 2).
  */
 class ReferenceNystromSolver(
     private val kernel: (Double, Double) -> Double,
@@ -62,15 +62,15 @@ class ReferenceNystromSolver(
     private val nodeCount: Int = 64,
 ) {
     init {
-        require(nodeCount >= 2) { "ReferenceNystromSolver: требуется nodeCount >= 2, получено $nodeCount" }
-        require(b > a) { "ReferenceNystromSolver: требуется b > a, получено a=$a, b=$b" }
+        require(nodeCount >= 2) { "ReferenceNystromSolver: nodeCount >= 2 is required, got $nodeCount" }
+        require(b > a) { "ReferenceNystromSolver: b > a is required, got a=$a, b=$b" }
     }
 
-    /** Узлы и веса квадратуры, отображённые с `[-1,1]` на `[a,b]`. */
+    /** The quadrature nodes and weights, mapped from `[-1,1]` onto `[a,b]`. */
     private val nodes: DoubleArray
     private val weights: DoubleArray
 
-    /** Значения решения в узлах квадратуры — неизвестные системы Нюстрёма. */
+    /** The values of the solution at the quadrature nodes — the unknowns of the Nyström system. */
     private val nodeValues: DoubleArray
 
     init {
@@ -79,7 +79,7 @@ class ReferenceNystromSolver(
         val mid = 0.5 * (a + b)
         nodes = DoubleArray(nodeCount) { mid + half * raw[it] }
         weights = DoubleArray(nodeCount) { half * rawWeights[it] }
-        // Система Нюстрёма: (I - lambda * w_j * K(t_i, t_j)) u = f.
+        // The Nyström system: (I - lambda * w_j * K(t_i, t_j)) u = f.
         val matrix = Array(nodeCount) { i ->
             DoubleArray(nodeCount) { j ->
                 (if (i == j) 1.0 else 0.0) - lambda * weights[j] * kernel(nodes[i], nodes[j])
@@ -89,11 +89,11 @@ class ReferenceNystromSolver(
     }
 
     /**
-     * Значение эталонного решения в произвольной точке [t].
+     * The value of the baseline solution at an arbitrary point [t].
      *
-     * Используется формула Нюстрёма (интерполяция самим уравнением, а не сплайном):
-     * `u(t) = f(t) + lambda * sum_j w_j K(t, t_j) u_j`. Она сохраняет точность
-     * квадратуры и вне узлов, поэтому отдельная интерполяция не нужна.
+     * The Nyström formula is used (interpolation by the equation itself rather than by a spline):
+     * `u(t) = f(t) + lambda * sum_j w_j K(t, t_j) u_j`. It preserves the accuracy of the
+     * quadrature outside the nodes too, so a separate interpolation is not needed.
      */
     fun eval(t: Double): Double {
         var sum = 0.0
@@ -104,13 +104,13 @@ class ReferenceNystromSolver(
     companion object {
 
         /**
-         * Интеграл `∫_a^b f(s) ds` независимой квадратурой Гаусса–Лежандра.
+         * The integral `∫_a^b f(s) ds` by an independent Gauss-Legendre quadrature.
          *
-         * Вынесено в публичный метод, потому что правая часть модельной задачи
-         * `f = u - Ku` тоже содержит интеграл, и взять его оператором проекта значило бы
-         * втянуть проверяемый код в эталон через чёрный ход.
+         * Extracted into a public method because the right-hand side of a model problem
+         * `f = u - Ku` also contains an integral, and taking it with the project operator would mean
+         * drawing the code under test into the baseline through a back door.
          *
-         * На гладких подынтегральных функциях 96 узлов дают машинную точность.
+         * On smooth integrands 96 nodes give machine accuracy.
          */
         fun integrate(
             a: Double,
@@ -118,8 +118,8 @@ class ReferenceNystromSolver(
             nodeCount: Int = 96,
             f: (Double) -> Double,
         ): Double {
-            require(nodeCount >= 2) { "integrate: требуется nodeCount >= 2, получено $nodeCount" }
-            require(b > a) { "integrate: требуется b > a, получено a=$a, b=$b" }
+            require(nodeCount >= 2) { "integrate: nodeCount >= 2 is required, got $nodeCount" }
+            require(b > a) { "integrate: b > a is required, got a=$a, b=$b" }
             val (raw, rawWeights) = legendreNodes(nodeCount)
             val half = 0.5 * (b - a)
             val mid = 0.5 * (a + b)
@@ -129,16 +129,16 @@ class ReferenceNystromSolver(
         }
 
         /**
-         * Узлы и веса квадратуры Гаусса–Лежандра на `[-1,1]`.
+         * The nodes and weights of the Gauss-Legendre quadrature on `[-1,1]`.
          *
-         * Алгоритм: метод Ньютона по нулям многочлена Лежандра `P_m`, значения и
-         * производная которого берутся из трёхчленной рекуррентности
-         * `(k+1) P_{k+1} = (2k+1) x P_k - k P_{k-1}`, вес `w = 2 / ((1-x^2) P'_m(x)^2)`.
-         * Начальное приближение — асимптотика Трикоми `cos(pi (i - 1/4)/(m + 1/2))`.
+         * The algorithm: Newton's method on the zeros of the Legendre polynomial `P_m`, whose values and
+         * derivative are taken from the three-term recurrence
+         * `(k+1) P_{k+1} = (2k+1) x P_k - k P_{k-1}`, the weight `w = 2 / ((1-x^2) P'_m(x)^2)`.
+         * The initial approximation is the Tricomi asymptotics `cos(pi (i - 1/4)/(m + 1/2))`.
          *
-         * Реализовано ЗДЕСЬ, а не взято из `numerics.GaussLegendre`, именно затем,
-         * чтобы эталон не зависел от проверяемого кода: узлы квадратуры входят и в
-         * схемы проекта, поэтому общая ошибка в них сократилась бы при сравнении.
+         * Implemented HERE and not taken from `numerics.GaussLegendre` exactly so that
+         * the baseline does not depend on the code under test: the quadrature nodes enter the
+         * project schemes too, so a common error in them would cancel in the comparison.
          */
         fun legendreNodes(m: Int): Pair<DoubleArray, DoubleArray> {
             val nodes = DoubleArray(m)
@@ -146,9 +146,9 @@ class ReferenceNystromSolver(
             for (i in 0 until m) {
                 var x = cos(PI * (i + 0.75) / (m + 0.5))
                 var derivative = 0.0
-                // Ньютон сходится квадратично; 100 итераций — заведомый запас,
-                // фактически хватает 4-5. Ограничение обязательно: без него
-                // ошибка в формуле дала бы вечный цикл вместо внятного отказа.
+                // Newton converges quadratically; 100 iterations is a certain margin,
+                // in fact 4-5 are enough. The limit is mandatory: without it
+                // an error in the formula would give an infinite loop instead of a clear failure.
                 var converged = false
                 for (iteration in 0 until 100) {
                     var previous = 1.0
@@ -167,7 +167,7 @@ class ReferenceNystromSolver(
                         break
                     }
                 }
-                check(converged) { "legendreNodes: метод Ньютона не сошёлся для m=$m, узел $i" }
+                check(converged) { "legendreNodes: Newton's method did not converge for m=$m, node $i" }
                 nodes[i] = x
                 weights[i] = 2.0 / ((1.0 - x * x) * derivative * derivative)
             }
@@ -175,13 +175,13 @@ class ReferenceNystromSolver(
         }
 
         /**
-         * Решение плотной системы `A x = rhs` методом Гаусса с выбором главного
-         * элемента по столбцу.
+         * The solution of a dense system `A x = rhs` by Gaussian elimination with column
+         * pivoting.
          *
-         * Реализовано ЗДЕСЬ по той же причине, что и квадратура: обращение к
-         * `LinearAlgebra` проекта сделало бы эталон зависимым от проверяемого кода.
-         * Матрица Нюстрёма на гладком ядре хорошо обусловлена (порядка единиц),
-         * поэтому простого частичного выбора достаточно — уточнения не требуются.
+         * Implemented HERE for the same reason as the quadrature: using the project's
+         * `LinearAlgebra` would make the baseline dependent on the code under test.
+         * The Nyström matrix on a smooth kernel is well conditioned (of order units),
+         * so simple partial pivoting is enough — no refinements are needed.
          */
         fun solveDense(matrix: Array<DoubleArray>, rhs: DoubleArray): DoubleArray {
             val size = rhs.size
@@ -193,7 +193,7 @@ class ReferenceNystromSolver(
                     if (abs(a[row][column]) > abs(a[pivot][column])) pivot = row
                 }
                 check(abs(a[pivot][column]) > 0.0) {
-                    "solveDense: матрица вырождена, нулевой столбец $column"
+                    "solveDense: the matrix is singular, zero column $column"
                 }
                 if (pivot != column) {
                     val rowTmp = a[pivot]; a[pivot] = a[column]; a[column] = rowTmp

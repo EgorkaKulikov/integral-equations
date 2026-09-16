@@ -13,206 +13,206 @@ import splines.metrics.errorEh
 import java.util.Locale
 
 /**
- * ЕДИНЫЙ ИСТОЧНИК дополнительной характеризационной матрицы (снимок `baseline-extra.tsv`).
+ * THE SINGLE SOURCE of the additional characterization matrix (the snapshot `baseline-extra.tsv`).
  *
- * Зачем отдельная матрица, если уже есть `baseline-eh.tsv`. Действующий эталон покрывает
- * только схемы `base`/`sloan`/`kulkarni`/`iteratedKulkarni`/`nystrom`/`iteratedNystrom`
- * на сетке [Grid.uniform] и отрезке `[0,1]`. Вне покрытия остаются ровно те места,
- * которые сильнее всего рискуют пострадать при выносе общего кода решателей
- * Фредгольма и Вольтерры в общий базовый класс:
+ * Why a separate matrix when there is already `baseline-eh.tsv`. The existing baseline covers
+ * only the schemes `base`/`sloan`/`kulkarni`/`iteratedKulkarni`/`nystrom`/`iteratedNystrom`
+ * on the grid [Grid.uniform] and the interval `[0,1]`. Outside the coverage remain exactly the places
+ * that are most at risk when the common code of the Fredholm and Volterra solvers
+ * is moved into a common base class:
  *
- *  1. [solvers.fredholm.FredholmSecondKindSolver.combinedNystrom] и
- *     [solvers.volterra.VolterraSecondKindSolver.combinedNystrom] — у них РАЗНЫЕ критерии
- *     останова простой итерации: Фредгольм меряет расхождение в гауссовых узлах
- *     `op.gNode` (`FredholmSolver.kt`), Вольтерра — в `4n+1` равномерных контрольных
- *     точках (`VolterraSolver.kt`). Слияние тел в общее ядро изменит число итераций,
- *     а значит и результат;
- *  2. неравномерные сетки [Grid.quasiUniform], [Grid.geometric], [Grid.graded];
- *  3. отрезки, отличные от `[0,1]` — на них включается масштабирование порога
- *     [Grid.breakpointInclusionEps], введённое на этапе 3.
+ *  1. [solvers.fredholm.FredholmSecondKindSolver.combinedNystrom] and
+ *     [solvers.volterra.VolterraSecondKindSolver.combinedNystrom] — they have DIFFERENT stopping
+ *     criteria of the simple iteration: Fredholm measures the discrepancy at the Gauss nodes
+ *     `op.gNode` (`FredholmSolver.kt`), Volterra at `4n+1` uniform control
+ *     points (`VolterraSolver.kt`). Merging the bodies into a common core will change the number of iterations,
+ *     and hence the result;
+ *  2. the non-uniform grids [Grid.quasiUniform], [Grid.geometric], [Grid.graded];
+ *  3. intervals other than `[0,1]` — on them the scaling of the threshold
+ *     [Grid.breakpointInclusionEps], introduced at stage 3, kicks in.
  *
- * Почему матрица описана ОДИН раз и используется и инструментом снятия
- * ([ExtraBaselineSnapshotTool]), и проверкой ([ExtraCharacterizationTest]): пара
- * «BaselineSnapshotTool + EhCharacterizationTest» дублирует перечисление сочетаний,
- * и любая правка одного файла без второго молча выводит эталон из-под проверки.
- * Здесь такой рассинхронизации не может быть по построению.
+ * Why the matrix is described ONCE and used both by the snapshot tool
+ * ([ExtraBaselineSnapshotTool]) and by the check ([ExtraCharacterizationTest]): the pair
+ * "BaselineSnapshotTool + EhCharacterizationTest" duplicates the enumeration of the combinations,
+ * and any edit of one file without the other silently takes the baseline out from under the check.
+ * Here such a desynchronization is impossible by construction.
  *
- * СОСТАВ (см. [collect]):
- *  - уравнения: Фредгольм (`F2`) и Вольтерра (`V2`) — рациональные задачи, решение
- *    которых не лежит ни в одной порождающей системе (то есть числа не вырождаются
- *    в машинный ноль и пригодны для относительного сравнения);
- *  - схемы: `combinedNystrom`, `iteratedCombinedNystrom` (целевые) плюс `base` и
- *    `kulkarni` (контрольные: ловят порчу сборки матриц `M`/`M2`);
- *  - порождающие системы: B, H, T;
- *  - семейства функционалов: `theta`, `mu`, `lambda` — ТОЛЬКО без производной.
- *    Ограничение не выбрано, а закреплено кодом: `nystromSupport()` начинается с
- *    `require(!funcs.usesDerivative)` (`FredholmSolver.kt:265`, симметрично в
- *    `VolterraSolver.kt`), поэтому семейства `xi0`/`xi1`/`xi2` для Nyström-схем
- *    невалидны и в матрицу не входят;
- *  - сетки: `uniform`, `quasiUniform`, `geometric`, `graded`;
- *  - n: 8 и 16;
- *  - отрезки: `[0,1]` (полная матрица) и `[0,2]` (сокращённый набор, см. [collect]).
+ * THE COMPOSITION (see [collect]):
+ *  - the equations: Fredholm (`F2`) and Volterra (`V2`) — rational problems whose solution
+ *    lies in no generating system (that is, the numbers do not degenerate
+ *    into machine zero and are suitable for a relative comparison);
+ *  - the schemes: `combinedNystrom`, `iteratedCombinedNystrom` (the targets) plus `base` and
+ *    `kulkarni` (controls: they catch a corruption of the assembly of the matrices `M`/`M2`);
+ *  - the generating systems: B, H, T;
+ *  - the functional families: `theta`, `mu`, `lambda` — ONLY those without a derivative.
+ *    The restriction is not a choice but is fixed by the code: `nystromSupport()` starts with
+ *    `require(!funcs.usesDerivative)` (`FredholmSolver.kt:265`, symmetrically in
+ *    `VolterraSolver.kt`), so the families `xi0`/`xi1`/`xi2` are invalid for the Nyström
+ *    schemes and are not in the matrix;
+ *  - the grids: `uniform`, `quasiUniform`, `geometric`, `graded`;
+ *  - n: 8 and 16;
+ *  - the intervals: `[0,1]` (the full matrix) and `[0,2]` (a reduced set, see [collect]).
  *
- * ПОЧЕМУ `[0,2]`, А НЕ `[-1,1]`: ядро задач `F2`/`V2` равно `1/(1+t+s)` и на `[-1,1]`
- * имеет полюс при `t+s = -1`, то есть прямо внутри области интегрирования. Снимок
- * фиксировал бы не поведение решателя, а деление на ноль. На `[0,2]` знаменатель
- * лежит в `[1,5]` — особенности нет, а масштаб отрезка удвоен, чего достаточно для
- * срабатывания относительного порога [Grid.breakpointInclusionEps].
+ * WHY `[0,2]` AND NOT `[-1,1]`: the kernel of the problems `F2`/`V2` equals `1/(1+t+s)` and on `[-1,1]`
+ * has a pole at `t+s = -1`, that is, right inside the integration domain. The snapshot
+ * would record not the behaviour of the solver but a division by zero. On `[0,2]` the denominator
+ * lies in `[1,5]` — there is no singularity, while the scale of the interval is doubled, which is enough for
+ * the relative threshold [Grid.breakpointInclusionEps] to kick in.
  *
- * РЕЖИМ ДИАГНОСТИКИ: решатели создаются с `throwOnDivergence = false`. Это ОСОЗНАННО.
- * НА ТЕКУЩЕЙ МАТРИЦЕ ВСЁ СХОДИТСЯ: все 336 значений `*.iters` лежат в множестве
- * {13, 15, 47, 107}, предела 200 не достигает ни одно сочетание, включая отрезок `[0,2]`.
- * Режим выбран не потому, что расходимость наблюдается, а потому, что она НЕ ДОЛЖНА
- * превращать снимок в бесполезный: при поведении по умолчанию (исключение) первое же
- * несошедшееся сочетание зафиксировало бы факт исключения — ОДИН бит информации вместо
- * числа — и обрушило бы снятие эталона целиком. В режиме диагностики фиксируются и
- * достигнутое значение, и число итераций, поэтому сеть останется чувствительной, если
- * будущая правка сдвинет какое-то сочетание за предел сходимости.
+ * THE DIAGNOSTIC MODE: the solvers are created with `throwOnDivergence = false`. This is DELIBERATE.
+ * ON THE CURRENT MATRIX EVERYTHING CONVERGES: all 336 values of `*.iters` lie in the set
+ * {13, 15, 47, 107}, no combination reaches the limit 200, including the interval `[0,2]`.
+ * The mode is chosen not because divergence is observed, but because it MUST NOT
+ * turn the snapshot into a useless one: with the default behaviour (an exception) the very first
+ * non-converged combination would record the fact of an exception — ONE bit of information instead of
+ * a number — and would bring down the whole shooting of the baseline. In the diagnostic mode both the
+ * attained value and the number of iterations are recorded, so the net stays sensitive if
+ * a future edit pushes some combination past the convergence limit.
  *
- * ЧИСЛО ИТЕРАЦИЙ СНИМАЕТСЯ ЯВНО (ключи `*.combNystrom.iters`) и это ключевой элемент
- * сети: если при слиянии решателей критерий останова одного из них подменить критерием
- * другого, но итог случайно совпадёт по числу итераций, значение E_h не изменится —
- * именно счётчик итераций делает такую подмену видимой.
+ * THE NUMBER OF ITERATIONS IS RECORDED EXPLICITLY (the keys `*.combNystrom.iters`) and this is a key element
+ * of the net: if on merging the solvers the stopping criterion of one of them is substituted by the criterion
+ * of the other, but the outcome accidentally coincides in the number of iterations, the value of E_h will not change —
+ * it is exactly the iteration counter that makes such a substitution visible.
  */
 object ExtraCharacterizationMatrix {
 
-    /** Путь к ресурсу с эталонным снимком дополнительной матрицы. */
+    /** The path to the resource with the baseline snapshot of the additional matrix. */
     const val RESOURCE_PATH = "/characterization/baseline-extra.tsv"
 
-    /** Относительный допуск сравнения с эталоном (тот же, что и у основного гейта). */
+    /** The relative tolerance of the comparison with the baseline (the same as for the main gate). */
     const val RELATIVE_TOLERANCE = 1e-9
 
     /**
-     * Абсолютный «пол» сравнения: значения ниже него считаются нулевыми.
-     * Нужен по той же причине, что и в [EhCharacterizationTest]: у величин, лежащих
-     * на уровне машинного нуля, относительное сравнение бессмысленно.
+     * The absolute "floor" of the comparison: values below it are considered zero.
+     * Needed for the same reason as in [EhCharacterizationTest]: for quantities lying
+     * at the level of machine zero a relative comparison is meaningless.
      */
     const val ABSOLUTE_FLOOR = 1e-11
 
     /**
-     * Порог шума округления для ключей E_h и `.iters`: расхождение |actual − expected|
-     * не выше него допусками не проверяется. `10³·ε·‖u‖∞` при `‖u‖∞ ≈ e` — то же
-     * значение и обоснование, что у [EhCharacterizationTest.ABSOLUTE_FLOOR]. Измерено
-     * при смене реализации LAPACK (numerical-core 1.0.0): 248 из 672 ключей E_h этого
-     * эталона сдвинулись не более чем на `1.0e-15` абс. (`≈ 2·ε·‖u‖`), что при допуске
-     * `1e-9` на `E_h ≈ 1e-13…1e-4` давало ложные падения.
+     * The rounding noise threshold for the E_h and `.iters` keys: a discrepancy |actual − expected|
+     * not above it is not checked by the tolerances. `10³·ε·‖u‖∞` at `‖u‖∞ ≈ e` is the same
+     * value and justification as for [EhCharacterizationTest.ABSOLUTE_FLOOR]. Measured
+     * at the change of the LAPACK implementation (numerical-core 1.0.0): 248 of the 672 E_h keys of this
+     * baseline shifted by at most `1.0e-15` abs. (`≈ 2·ε·‖u‖`), which at the tolerance
+     * `1e-9` on `E_h ≈ 1e-13…1e-4` produced false failures.
      */
     const val NOISE_FLOOR = 6e-13
 
     /**
-     * Порог шума округления СПЕЦИАЛЬНО для ключей невязки: `10·ε·‖u‖∞ ≈ 6e-15`.
+     * The rounding noise threshold SPECIFICALLY for the residual keys: `10·ε·‖u‖∞ ≈ 6e-15`.
      *
-     * Общий [NOISE_FLOOR] = 6e-13 здесь неприменим по той же причине, что и общий
-     * [ABSOLUTE_FLOOR]: любая сошедшаяся невязка меньше `1e-13`, и порог `6e-13`
-     * поглотил бы ВСЕ ключи невязки — сеть снова стала бы дырой.
+     * The common [NOISE_FLOOR] = 6e-13 is inapplicable here for the same reason as the common
+     * [ABSOLUTE_FLOOR]: any converged residual is smaller than `1e-13`, and the threshold `6e-13`
+     * would absorb ALL the residual keys — the net would become a hole again.
      *
-     * Почему порог всё же нужен. Невязка вычисляется как разность величин порядка
-     * единицы, поэтому её шум округления — порядка `ε·‖u‖ ≈ 6e-16`, а НЕ 1 ULP самого
-     * значения невязки, как предполагалось в KDoc [RESIDUAL_RELATIVE_TOLERANCE].
-     * Измерено при смене реализации LAPACK: 248 из 336 ключей невязки сдвинулись,
-     * максимум `7.8e-16` абс. (`≈ 3.5·ε`), то есть до `1.3e-2` отн. при допуске `1e-3`.
+     * Why the threshold is nevertheless needed. The residual is computed as a difference of quantities of order
+     * one, so its rounding noise is of order `ε·‖u‖ ≈ 6e-16`, and NOT 1 ULP of the residual
+     * value itself, as was assumed in the KDoc of [RESIDUAL_RELATIVE_TOLERANCE].
+     * Measured at the change of the LAPACK implementation: 248 of the 336 residual keys shifted,
+     * at most `7.8e-16` abs. (`≈ 3.5·ε`), that is, up to `1.3e-2` rel. at the tolerance `1e-3`.
      *
-     * Цена: для самых малых невязок (`~1.2e-14`) чувствительность гейта падает до
-     * `~50 %` сдвига вместо `0.1 %`. Мутация из KDoc [RESIDUAL_RELATIVE_TOLERANCE] под
-     * этим порогом повторно не прогонялась; ослабление зафиксировано в
-     * `docs/baseline-changes.md` (запись от 2026-09-09).
+     * The price: for the smallest residuals (`~1.2e-14`) the sensitivity of the gate drops to
+     * a `~50 %` shift instead of `0.1 %`. The mutation from the KDoc of [RESIDUAL_RELATIVE_TOLERANCE] was
+     * not re-run under this threshold; the relaxation is recorded in
+     * `docs/baseline-changes.md` (the entry of 2026-09-09).
      */
     const val RESIDUAL_NOISE_FLOOR = 6e-15
 
     /**
-     * Относительный допуск для ключей E_h, ОБА значения которых лежат ниже [ABSOLUTE_FLOOR].
+     * The relative tolerance for the E_h keys BOTH of whose values lie below [ABSOLUTE_FLOOR].
      *
-     * Зачем понадобился отдельный режим. Раньше такая пара просто ПРОПУСКАЛАСЬ
-     * (`continue`), и это было дырой ровно того же вида, что уже закрыта для ключей
-     * невязки: под пол `1e-11` попадают 53 из 672 ключей E_h, и среди них — 3 ключа
-     * `combNystrom` и 21 `iterCombNystrom`, то есть ЦЕЛЕВЫЕ схемы этапа. Изменение
-     * `2.7e-12` → `9e-12` (втрое) проходило молча.
+     * Why a separate mode was needed. Previously such a pair was simply SKIPPED
+     * (`continue`), and this was a hole of exactly the same kind as the one already closed for the residual
+     * keys: under the floor `1e-11` fall 53 of the 672 E_h keys, and among them 3 `combNystrom`
+     * keys and 21 `iterCombNystrom` ones, that is, the TARGET schemes of the stage. A change
+     * `2.7e-12` → `9e-12` (threefold) passed silently.
      *
-     * Почему допуск НЕ `1e-9`, как у обычных ключей. Значения этого диапазона
-     * (наблюдаемый минимум `3.3e-14` при самих решениях порядка единицы) — это разность
-     * почти совпавших чисел, то есть катастрофическое сокращение: сдвиг операндов на один
-     * ULP (`~2.2e-16`) даёт здесь относительное изменение до нескольких процентов.
-     * Допуск `1e-9` был бы строже машинной точности и давал бы ложные падения.
+     * Why the tolerance is NOT `1e-9`, as for the ordinary keys. The values of this range
+     * (the observed minimum is `3.3e-14` with the solutions themselves of order one) are a difference
+     * of nearly coinciding numbers, that is, a catastrophic cancellation: a shift of the operands by one
+     * ULP (`~2.2e-16`) gives here a relative change of up to a few per cent.
+     * A tolerance of `1e-9` would be stricter than machine accuracy and would produce false failures.
      *
-     * Почему `1e-3`. Тот же порог, что и у ключей невязки, и по той же причине: он лежит
-     * на порядки ниже любого содержательного эффекта ошибки переноса (мутационная проверка
-     * сдвигала значение ВТРОЕ, то есть на 200%) и на порядки выше шума хранения.
+     * Why `1e-3`. The same threshold as for the residual keys, and for the same reason: it lies
+     * orders of magnitude below any substantial effect of a transcription error (the mutation check
+     * shifted the value THREEFOLD, that is, by 200%) and orders of magnitude above the storage noise.
      */
     const val SMALL_VALUE_RELATIVE_TOLERANCE = 1e-3
 
     /**
-     * Абсолютный «пол» для ключей E_h, попавших в режим [SMALL_VALUE_RELATIVE_TOLERANCE].
+     * The absolute "floor" for the E_h keys that fell into the [SMALL_VALUE_RELATIVE_TOLERANCE] mode.
      *
-     * Лежит на два порядка ниже наблюдаемого минимума E_h (`3.3e-14`) и служит только
-     * защитой от деления на ноль при точном нуле ошибки.
+     * It lies two orders below the observed minimum of E_h (`3.3e-14`) and serves only
+     * as a protection against division by zero at an exact zero of the error.
      */
     const val SMALL_VALUE_ABSOLUTE_FLOOR = 1e-16
 
-    /** Порядок квадратуры Гаусса — тот же, что и в основном эталоне. */
+    /** The order of the Gauss quadrature — the same as in the main baseline. */
     private const val QUADRATURE_ORDER = 8
 
     /**
-     * Суффикс ключей, хранящих ДОСТИГНУТУЮ НЕВЯЗКУ итерации (`SolutionFunc.residual`).
+     * The suffix of the keys storing the ATTAINED RESIDUAL of the iteration (`SolutionFunc.residual`).
      *
-     * Ради чего эти ключи существуют. Невязка — ровно та величина, которую меряет критерий
-     * останова: равномерная норма разности соседних итерантов НА КОНТРОЛЬНОМ МНОЖЕСТВЕ.
-     * У решателей это множество РАЗНОЕ (Фредгольм — гауссовы узлы `op.gNode`, Вольтерра —
-     * `4n+1` равномерных точек), и подмена одного другим при слиянии решателей меняет
-     * именно её.
+     * What these keys exist for. The residual is exactly the quantity measured by the stopping
+     * criterion: the uniform norm of the difference of neighbouring iterates ON THE CONTROL SET.
+     * For the solvers this set is DIFFERENT (Fredholm — the Gauss nodes `op.gNode`, Volterra —
+     * `4n+1` uniform points), and substituting one for the other when merging the solvers changes
+     * exactly it.
      *
-     * Это установлено ЗАМЕРОМ, а не предположением. Мутация «контрольные точки Вольтерры
-     * заменены гауссовыми узлами» была внесена и проверена: E_h и число итераций
-     * НЕ ИЗМЕНИЛИСЬ НИ НА БИТ (итерация сходится за то же число шагов и приходит в ту же
-     * точку — оба множества достаточно плотные, а сходимость линейная). Без ключей
-     * невязки сеть эту мутацию пропускала бы молча — то есть была бы бесполезна ровно
-     * в том месте, ради которого создавалась.
+     * This is established BY MEASUREMENT and not by assumption. The mutation "the Volterra control points
+     * are replaced by the Gauss nodes" was introduced and checked: E_h and the number of iterations
+     * DID NOT CHANGE BY A SINGLE BIT (the iteration converges in the same number of steps and arrives at the same
+     * point — both sets are dense enough, and the convergence is linear). Without the residual
+     * keys the net would let this mutation through silently — that is, it would be useless exactly
+     * in the place it was created for.
      */
     const val RESIDUAL_SUFFIX = ".residual"
 
     /**
-     * Допуск сравнения невязок — 1e-3 (относительный), а не общий 1e-9.
+     * The tolerance of the comparison of the residuals is 1e-3 (relative), and not the common 1e-9.
      *
-     * Почему НЕ 1e-9. Невязка — разность почти совпавших итерантов (порядка 3.6e-14
-     * при самих значениях порядка 1), то есть катастрофическое сокращение. Возмущение
-     * операндов всего на один ULP (~2.2e-16) даёт в ней относительное изменение около
-     * 2.2e-16/3.6e-14 ~ 0.6%, то есть допуск 1e-9 здесь был бы строже машинной точности.
+     * Why NOT 1e-9. The residual is a difference of nearly coinciding iterates (of order 3.6e-14
+     * with the values themselves of order 1), that is, a catastrophic cancellation. A perturbation
+     * of the operands by just one ULP (~2.2e-16) gives in it a relative change of about
+     * 2.2e-16/3.6e-14 ~ 0.6%, that is, a tolerance of 1e-9 here would be stricter than machine accuracy.
      *
-     * Почему ИМЕННО 1e-3 — по замеру, а не по вкусу. Мутация «контрольные точки Вольтерры
-     * `4n+1` → гауссовы узлы» изменила 168 из 336 ключей невязки (все вольтерровы;
-     * фредгольмовы не тронуты, как и должно быть), причём ВСЕ 168 — больше чем на 1e-3
-     * (медиана изменённых ~1.5%, максимум 4.0%). Порог 1e-3 лежит ниже всего
-     * эффекта мутации и на 13 порядков выше сдвига САМОГО ЗНАЧЕНИЯ невязки на 1 ULP
-     * (~1e-16), то есть разделяет сигнал и шум хранения.
+     * Why EXACTLY 1e-3 — by measurement and not by taste. The mutation "the Volterra control points
+     * `4n+1` → the Gauss nodes" changed 168 of the 336 residual keys (all the Volterra ones;
+     * the Fredholm ones were untouched, as they should be), and ALL 168 by more than 1e-3
+     * (the median of the changed ones ~1.5%, the maximum 4.0%). The threshold 1e-3 lies below the whole
+     * effect of the mutation and 13 orders above a shift of the residual VALUE ITSELF by 1 ULP
+     * (~1e-16), that is, it separates the signal from the storage noise.
      *
-     * ЧЕСТНОЕ ПРЕДУПРЕЖДЕНИЕ СОПРОВОЖДАЮЩЕМУ. Ключи `*.residual` НАМЕРЕННО
-     * ГИПЕРЧУВСТВИТЕЛЬНЫ: из-за сокращения они усиливают различие в последних битах
-     * примерно в 1e13 раз. Если рефакторинг математически нейтрален, но НЕ побитово
-     * тождествен (например, сменился порядок сложения), эти ключи могут упасть ПРИ
-     * ЧИСТЫХ ключах E_h. Правильная реакция в таком случае — убедиться, что (1) все
-     * ключи E_h и `*.iters` совпали и (2) контрольные множества обоих решателей остались
-     * разными, и после этого ОСОЗНАННО переснять снимок, а НЕ ослаблять этот порог.
+     * AN HONEST WARNING TO THE MAINTAINER. The `*.residual` keys are DELIBERATELY
+     * HYPERSENSITIVE: because of the cancellation they amplify a difference in the last bits
+     * by about 1e13 times. If a refactoring is mathematically neutral but NOT bitwise
+     * identical (the addition order changed, say), these keys may fail WITH
+     * CLEAN E_h keys. The right reaction in such a case is to make sure that (1) all the
+     * E_h and `*.iters` keys matched and (2) the control sets of both solvers stayed
+     * different, and after that to re-shoot the snapshot DELIBERATELY, and NOT to loosen this threshold.
      */
     const val RESIDUAL_RELATIVE_TOLERANCE = 1e-3
 
     /**
-     * Абсолютный «пол» СПЕЦИАЛЬНО для ключей невязки: 1e-18.
+     * The absolute "floor" SPECIFICALLY for the residual keys: 1e-18.
      *
-     * Общий [ABSOLUTE_FLOOR] = 1e-11 здесь НЕПРИМЕНИМ и был бы СКРЫТОЙ ДЫРОЙ в сети.
-     * Критерий останова итерации равен 1e-13, поэтому ЛЮБАЯ сошедшаяся невязка по
-     * построению меньше 1e-13, то есть всегда ниже 1e-11 — с общим полом ВСЕ ключи
-     * невязки признавались бы «нулёвыми» и не сравнивались вовсе. Это не догадка:
-     * первая редакция теста именно так и ПРОПУСТИЛА мутацию (а) на зелёном прогоне,
-     * хотя числа в снимке уже расходились.
+     * The common [ABSOLUTE_FLOOR] = 1e-11 is INAPPLICABLE here and would be a HIDDEN HOLE in the net.
+     * The stopping criterion of the iteration equals 1e-13, so ANY converged residual is by
+     * construction smaller than 1e-13, that is, always below 1e-11 — with the common floor ALL the residual
+     * keys would be declared "zero" and would not be compared at all. This is not a guess:
+     * the first edition of the test MISSED exactly this way the mutation (a) on a green run,
+     * although the numbers in the snapshot already differed.
      *
-     * 1e-18 лежит на четыре порядка ниже наблюдаемых невязок (~3.6e-14) и служит
-     * только защитой от деления на ноль при точном нуле невязки.
+     * 1e-18 lies four orders below the observed residuals (~3.6e-14) and serves
+     * only as a protection against division by zero at an exact zero of the residual.
      */
     const val RESIDUAL_ABSOLUTE_FLOOR = 1e-18
 
-    /** Описание отрезка интегрирования: короткий тег для ключа и сами границы. */
+    /** The description of the integration interval: a short tag for the key and the bounds themselves. */
     private data class Segment(val tag: String, val a: Double, val b: Double)
 
-    /** Описание фабрики сетки: короткий тег для ключа и построитель. */
+    /** The description of a grid factory: a short tag for the key and a builder. */
     private data class GridKind(val tag: String, val build: (Int, Double, Double) -> Grid)
 
     private val gridKinds = listOf(
@@ -225,8 +225,8 @@ object ExtraCharacterizationMatrix {
     private val systems = listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)
 
     /**
-     * Семейства функционалов БЕЗ производной — единственные, применимые к Nyström-схемам.
-     * Инвариант проверяется в [collect] явной проверкой `usesDerivative`.
+     * The functional families WITHOUT a derivative — the only ones applicable to the Nyström schemes.
+     * The invariant is checked in [collect] by an explicit `usesDerivative` check.
      */
     private val familyNames = listOf("theta", "mu", "lambda")
 
@@ -239,19 +239,19 @@ object ExtraCharacterizationMatrix {
         "theta" -> ProjFunctionals(basis)
         "mu" -> AveragingFunctionals(basis)
         "lambda" -> ThreePointFunctionals(basis)
-        else -> error("ExtraCharacterizationMatrix: неизвестное семейство '$name'")
+        else -> error("ExtraCharacterizationMatrix: unknown family '$name'")
     }
 
     /**
-     * Печатное представление значения снимка.
+     * The printed representation of a snapshot value.
      *
-     * 17 значащих цифр — как в [BaselineSnapshotTool]: это минимальная точность, при
-     * которой десятичная запись `double` восстанавливается ПОБИТОВО. Прежние 12 цифр
-     * round-trip НЕ дают (`"%.12g".format(0.1 + 0.2)` = `0.300000000000` ≠ `0.1 + 0.2`), то есть
-     * сам эталон вносил относительную погрешность хранения ~1e-12 — грубее, чем реальное
-     * расхождение бэкендов. Локаль [Locale.ROOT]
-     * задана явно: `"%.17g".format(x)` использует локаль по умолчанию и на машине с
-     * русской локалью пишет запятую вместо точки, после чего снимок перестаёт читаться.
+     * 17 significant digits — as in [BaselineSnapshotTool]: this is the minimal precision at
+     * which the decimal record of a `double` is restored BITWISE. The former 12 digits do NOT
+     * give a round-trip (`"%.12g".format(0.1 + 0.2)` = `0.300000000000` ≠ `0.1 + 0.2`), that is,
+     * the baseline itself introduced a relative storage error of ~1e-12 — coarser than the real
+     * discrepancy of the backends. The locale [Locale.ROOT]
+     * is set explicitly: `"%.17g".format(x)` uses the default locale and on a machine with
+     * a Russian locale writes a comma instead of a dot, after which the snapshot stops being readable.
      */
     fun formatValue(value: Double): String = when {
         value.isNaN() -> "NaN"
@@ -260,12 +260,12 @@ object ExtraCharacterizationMatrix {
     }
 
     /**
-     * Вычисляет одно значение снимка, ПЕРЕХВАТЫВАЯ отказ.
+     * Computes one snapshot value, INTERCEPTING a failure.
      *
-     * Снимок характеризационный: если сочетание сегодня падает, фиксируется сам факт
-     * отказа (`ERROR:<класс исключения>`), а не «исправляется» задача. Это сохраняет
-     * сочетание в сети: превращение отказа в число (или в другое исключение) после
-     * рефакторинга будет замечено так же надёжно, как изменение числа.
+     * The snapshot is characterization: if a combination fails today, the fact of the
+     * failure is recorded (`ERROR:<exception class>`), rather than the problem being "fixed". This keeps the
+     * combination in the net: turning a failure into a number (or into another exception) after
+     * a refactoring will be noticed just as reliably as a change of a number.
      */
     private fun evaluate(compute: () -> Double): String = try {
         formatValue(compute())
@@ -274,15 +274,15 @@ object ExtraCharacterizationMatrix {
     }
 
     /**
-     * Собирает всю матрицу в виде отсортированного по ключу списка пар «ключ - значение».
+     * Collects the whole matrix as a list of "key - value" pairs sorted by key.
      *
-     * Сортировка обязательна: она делает и файл снимка, и его дифф осмысленными
-     * независимо от порядка обхода циклов.
+     * The sorting is mandatory: it makes both the snapshot file and its diff meaningful
+     * regardless of the traversal order of the loops.
      */
     fun collect(): List<Pair<String, String>> {
         val rows = mutableListOf<Pair<String, String>>()
 
-        // Полная матрица на единичном отрезке.
+        // The full matrix on the unit interval.
         for (segment in listOf(unitSegment)) {
             for (kind in gridKinds) {
                 for (system in systems) {
@@ -296,10 +296,10 @@ object ExtraCharacterizationMatrix {
             }
         }
 
-        // Сокращённый набор на отрезке [0,2]: цель — поймать масштабно-зависимые ошибки
-        // (порог включения точки разбиения, нормировки шага), а не повторить всю матрицу.
-        // Достаточно двух сеток (равномерной как контрольной и геометрической как
-        // существенно неравномерной) и одного семейства.
+        // A reduced set on the interval [0,2]: the goal is to catch scale-dependent errors
+        // (the breakpoint inclusion threshold, the step normalizations), and not to repeat the whole matrix.
+        // Two grids are enough (a uniform one as a control and a geometric one as a
+        // substantially non-uniform one) and one family.
         for (kind in gridKinds.filter { it.tag == "uniform" || it.tag == "geom" }) {
             for (system in systems) {
                 for (n in sizes) {
@@ -322,7 +322,7 @@ object ExtraCharacterizationMatrix {
         n: Int,
     ): String = "$equation.$problemName.${system.name}.$familyName.${kind.tag}.${segment.tag}.n$n"
 
-    /** Схемы решателя Фредгольма для одного сочетания параметров. */
+    /** The schemes of the Fredholm solver for one combination of parameters. */
     private fun collectFredholm(
         rows: MutableList<Pair<String, String>>,
         segment: Segment,
@@ -336,7 +336,7 @@ object ExtraCharacterizationMatrix {
         val basis = MinimalSplineBasis(system, grid)
         val funcs = family(familyName, basis)
         check(!funcs.usesDerivative) {
-            "Семейство '${funcs.name}' использует производную и несовместимо с Nyström-схемами"
+            "The family '${funcs.name}' uses a derivative and is incompatible with the Nyström schemes"
         }
         val op = solvers.fredholm.FredholmOperator(problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER))
         val solver = solvers.fredholm.FredholmSecondKindSolver(
@@ -360,7 +360,7 @@ object ExtraCharacterizationMatrix {
         }
     }
 
-    /** Схемы решателя Вольтерры для одного сочетания параметров. */
+    /** The schemes of the Volterra solver for one combination of parameters. */
     private fun collectVolterra(
         rows: MutableList<Pair<String, String>>,
         segment: Segment,
@@ -374,7 +374,7 @@ object ExtraCharacterizationMatrix {
         val basis = MinimalSplineBasis(system, grid)
         val funcs = family(familyName, basis)
         check(!funcs.usesDerivative) {
-            "Семейство '${funcs.name}' использует производную и несовместимо с Nyström-схемами"
+            "The family '${funcs.name}' uses a derivative and is incompatible with the Nyström schemes"
         }
         val op = solvers.volterra.VolterraOperator(problem.kernel, grid, GaussLegendre(QUADRATURE_ORDER))
         val solver = solvers.volterra.VolterraSecondKindSolver(
@@ -398,7 +398,7 @@ object ExtraCharacterizationMatrix {
         }
     }
 
-    /** Схемы, снимаемые для каждого сочетания параметров. */
+    /** The schemes shot for every combination of parameters. */
     private enum class Scheme(val tag: String) {
         BASE("base"),
         KULKARNI("kulkarni"),
@@ -407,14 +407,14 @@ object ExtraCharacterizationMatrix {
     }
 
     /**
-     * Снимает E_h всех схем и дополнительно число итераций у итерационных схем Nyström.
+     * Shoots the E_h of all the schemes and additionally the number of iterations of the iterative Nyström schemes.
      *
-     * Решение задаётся функцией [solve], а не готовым списком. Общая база у решателей
-     * теперь есть (`SecondKindSolverCore`), но вызываемые здесь схемы `combinedNystrom`
-     * и `iteratedCombinedNystrom` в неё СОЗНАТЕЛЬНО НЕ перенесены (разные веса Nyström
-     * и разные критерии останова), то есть объявлены в наследниках независимо.
-     * Поэтому замыкание остаётся единственным способом объединить их в одной матрице —
-     * и это ПРАВИЛЬНО: сеть должна звать именно те реализации, которые сторожит.
+     * The solution is given by the function [solve] and not by a ready list. The solvers now have a
+     * common base (`SecondKindSolverCore`), but the schemes called here, `combinedNystrom`
+     * and `iteratedCombinedNystrom`, are DELIBERATELY NOT moved into it (different Nyström weights
+     * and different stopping criteria), that is, they are declared in the subclasses independently.
+     * Therefore a closure remains the only way to combine them in one matrix —
+     * and this is RIGHT: the net must call exactly the implementations it guards.
      */
     private fun emitSchemes(
         rows: MutableList<Pair<String, String>>,
@@ -433,19 +433,19 @@ object ExtraCharacterizationMatrix {
                 errorEh(exact, solution.eval, grid)
             }
             rows += "$prefix.${scheme.tag}" to value
-            // Счётчик итераций и невязка осмыслены только для итерационных схем; у прямых
-            // они тождественно равны 0 и только зашумляют дифф.
+            // The iteration counter and the residual are meaningful only for the iterative schemes; for the direct
+            // ones they are identically 0 and only add noise to the diff.
             //
-            // ОГОВОРКА О ЗАВИСИМОСТИ КЛЮЧЕЙ. Для ITERATED_COMBINED_NYSTROM пары
-            // `.iters`/`.residual` ПОБИТОВО РАВНЫ соответствующим ключам COMBINED_NYSTROM:
-            // `iteratedCombinedNystrom` наследует эти поля от исходного решения без
-            // пересчёта (одно интегрирование, собственных итераций нет). То есть 168 пар
-            // из 1344 значений НЕ дают независимого покрытия — независимых значений в сети
-            // 1176, и заявлять 1344 как меру независимого покрытия неверно.
-            // Ключи всё же снимаются: они фиксируют САМ ФАКТ наследования. Если правка
-            // заставит `iteratedCombinedNystrom` пересчитывать критерий останова заново
-            // (например, при попытке слить его с `combinedNystrom`), равенство нарушится
-            // и тест это покажет — а по одному лишь E_h такая правка может пройти молча.
+            // A CAVEAT ON THE DEPENDENCE OF THE KEYS. For ITERATED_COMBINED_NYSTROM the pairs
+            // `.iters`/`.residual` are BITWISE EQUAL to the corresponding COMBINED_NYSTROM keys:
+            // `iteratedCombinedNystrom` inherits these fields from the original solution without
+            // recomputation (one integration, no iterations of its own). That is, 168 pairs
+            // of the 1344 values do NOT give independent coverage — there are 1176 independent values
+            // in the net, and claiming 1344 as a measure of independent coverage is wrong.
+            // The keys are nevertheless shot: they record THE VERY FACT of the inheritance. If an edit
+            // makes `iteratedCombinedNystrom` recompute the stopping criterion anew
+            // (for example, in an attempt to merge it with `combinedNystrom`), the equality will break
+            // and the test will show it — while by E_h alone such an edit may pass silently.
             val iterationsMatter =
                 scheme == Scheme.COMBINED_NYSTROM || scheme == Scheme.ITERATED_COMBINED_NYSTROM
             if (iterationsMatter) {

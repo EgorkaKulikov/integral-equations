@@ -10,9 +10,9 @@ import kotlin.test.assertTrue
 import problems.fredholm.FredholmProblem
 
 /**
- * FD-сверка второй производной образа Фредгольма (K u)''(t) = int K_tt u ds
- * с центральной конечной разностью. Точки берутся
- * ВНУТРИ гладких кусков сплайна (не в узлах), т.к. omega_i'' разрывна в узлах.
+ * An FD cross-check of the second derivative of the Fredholm image (K u)''(t) = int K_tt u ds
+ * against a central finite difference. The points are taken
+ * INSIDE the smooth pieces of the spline (not at the knots), since omega_i'' is discontinuous at the knots.
  */
 @Tag("fast")
 class FredholmDeriv2FDTest {
@@ -25,7 +25,7 @@ class FredholmDeriv2FDTest {
             val grid = Grid.uniform(8)
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
             val op = FredholmOperator(p.kernel, grid, quad)
-            // Внутренние точки гладких кусков: середины интервалов сетки.
+            // Interior points of the smooth pieces: the midpoints of the grid intervals.
             val innerTs = (0 until grid.n).map { 0.5 * (grid.x(it) + grid.x(it + 1)) }
             for (i in -2 until basis.n) {
                 val u = { s: Double -> basis.omega(i, s) }

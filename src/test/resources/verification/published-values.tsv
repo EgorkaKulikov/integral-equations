@@ -1,73 +1,73 @@
-# ЭТАЛОННЫЕ ЗНАЧЕНИЯ ИЗ ПУБЛИКАЦИИ (внешний источник истины).
+# REFERENCE VALUES FROM THE PUBLICATION (an external source of truth).
 #
-# Извлечены МЕХАНИЧЕСКИ (скриптом-парсером) из .tex-таблиц статьи, помеченных
-# «Auto-prepared from verified runs. Do not alter numbers»:
-#   Scientific Agents/papers/new-01/experiments/tables/  (18 файлов)
-# Ручной перенос сознательно не применялся: он и есть источник «ошибки переноса».
+# Extracted MECHANICALLY (by a parser script) from the .tex tables of the article marked
+# "Auto-prepared from verified runs. Do not alter numbers":
+#   Scientific Agents/papers/new-01/experiments/tables/  (18 files)
+# A manual transfer was deliberately not used: it is itself the source of the "transfer error".
 #
-# Назначение: сверка результатов текущего кода с ОПУБЛИКОВАННЫМИ числами. В отличие
-# от characterization/baseline-eh.tsv (снят этой же реализацией и фиксирует лишь
-# неизменность поведения), настоящий файл от кода проекта не зависит.
+# Purpose: a cross-check of the results of the current code against the PUBLISHED numbers. Unlike
+# characterization/baseline-eh.tsv (captured by this same implementation and recording only
+# the invariance of the behaviour), the present file does not depend on the project code.
 #
-# Формат:  ключ <TAB> значение <TAB> файл-источник <TAB> расположение в файле
+# Format:  key <TAB> value <TAB> source file <TAB> location in the file
 #
-# Ключ:  <уравнение>.<задача>.<базис>.<семейство>.n<N>.<схема>.<величина>
-#   уравнение — F (Фредгольм) либо V (Вольтерра);
-#   задача    — F2, F2exp, F1, V2, V2exp, V2win, V1;
-#   величина  — Eh (погрешность max|u*-u_h|) либо ph (порядок log2(E_h/E_{h/2})).
-# Схема именования согласована с characterization/baseline-eh.tsv.
+# Key:  <equation>.<problem>.<basis>.<family>.n<N>.<scheme>.<quantity>
+#   equation — F (Fredholm) or V (Volterra);
+#   problem  — F2, F2exp, F1, V2, V2exp, V2win, V1;
+#   quantity — Eh (the error max|u*-u_h|) or ph (the order log2(E_h/E_{h/2})).
+# The naming scheme agrees with characterization/baseline-eh.tsv.
 #
-# Значения приведены с 4 значащими цифрами — ровно столько напечатано в статье.
-# Отсюда допуск сверки 2 %: см. PublishedValuesTest.RELATIVE_TOLERANCE.
+# The values are given with 4 significant digits — exactly as many as are printed in the article.
+# Hence the cross-check tolerance of 2 %: see PublishedValuesTest.RELATIVE_TOLERANCE.
 #
-# ИЗВЕСТНЫЕ РАСХОЖДЕНИЯ МЕЖДУ САМИМИ ТАБЛИЦАМИ. Обнаружены при извлечении: одна и та
-# же величина напечатана в двух таблицах по-разному. Это не ошибка переноса, а разные
-# прогоны (table-t2-* — «Phase-8 runs», table-t3-* — прогон commit 403fa1d). Все три
-# случая лежат НА УРОВНЕ МАШИННОЙ ТОЧНОСТИ и потому из сверки исключены (NOISE_FLOOR);
-# в поле расположения они помечены словом РАСХОЖДЕНИЕ:
-#   F.F2exp.B.theta.n32.kulkarni.Eh : 7.327e-15 (t2) против 7.994e-15 (t3), 9 %;
-#   F.F2exp.B.theta.n64.kulkarni.Eh : 5.995e-15 (t2) против 6.439e-15 (t3), 7 %;
-#   F.F2exp.B.theta.n16.kulkarni.ph : 6.45 (t2) против 6.32 (t3) — порядок вычислен
-#     по E_h(n=32) из шумовой зоны, поэтому недостоверен сам по себе.
-# Оставлено значение из table-t2-*; альтернативное указано в примечании.
-# Прочие 220 значений, продублированных в нескольких таблицах, совпали полностью.
+# KNOWN DISCREPANCIES BETWEEN THE TABLES THEMSELVES. Found during the extraction: one and the
+# same quantity is printed differently in two tables. This is not a transfer error but different
+# runs (table-t2-* are the "Phase-8 runs", table-t3-* the run of commit 403fa1d). All three
+# cases lie AT THE LEVEL OF THE MACHINE PRECISION and are therefore excluded from the cross-check (NOISE_FLOOR);
+# in the location field they are marked with a divergence marker:
+#   F.F2exp.B.theta.n32.kulkarni.Eh : 7.327e-15 (t2) against 7.994e-15 (t3), 9 %;
+#   F.F2exp.B.theta.n64.kulkarni.Eh : 5.995e-15 (t2) against 6.439e-15 (t3), 7 %;
+#   F.F2exp.B.theta.n16.kulkarni.ph : 6.45 (t2) against 6.32 (t3) — the order is computed
+#     from E_h(n=32) taken from the noise zone and is therefore unreliable in itself.
+# The value from table-t2-* is kept; the alternative is given in the note.
+# The other 220 values duplicated in several tables coincided completely.
 #
 # ============================================================================
-# НА КАКОМ ПУТИ ЛИНЕЙНОЙ АЛГЕБРЫ СНЯТЫ ТАБЛИЦЫ (измерено, этап 8.6)
+# ON WHICH LINEAR-ALGEBRA ROUTE THE TABLES WERE CAPTURED (measured, stage 8.6)
 # ============================================================================
-# В самой статье бэкенд не указан. Он восстановлен ПО ФАКТУ — прогоном всех
-# 42 ключей F1 на обоих бэкендах (`-Dnumerics.backend=multik|reference`, JDK 21,
-# macOS aarch64) и сравнением с опубликованными числами. Результат:
+# The article itself does not state the backend. It has been recovered BY FACT — by running all
+# 42 F1 keys on both backends (`-Dnumerics.backend=multik|reference`, JDK 21,
+# macOS aarch64) and comparing with the published numbers. The result:
 #
-#   table-xi-f1.tex  (36 ключей F1) — снята на MULTIK/OpenBLAS.
-#       multik    против публикации: макс. 0.033 %, медиана 0.0032 %;
-#       reference против публикации: макс. 11.485 %, медиана 1.162 %.
-#       Воспроизводится практически бит-в-бит, допуск — общие 2 %.
+#   table-xi-f1.tex  (36 F1 keys) — captured on MULTIK/OpenBLAS.
+#       multik    against the publication: max. 0.033 %, median 0.0032 %;
+#       reference against the publication: max. 11.485 %, median 1.162 %.
+#       It is reproduced practically bit for bit; the tolerance is the common 2 %.
 #
-#   table-f1.tex     (6 ключей F.F1.H.theta.*) — снята на JVM-пУТИ LU (ReferenceBackend
-#       либо арифметически близкая реализация), А НЕ на multik.
-#       reference против публикации: макс. 4.234 %, медиана 0.010 %
-#                   (4 ключа из 6 совпадают до 4-й значащей цифры);
-#       multik    против публикации: макс. 6.780 %, медиана 3.471 %.
-#       Допуск — 8 %, см. PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE. Общий
-#       допуск 2 % НЕ ОСЛАБЛЕН: послабление касается только этих 6 ключей.
+#   table-f1.tex     (6 keys F.F1.H.theta.*) — captured on a JVM LU ROUTE (ReferenceBackend
+#       or an arithmetically close implementation) AND NOT on multik.
+#       reference against the publication: max. 4.234 %, median 0.010 %
+#                   (4 keys out of 6 coincide to the 4th significant digit);
+#       multik    against the publication: max. 6.780 %, median 3.471 %.
+#       The tolerance is 8 %, see PublishedValuesTest.LU_PATH_DEPENDENT_TOLERANCE. The common
+#       tolerance of 2 % is NOT RELAXED: the relaxation concerns only these 6 keys.
 #
-# ПРИЧИНА, почему разные пути LU вообще дают разные числа именно в F1: это
-# уравнение ПЕРВОГО рода с регуляризацией Вазваза (alpha = 1e-10, c_L = -1e10).
-# Измерено: cond_inf(I-M) = 1.18e10..2.70e10, ‖g‖_inf = 1.59e10, а в схеме Слоана два
-# слагаемых порядка 1.38e10 сокращаются до 2.7 (потеря ~9.7 из 16 цифр).
-# Измеренный разброс multik против reference ВНУТРИ САМОЙ table-f1.tex (6 ключей):
-# макс. 7.267 % (ключ F.F1.H.theta.n8.sloan) — именно из этого числа выведен допуск
-# 8 % (= 0.05 % точности публикации + 7.267 %, округлено вверх).
-# Для сравнения, ПО ВСЕЙ группе F1 (42 ключа) тот же разброс был бы шире:
-# макс. 11.483 % (ключ F.F1.B.xi1.n32.sloan из ДРУГОЙ таблицы), медиана 0.98 %.
-# Взят УЗКИЙ вариант: разброс чужой таблицы не должен послаблять эту.
-# Подробный замер: .tasks/code-review-remediation/stage8/MEASURE-8.6-f1-tolerance.md.
+# THE REASON why different LU routes give different numbers precisely in F1: this is an
+# equation of the FIRST kind with the Wazwaz regularization (alpha = 1e-10, c_L = -1e10).
+# Measured: cond_inf(I-M) = 1.18e10..2.70e10, ||g||_inf = 1.59e10, and in the Sloan scheme two
+# terms of the order 1.38e10 cancel down to 2.7 (a loss of ~9.7 of the 16 digits).
+# The measured spread of multik against reference INSIDE table-f1.tex itself (6 keys):
+# max. 7.267 % (the key F.F1.H.theta.n8.sloan) — it is from this number that the tolerance of
+# 8 % is derived (= 0.05 % of the precision of the publication + 7.267 %, rounded up).
+# For comparison, OVER THE WHOLE F1 group (42 keys) the same spread would be wider:
+# max. 11.483 % (the key F.F1.B.xi1.n32.sloan from ANOTHER table), median 0.98 %.
+# The NARROW variant was taken: the spread of a foreign table must not relax this one.
+# The detailed measurement: .tasks/code-review-remediation/stage8/MEASURE-8.6-f1-tolerance.md.
 #
-# ОСТАЛЬНЫЕ ТАБЛИЦЫ (F2/F2exp/V1/V2/V2exp/V2win, 700 ключей) от пути LU НЕ ЗАВИСЯТ:
-# там нет масштабирования на 1/alpha, cond(I-M) порядка единиц, и все они проходят
-# под общим допуском 2 % на ОБОИХ бэкендах. Поэтому единого «бэкенда статьи» не
-# существует и быть записано одной строкой не может — только по-таблично.
+# THE OTHER TABLES (F2/F2exp/V1/V2/V2exp/V2win, 700 keys) DO NOT DEPEND on the LU route:
+# there is no scaling by 1/alpha there, cond(I-M) is of the order of units, and all of them pass
+# under the common tolerance of 2 % on BOTH backends. Hence a single "backend of the article" does not
+# exist and cannot be recorded in a single line — only table by table.
 F.F1.B.xi1.n16.base.Eh	8.56e-05	table-xi-f1.tex	xi1/B
 F.F1.B.xi1.n16.base.ph	0.09	table-xi-f1.tex	xi1/B
 F.F1.B.xi1.n16.sloan.Eh	9.068e-05	table-xi-f1.tex	xi1/B
@@ -148,8 +148,8 @@ F.F2.B.mu.n32.base.ph	2.94	table-families.tex	F2
 F.F2.B.mu.n64.base.Eh	3.648e-07	table-families.tex	F2
 F.F2.B.mu.n8.base.Eh	0.0001403	table-families.tex	F2
 F.F2.B.mu.n8.base.ph	2.77	table-families.tex	F2
-F.F2.B.theta.n16.base.Eh	1.246e-05	table-t1-f2.tex	базис B
-F.F2.B.theta.n16.base.ph	3.03	table-t1-f2.tex	базис B
+F.F2.B.theta.n16.base.Eh	1.246e-05	table-t1-f2.tex	basis B
+F.F2.B.theta.n16.base.ph	3.03	table-t1-f2.tex	basis B
 F.F2.B.theta.n16.iterKulkarni.Eh	7.994e-15	table-t2-fredholm.tex	F2
 F.F2.B.theta.n16.iterKulkarni.ph	4.17	table-t2-fredholm.tex	F2
 F.F2.B.theta.n16.iterNystrom.Eh	5.063e-07	table-t3-fredholm.tex	F2
@@ -160,8 +160,8 @@ F.F2.B.theta.n16.nystrom.Eh	1.199e-06	table-t3-fredholm.tex	F2
 F.F2.B.theta.n16.nystrom.ph	4.26	table-t3-fredholm.tex	F2
 F.F2.B.theta.n16.sloan.Eh	2.497e-07	table-t2-fredholm.tex	F2
 F.F2.B.theta.n16.sloan.ph	4.32	table-t2-fredholm.tex	F2
-F.F2.B.theta.n32.base.Eh	1.521e-06	table-t1-f2.tex	базис B
-F.F2.B.theta.n32.base.ph	3.02	table-t1-f2.tex	базис B
+F.F2.B.theta.n32.base.Eh	1.521e-06	table-t1-f2.tex	basis B
+F.F2.B.theta.n32.base.ph	3.02	table-t1-f2.tex	basis B
 F.F2.B.theta.n32.iterKulkarni.Eh	4.441e-16	table-t2-fredholm.tex	F2
 F.F2.B.theta.n32.iterKulkarni.ph	0	table-t2-fredholm.tex	F2
 F.F2.B.theta.n32.iterNystrom.Eh	2.65e-08	table-t3-fredholm.tex	F2
@@ -172,14 +172,14 @@ F.F2.B.theta.n32.nystrom.Eh	6.279e-08	table-t3-fredholm.tex	F2
 F.F2.B.theta.n32.nystrom.ph	4.21	table-t3-fredholm.tex	F2
 F.F2.B.theta.n32.sloan.Eh	1.251e-08	table-t2-fredholm.tex	F2
 F.F2.B.theta.n32.sloan.ph	4.26	table-t2-fredholm.tex	F2
-F.F2.B.theta.n64.base.Eh	1.871e-07	table-t1-f2.tex	базис B
+F.F2.B.theta.n64.base.Eh	1.871e-07	table-t1-f2.tex	basis B
 F.F2.B.theta.n64.iterKulkarni.Eh	4.441e-16	table-t2-fredholm.tex	F2
 F.F2.B.theta.n64.iterNystrom.Eh	1.439e-09	table-t3-fredholm.tex	F2
 F.F2.B.theta.n64.kulkarni.Eh	2.109e-15	table-t2-fredholm.tex	F2
 F.F2.B.theta.n64.nystrom.Eh	3.401e-09	table-t3-fredholm.tex	F2
 F.F2.B.theta.n64.sloan.Eh	6.511e-10	table-t2-fredholm.tex	F2
-F.F2.B.theta.n8.base.Eh	0.0001014	table-t1-f2.tex	базис B
-F.F2.B.theta.n8.base.ph	3.02	table-t1-f2.tex	базис B
+F.F2.B.theta.n8.base.Eh	0.0001014	table-t1-f2.tex	basis B
+F.F2.B.theta.n8.base.ph	3.02	table-t1-f2.tex	basis B
 F.F2.B.theta.n8.iterKulkarni.Eh	2.988e-12	table-t2-fredholm.tex	F2
 F.F2.B.theta.n8.iterKulkarni.ph	8.55	table-t2-fredholm.tex	F2
 F.F2.B.theta.n8.iterNystrom.Eh	9.488e-06	table-t3-fredholm.tex	F2
@@ -274,13 +274,13 @@ F.F2.B.xi2.n8.kulkarni.Eh	2.362e-08	table-xi-t2-fredholm.tex	xi2
 F.F2.B.xi2.n8.kulkarni.ph	5.38	table-xi-t2-fredholm.tex	xi2
 F.F2.B.xi2.n8.sloan.Eh	0.0001803	table-xi-t2-fredholm.tex	xi2
 F.F2.B.xi2.n8.sloan.ph	2.79	table-xi-t2-fredholm.tex	xi2
-F.F2.H.theta.n16.base.Eh	1.043e-05	table-t1-f2.tex	базис H
-F.F2.H.theta.n16.base.ph	3.04	table-t1-f2.tex	базис H
-F.F2.H.theta.n32.base.Eh	1.272e-06	table-t1-f2.tex	базис H
-F.F2.H.theta.n32.base.ph	3.03	table-t1-f2.tex	базис H
-F.F2.H.theta.n64.base.Eh	1.562e-07	table-t1-f2.tex	базис H
-F.F2.H.theta.n8.base.Eh	8.471e-05	table-t1-f2.tex	базис H
-F.F2.H.theta.n8.base.ph	3.02	table-t1-f2.tex	базис H
+F.F2.H.theta.n16.base.Eh	1.043e-05	table-t1-f2.tex	basis H
+F.F2.H.theta.n16.base.ph	3.04	table-t1-f2.tex	basis H
+F.F2.H.theta.n32.base.Eh	1.272e-06	table-t1-f2.tex	basis H
+F.F2.H.theta.n32.base.ph	3.03	table-t1-f2.tex	basis H
+F.F2.H.theta.n64.base.Eh	1.562e-07	table-t1-f2.tex	basis H
+F.F2.H.theta.n8.base.Eh	8.471e-05	table-t1-f2.tex	basis H
+F.F2.H.theta.n8.base.ph	3.02	table-t1-f2.tex	basis H
 F.F2.H.xi0.n16.base.Eh	0.000568	table-xi-t1-f2.tex	xi0
 F.F2.H.xi0.n16.base.ph	2.9	table-xi-t1-f2.tex	xi0
 F.F2.H.xi0.n32.base.Eh	7.592e-05	table-xi-t1-f2.tex	xi0
@@ -302,13 +302,13 @@ F.F2.H.xi2.n32.base.ph	2.87	table-xi-t1-f2.tex	xi2
 F.F2.H.xi2.n64.base.Eh	1.18e-06	table-xi-t1-f2.tex	xi2
 F.F2.H.xi2.n8.base.Eh	0.0003328	table-xi-t1-f2.tex	xi2
 F.F2.H.xi2.n8.base.ph	2.53	table-xi-t1-f2.tex	xi2
-F.F2.T.theta.n16.base.Eh	1.45e-05	table-t1-f2.tex	базис T
-F.F2.T.theta.n16.base.ph	3.03	table-t1-f2.tex	базис T
-F.F2.T.theta.n32.base.Eh	1.771e-06	table-t1-f2.tex	базис T
-F.F2.T.theta.n32.base.ph	3.02	table-t1-f2.tex	базис T
-F.F2.T.theta.n64.base.Eh	2.18e-07	table-t1-f2.tex	базис T
-F.F2.T.theta.n8.base.Eh	0.0001182	table-t1-f2.tex	базис T
-F.F2.T.theta.n8.base.ph	3.03	table-t1-f2.tex	базис T
+F.F2.T.theta.n16.base.Eh	1.45e-05	table-t1-f2.tex	basis T
+F.F2.T.theta.n16.base.ph	3.03	table-t1-f2.tex	basis T
+F.F2.T.theta.n32.base.Eh	1.771e-06	table-t1-f2.tex	basis T
+F.F2.T.theta.n32.base.ph	3.02	table-t1-f2.tex	basis T
+F.F2.T.theta.n64.base.Eh	2.18e-07	table-t1-f2.tex	basis T
+F.F2.T.theta.n8.base.Eh	0.0001182	table-t1-f2.tex	basis T
+F.F2.T.theta.n8.base.ph	3.03	table-t1-f2.tex	basis T
 F.F2.T.xi0.n16.base.Eh	0.0008617	table-xi-t1-f2.tex	xi0
 F.F2.T.xi0.n16.base.ph	2.91	table-xi-t1-f2.tex	xi0
 F.F2.T.xi0.n32.base.Eh	0.000115	table-xi-t1-f2.tex	xi0
@@ -344,36 +344,36 @@ F.F2exp.B.mu.n32.base.ph	2.97	table-families.tex	F2exp
 F.F2exp.B.mu.n64.base.Eh	1.689e-07	table-families.tex	F2exp
 F.F2exp.B.mu.n8.base.Eh	7.4e-05	table-families.tex	F2exp
 F.F2exp.B.mu.n8.base.ph	2.88	table-families.tex	F2exp
-F.F2exp.B.theta.n16.base.Eh	5.653e-06	table-t1-f2exp.tex	базис B
-F.F2exp.B.theta.n16.base.ph	3.05	table-t1-f2exp.tex	базис B
+F.F2exp.B.theta.n16.base.Eh	5.653e-06	table-t1-f2exp.tex	basis B
+F.F2exp.B.theta.n16.base.ph	3.05	table-t1-f2exp.tex	basis B
 F.F2exp.B.theta.n16.iterKulkarni.Eh	5.906e-14	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n16.iterKulkarni.ph	4.89	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n16.iterNystrom.Eh	2.226e-07	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n16.iterNystrom.ph	4.37	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n16.kulkarni.Eh	6.39e-13	table-t2-fredholm.tex	F2exp
-F.F2exp.B.theta.n16.kulkarni.ph	6.45	table-t2-fredholm.tex	F2exp; РАСХОЖДЕНИЕ С table-t3-fredholm.tex: 6.32
+F.F2exp.B.theta.n16.kulkarni.ph	6.45	table-t2-fredholm.tex	F2exp; DISCREPANCY WITH table-t3-fredholm.tex: 6.32
 F.F2exp.B.theta.n16.nystrom.Eh	4.366e-07	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n16.nystrom.ph	4.26	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n16.sloan.Eh	3.193e-07	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n16.sloan.ph	4.19	table-t2-fredholm.tex	F2exp
-F.F2exp.B.theta.n32.base.Eh	6.838e-07	table-t1-f2exp.tex	базис B
-F.F2exp.B.theta.n32.base.ph	3.02	table-t1-f2exp.tex	базис B
+F.F2exp.B.theta.n32.base.Eh	6.838e-07	table-t1-f2exp.tex	basis B
+F.F2exp.B.theta.n32.base.ph	3.02	table-t1-f2exp.tex	basis B
 F.F2exp.B.theta.n32.iterKulkarni.Eh	1.998e-15	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n32.iterNystrom.Eh	1.073e-08	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n32.iterNystrom.ph	4.29	table-t3-fredholm.tex	F2exp
-F.F2exp.B.theta.n32.kulkarni.Eh	7.327e-15	table-t2-fredholm.tex	F2exp; РАСХОЖДЕНИЕ С table-t3-fredholm.tex: 7.994e-15
+F.F2exp.B.theta.n32.kulkarni.Eh	7.327e-15	table-t2-fredholm.tex	F2exp; DISCREPANCY WITH table-t3-fredholm.tex: 7.994e-15
 F.F2exp.B.theta.n32.nystrom.Eh	2.286e-08	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n32.nystrom.ph	4.15	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n32.sloan.Eh	1.75e-08	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n32.sloan.ph	4.1	table-t2-fredholm.tex	F2exp
-F.F2exp.B.theta.n64.base.Eh	8.424e-08	table-t1-f2exp.tex	базис B
+F.F2exp.B.theta.n64.base.Eh	8.424e-08	table-t1-f2exp.tex	basis B
 F.F2exp.B.theta.n64.iterKulkarni.Eh	1.332e-15	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n64.iterNystrom.Eh	5.499e-10	table-t3-fredholm.tex	F2exp
-F.F2exp.B.theta.n64.kulkarni.Eh	5.995e-15	table-t2-fredholm.tex	F2exp; РАСХОЖДЕНИЕ С table-t3-fredholm.tex: 6.439e-15
+F.F2exp.B.theta.n64.kulkarni.Eh	5.995e-15	table-t2-fredholm.tex	F2exp; DISCREPANCY WITH table-t3-fredholm.tex: 6.439e-15
 F.F2exp.B.theta.n64.nystrom.Eh	1.285e-09	table-t3-fredholm.tex	F2exp
 F.F2exp.B.theta.n64.sloan.Eh	1.018e-09	table-t2-fredholm.tex	F2exp
-F.F2exp.B.theta.n8.base.Eh	4.907e-05	table-t1-f2exp.tex	базис B
-F.F2exp.B.theta.n8.base.ph	3.12	table-t1-f2exp.tex	базис B
+F.F2exp.B.theta.n8.base.Eh	4.907e-05	table-t1-f2exp.tex	basis B
+F.F2exp.B.theta.n8.base.ph	3.12	table-t1-f2exp.tex	basis B
 F.F2exp.B.theta.n8.iterKulkarni.Eh	2.206e-11	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n8.iterKulkarni.ph	8.55	table-t2-fredholm.tex	F2exp
 F.F2exp.B.theta.n8.iterNystrom.Eh	4.356e-06	table-t3-fredholm.tex	F2exp
@@ -391,24 +391,24 @@ F.F2exp.B.xi1.n32.base.ph	2.98	table-families.tex	F2exp
 F.F2exp.B.xi1.n64.base.Eh	2.165e-06	table-families.tex	F2exp
 F.F2exp.B.xi1.n8.base.Eh	0.001003	table-families.tex	F2exp
 F.F2exp.B.xi1.n8.base.ph	2.92	table-families.tex	F2exp
-F.F2exp.H.theta.n16.base.Eh	7.212e-12	table-t1-f2exp.tex	базис H
-F.F2exp.H.theta.n16.base.ph	-1.24	table-t1-f2exp.tex	базис H
-F.F2exp.H.theta.n32.base.Eh	1.708e-11	table-t1-f2exp.tex	базис H
-F.F2exp.H.theta.n32.base.ph	-2.74	table-t1-f2exp.tex	базис H
-F.F2exp.H.theta.n64.base.Eh	1.141e-10	table-t1-f2exp.tex	базис H
-F.F2exp.H.theta.n8.base.Eh	7.261e-13	table-t1-f2exp.tex	базис H
-F.F2exp.H.theta.n8.base.ph	-3.31	table-t1-f2exp.tex	базис H
+F.F2exp.H.theta.n16.base.Eh	7.212e-12	table-t1-f2exp.tex	basis H
+F.F2exp.H.theta.n16.base.ph	-1.24	table-t1-f2exp.tex	basis H
+F.F2exp.H.theta.n32.base.Eh	1.708e-11	table-t1-f2exp.tex	basis H
+F.F2exp.H.theta.n32.base.ph	-2.74	table-t1-f2exp.tex	basis H
+F.F2exp.H.theta.n64.base.Eh	1.141e-10	table-t1-f2exp.tex	basis H
+F.F2exp.H.theta.n8.base.Eh	7.261e-13	table-t1-f2exp.tex	basis H
+F.F2exp.H.theta.n8.base.ph	-3.31	table-t1-f2exp.tex	basis H
 F.F2exp.H.xi1.n16.base.Eh	9.498e-12	table-xi-special.tex	F2exp
 F.F2exp.H.xi1.n32.base.Eh	2.358e-11	table-xi-special.tex	F2exp
 F.F2exp.H.xi1.n64.base.Eh	1.407e-10	table-xi-special.tex	F2exp
 F.F2exp.H.xi1.n8.base.Eh	1.115e-12	table-xi-special.tex	F2exp
-F.F2exp.T.theta.n16.base.Eh	1.131e-05	table-t1-f2exp.tex	базис T
-F.F2exp.T.theta.n16.base.ph	3.05	table-t1-f2exp.tex	базис T
-F.F2exp.T.theta.n32.base.Eh	1.368e-06	table-t1-f2exp.tex	базис T
-F.F2exp.T.theta.n32.base.ph	3.02	table-t1-f2exp.tex	базис T
-F.F2exp.T.theta.n64.base.Eh	1.685e-07	table-t1-f2exp.tex	базис T
-F.F2exp.T.theta.n8.base.Eh	9.82e-05	table-t1-f2exp.tex	базис T
-F.F2exp.T.theta.n8.base.ph	3.12	table-t1-f2exp.tex	базис T
+F.F2exp.T.theta.n16.base.Eh	1.131e-05	table-t1-f2exp.tex	basis T
+F.F2exp.T.theta.n16.base.ph	3.05	table-t1-f2exp.tex	basis T
+F.F2exp.T.theta.n32.base.Eh	1.368e-06	table-t1-f2exp.tex	basis T
+F.F2exp.T.theta.n32.base.ph	3.02	table-t1-f2exp.tex	basis T
+F.F2exp.T.theta.n64.base.Eh	1.685e-07	table-t1-f2exp.tex	basis T
+F.F2exp.T.theta.n8.base.Eh	9.82e-05	table-t1-f2exp.tex	basis T
+F.F2exp.T.theta.n8.base.ph	3.12	table-t1-f2exp.tex	basis T
 F.F2exp.T.xi1.n16.base.Eh	0.0002657	table-xi-special.tex	F2exp
 F.F2exp.T.xi1.n16.base.ph	2.96	table-xi-special.tex	F2exp
 F.F2exp.T.xi1.n32.base.Eh	3.416e-05	table-xi-special.tex	F2exp
@@ -416,18 +416,18 @@ F.F2exp.T.xi1.n32.base.ph	2.98	table-xi-special.tex	F2exp
 F.F2exp.T.xi1.n64.base.Eh	4.331e-06	table-xi-special.tex	F2exp
 F.F2exp.T.xi1.n8.base.Eh	0.002009	table-xi-special.tex	F2exp
 F.F2exp.T.xi1.n8.base.ph	2.92	table-xi-special.tex	F2exp
-V.V1.B.theta.n16.base.Eh	1.638e-06	table-v1.tex	сведение к V2
-V.V1.B.theta.n16.kulkarni.Eh	4.268e-08	table-v1.tex	сведение к V2
-V.V1.B.theta.n16.sloan.Eh	3.325e-08	table-v1.tex	сведение к V2
-V.V1.B.theta.n32.base.Eh	2.053e-07	table-v1.tex	сведение к V2
-V.V1.B.theta.n32.kulkarni.Eh	2.711e-09	table-v1.tex	сведение к V2
-V.V1.B.theta.n32.sloan.Eh	2e-09	table-v1.tex	сведение к V2
-V.V1.B.theta.n64.base.Eh	2.57e-08	table-v1.tex	сведение к V2
-V.V1.B.theta.n64.kulkarni.Eh	1.708e-10	table-v1.tex	сведение к V2
-V.V1.B.theta.n64.sloan.Eh	1.227e-10	table-v1.tex	сведение к V2
-V.V1.B.theta.n8.base.Eh	1.306e-05	table-v1.tex	сведение к V2
-V.V1.B.theta.n8.kulkarni.Eh	6.6e-07	table-v1.tex	сведение к V2
-V.V1.B.theta.n8.sloan.Eh	5.772e-07	table-v1.tex	сведение к V2
+V.V1.B.theta.n16.base.Eh	1.638e-06	table-v1.tex	reduction to V2
+V.V1.B.theta.n16.kulkarni.Eh	4.268e-08	table-v1.tex	reduction to V2
+V.V1.B.theta.n16.sloan.Eh	3.325e-08	table-v1.tex	reduction to V2
+V.V1.B.theta.n32.base.Eh	2.053e-07	table-v1.tex	reduction to V2
+V.V1.B.theta.n32.kulkarni.Eh	2.711e-09	table-v1.tex	reduction to V2
+V.V1.B.theta.n32.sloan.Eh	2e-09	table-v1.tex	reduction to V2
+V.V1.B.theta.n64.base.Eh	2.57e-08	table-v1.tex	reduction to V2
+V.V1.B.theta.n64.kulkarni.Eh	1.708e-10	table-v1.tex	reduction to V2
+V.V1.B.theta.n64.sloan.Eh	1.227e-10	table-v1.tex	reduction to V2
+V.V1.B.theta.n8.base.Eh	1.306e-05	table-v1.tex	reduction to V2
+V.V1.B.theta.n8.kulkarni.Eh	6.6e-07	table-v1.tex	reduction to V2
+V.V1.B.theta.n8.sloan.Eh	5.772e-07	table-v1.tex	reduction to V2
 V.V2.B.lambda.n16.base.Eh	1.258e-05	table-families.tex	V2
 V.V2.B.lambda.n16.base.ph	3.03	table-families.tex	V2
 V.V2.B.lambda.n32.base.Eh	1.537e-06	table-families.tex	V2
@@ -442,8 +442,8 @@ V.V2.B.mu.n32.base.ph	2.94	table-families.tex	V2
 V.V2.B.mu.n64.base.Eh	3.665e-07	table-families.tex	V2
 V.V2.B.mu.n8.base.Eh	0.0001453	table-families.tex	V2
 V.V2.B.mu.n8.base.ph	2.8	table-families.tex	V2
-V.V2.B.theta.n16.base.Eh	1.194e-05	table-t1-v2.tex	базис B
-V.V2.B.theta.n16.base.ph	3	table-t1-v2.tex	базис B
+V.V2.B.theta.n16.base.Eh	1.194e-05	table-t1-v2.tex	basis B
+V.V2.B.theta.n16.base.ph	3	table-t1-v2.tex	basis B
 V.V2.B.theta.n16.iterKulkarni.Eh	1.513e-08	table-t2-volterra.tex	V2
 V.V2.B.theta.n16.iterKulkarni.ph	4.17	table-t2-volterra.tex	V2
 V.V2.B.theta.n16.iterNystrom.Eh	4.816e-08	table-t3-volterra.tex	V2
@@ -454,8 +454,8 @@ V.V2.B.theta.n16.nystrom.Eh	7.602e-07	table-t3-volterra.tex	V2
 V.V2.B.theta.n16.nystrom.ph	3.84	table-t3-volterra.tex	V2
 V.V2.B.theta.n16.sloan.Eh	2.023e-07	table-t2-volterra.tex	V2
 V.V2.B.theta.n16.sloan.ph	3.88	table-t2-volterra.tex	V2
-V.V2.B.theta.n32.base.Eh	1.489e-06	table-t1-v2.tex	базис B
-V.V2.B.theta.n32.base.ph	3.01	table-t1-v2.tex	базис B
+V.V2.B.theta.n32.base.Eh	1.489e-06	table-t1-v2.tex	basis B
+V.V2.B.theta.n32.base.ph	3.01	table-t1-v2.tex	basis B
 V.V2.B.theta.n32.iterKulkarni.Eh	8.398e-10	table-t2-volterra.tex	V2
 V.V2.B.theta.n32.iterKulkarni.ph	4.13	table-t2-volterra.tex	V2
 V.V2.B.theta.n32.iterNystrom.Eh	1.808e-09	table-t3-volterra.tex	V2
@@ -464,12 +464,12 @@ V.V2.B.theta.n32.kulkarni.ph	3.92	table-t2-volterra.tex	V2
 V.V2.B.theta.n32.nystrom.Eh	5.299e-08	table-t3-volterra.tex	V2
 V.V2.B.theta.n32.sloan.Eh	1.369e-08	table-t2-volterra.tex	V2
 V.V2.B.theta.n32.sloan.ph	3.94	table-t2-volterra.tex	V2
-V.V2.B.theta.n64.base.Eh	1.851e-07	table-t1-v2.tex	базис B
+V.V2.B.theta.n64.base.Eh	1.851e-07	table-t1-v2.tex	basis B
 V.V2.B.theta.n64.iterKulkarni.Eh	4.79e-11	table-t2-volterra.tex	V2
 V.V2.B.theta.n64.kulkarni.Eh	1.276e-09	table-t2-volterra.tex	V2
 V.V2.B.theta.n64.sloan.Eh	8.921e-10	table-t2-volterra.tex	V2
-V.V2.B.theta.n8.base.Eh	9.34e-05	table-t1-v2.tex	базис B
-V.V2.B.theta.n8.base.ph	2.97	table-t1-v2.tex	базис B
+V.V2.B.theta.n8.base.Eh	9.34e-05	table-t1-v2.tex	basis B
+V.V2.B.theta.n8.base.ph	2.97	table-t1-v2.tex	basis B
 V.V2.B.theta.n8.iterKulkarni.Eh	2.683e-07	table-t2-volterra.tex	V2
 V.V2.B.theta.n8.iterKulkarni.ph	4.15	table-t2-volterra.tex	V2
 V.V2.B.theta.n8.iterNystrom.Eh	9.279e-07	table-t3-volterra.tex	V2
@@ -564,13 +564,13 @@ V.V2.B.xi2.n8.kulkarni.Eh	1.396e-06	table-xi-t2-volterra.tex	xi2
 V.V2.B.xi2.n8.kulkarni.ph	3.51	table-xi-t2-volterra.tex	xi2
 V.V2.B.xi2.n8.sloan.Eh	6.714e-05	table-xi-t2-volterra.tex	xi2
 V.V2.B.xi2.n8.sloan.ph	2.78	table-xi-t2-volterra.tex	xi2
-V.V2.H.theta.n16.base.Eh	9.982e-06	table-t1-v2.tex	базис H
-V.V2.H.theta.n16.base.ph	3	table-t1-v2.tex	базис H
-V.V2.H.theta.n32.base.Eh	1.244e-06	table-t1-v2.tex	базис H
-V.V2.H.theta.n32.base.ph	3.01	table-t1-v2.tex	базис H
-V.V2.H.theta.n64.base.Eh	1.545e-07	table-t1-v2.tex	базис H
-V.V2.H.theta.n8.base.Eh	7.789e-05	table-t1-v2.tex	базис H
-V.V2.H.theta.n8.base.ph	2.96	table-t1-v2.tex	базис H
+V.V2.H.theta.n16.base.Eh	9.982e-06	table-t1-v2.tex	basis H
+V.V2.H.theta.n16.base.ph	3	table-t1-v2.tex	basis H
+V.V2.H.theta.n32.base.Eh	1.244e-06	table-t1-v2.tex	basis H
+V.V2.H.theta.n32.base.ph	3.01	table-t1-v2.tex	basis H
+V.V2.H.theta.n64.base.Eh	1.545e-07	table-t1-v2.tex	basis H
+V.V2.H.theta.n8.base.Eh	7.789e-05	table-t1-v2.tex	basis H
+V.V2.H.theta.n8.base.ph	2.96	table-t1-v2.tex	basis H
 V.V2.H.xi0.n16.base.Eh	0.0004047	table-xi-t1-v2.tex	xi0
 V.V2.H.xi0.n16.base.ph	2.91	table-xi-t1-v2.tex	xi0
 V.V2.H.xi0.n32.base.Eh	5.401e-05	table-xi-t1-v2.tex	xi0
@@ -592,13 +592,13 @@ V.V2.H.xi2.n32.base.ph	2.87	table-xi-t1-v2.tex	xi2
 V.V2.H.xi2.n64.base.Eh	8.622e-07	table-xi-t1-v2.tex	xi2
 V.V2.H.xi2.n8.base.Eh	0.0002418	table-xi-t1-v2.tex	xi2
 V.V2.H.xi2.n8.base.ph	2.52	table-xi-t1-v2.tex	xi2
-V.V2.T.theta.n16.base.Eh	1.39e-05	table-t1-v2.tex	базис T
-V.V2.T.theta.n16.base.ph	3	table-t1-v2.tex	базис T
-V.V2.T.theta.n32.base.Eh	1.733e-06	table-t1-v2.tex	базис T
-V.V2.T.theta.n32.base.ph	3.01	table-t1-v2.tex	базис T
-V.V2.T.theta.n64.base.Eh	2.157e-07	table-t1-v2.tex	базис T
-V.V2.T.theta.n8.base.Eh	0.0001089	table-t1-v2.tex	базис T
-V.V2.T.theta.n8.base.ph	2.97	table-t1-v2.tex	базис T
+V.V2.T.theta.n16.base.Eh	1.39e-05	table-t1-v2.tex	basis T
+V.V2.T.theta.n16.base.ph	3	table-t1-v2.tex	basis T
+V.V2.T.theta.n32.base.Eh	1.733e-06	table-t1-v2.tex	basis T
+V.V2.T.theta.n32.base.ph	3.01	table-t1-v2.tex	basis T
+V.V2.T.theta.n64.base.Eh	2.157e-07	table-t1-v2.tex	basis T
+V.V2.T.theta.n8.base.Eh	0.0001089	table-t1-v2.tex	basis T
+V.V2.T.theta.n8.base.ph	2.97	table-t1-v2.tex	basis T
 V.V2.T.xi0.n16.base.Eh	0.0005838	table-xi-t1-v2.tex	xi0
 V.V2.T.xi0.n16.base.ph	2.92	table-xi-t1-v2.tex	xi0
 V.V2.T.xi0.n32.base.Eh	7.696e-05	table-xi-t1-v2.tex	xi0
@@ -634,8 +634,8 @@ V.V2exp.B.mu.n32.base.ph	2.97	table-families.tex	V2exp
 V.V2exp.B.mu.n64.base.Eh	1.691e-07	table-families.tex	V2exp
 V.V2exp.B.mu.n8.base.Eh	7.39e-05	table-families.tex	V2exp
 V.V2exp.B.mu.n8.base.ph	2.87	table-families.tex	V2exp
-V.V2exp.B.theta.n16.base.Eh	5.664e-06	table-t1-v2exp.tex	базис B
-V.V2exp.B.theta.n16.base.ph	3.04	table-t1-v2exp.tex	базис B
+V.V2exp.B.theta.n16.base.Eh	5.664e-06	table-t1-v2exp.tex	basis B
+V.V2exp.B.theta.n16.base.ph	3.04	table-t1-v2exp.tex	basis B
 V.V2exp.B.theta.n16.iterKulkarni.Eh	3.251e-08	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n16.iterKulkarni.ph	4.11	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n16.iterNystrom.Eh	4.705e-07	table-t3-volterra.tex	V2exp
@@ -646,8 +646,8 @@ V.V2exp.B.theta.n16.nystrom.Eh	1.392e-06	table-t3-volterra.tex	V2exp
 V.V2exp.B.theta.n16.nystrom.ph	4.04	table-t3-volterra.tex	V2exp
 V.V2exp.B.theta.n16.sloan.Eh	2.026e-07	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n16.sloan.ph	4.05	table-t2-volterra.tex	V2exp
-V.V2exp.B.theta.n32.base.Eh	6.868e-07	table-t1-v2exp.tex	базис B
-V.V2exp.B.theta.n32.base.ph	3.02	table-t1-v2exp.tex	базис B
+V.V2exp.B.theta.n32.base.Eh	6.868e-07	table-t1-v2exp.tex	basis B
+V.V2exp.B.theta.n32.base.ph	3.02	table-t1-v2exp.tex	basis B
 V.V2exp.B.theta.n32.iterKulkarni.Eh	1.878e-09	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n32.iterKulkarni.ph	4.06	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n32.iterNystrom.Eh	2.729e-08	table-t3-volterra.tex	V2exp
@@ -656,12 +656,12 @@ V.V2exp.B.theta.n32.kulkarni.ph	3.99	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n32.nystrom.Eh	8.449e-08	table-t3-volterra.tex	V2exp
 V.V2exp.B.theta.n32.sloan.Eh	1.224e-08	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n32.sloan.ph	4.02	table-t2-volterra.tex	V2exp
-V.V2exp.B.theta.n64.base.Eh	8.45e-08	table-t1-v2exp.tex	базис B
+V.V2exp.B.theta.n64.base.Eh	8.45e-08	table-t1-v2exp.tex	basis B
 V.V2exp.B.theta.n64.iterKulkarni.Eh	1.126e-10	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n64.kulkarni.Eh	7.141e-10	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n64.sloan.Eh	7.524e-10	table-t2-volterra.tex	V2exp
-V.V2exp.B.theta.n8.base.Eh	4.799e-05	table-t1-v2exp.tex	базис B
-V.V2exp.B.theta.n8.base.ph	3.08	table-t1-v2exp.tex	базис B
+V.V2exp.B.theta.n8.base.Eh	4.799e-05	table-t1-v2exp.tex	basis B
+V.V2exp.B.theta.n8.base.ph	3.08	table-t1-v2exp.tex	basis B
 V.V2exp.B.theta.n8.iterKulkarni.Eh	6.01e-07	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n8.iterKulkarni.ph	4.21	table-t2-volterra.tex	V2exp
 V.V2exp.B.theta.n8.iterNystrom.Eh	8.774e-06	table-t3-volterra.tex	V2exp
@@ -679,24 +679,24 @@ V.V2exp.B.xi1.n32.base.ph	2.96	table-families.tex	V2exp
 V.V2exp.B.xi1.n64.base.Eh	8.307e-07	table-families.tex	V2exp
 V.V2exp.B.xi1.n8.base.Eh	0.0003422	table-families.tex	V2exp
 V.V2exp.B.xi1.n8.base.ph	2.82	table-families.tex	V2exp
-V.V2exp.H.theta.n16.base.Eh	6.438e-12	table-t1-v2exp.tex	базис H
-V.V2exp.H.theta.n16.base.ph	-1.31	table-t1-v2exp.tex	базис H
-V.V2exp.H.theta.n32.base.Eh	1.599e-11	table-t1-v2exp.tex	базис H
-V.V2exp.H.theta.n32.base.ph	-2.8	table-t1-v2exp.tex	базис H
-V.V2exp.H.theta.n64.base.Eh	1.112e-10	table-t1-v2exp.tex	базис H
-V.V2exp.H.theta.n8.base.Eh	6.488e-13	table-t1-v2exp.tex	базис H
-V.V2exp.H.theta.n8.base.ph	-3.31	table-t1-v2exp.tex	базис H
+V.V2exp.H.theta.n16.base.Eh	6.438e-12	table-t1-v2exp.tex	basis H
+V.V2exp.H.theta.n16.base.ph	-1.31	table-t1-v2exp.tex	basis H
+V.V2exp.H.theta.n32.base.Eh	1.599e-11	table-t1-v2exp.tex	basis H
+V.V2exp.H.theta.n32.base.ph	-2.8	table-t1-v2exp.tex	basis H
+V.V2exp.H.theta.n64.base.Eh	1.112e-10	table-t1-v2exp.tex	basis H
+V.V2exp.H.theta.n8.base.Eh	6.488e-13	table-t1-v2exp.tex	basis H
+V.V2exp.H.theta.n8.base.ph	-3.31	table-t1-v2exp.tex	basis H
 V.V2exp.H.xi1.n16.base.Eh	7.18e-12	table-xi-special.tex	V2exp
 V.V2exp.H.xi1.n32.base.Eh	2.095e-11	table-xi-special.tex	V2exp
 V.V2exp.H.xi1.n64.base.Eh	1.313e-10	table-xi-special.tex	V2exp
 V.V2exp.H.xi1.n8.base.Eh	7.567e-13	table-xi-special.tex	V2exp
-V.V2exp.T.theta.n16.base.Eh	1.133e-05	table-t1-v2exp.tex	базис T
-V.V2exp.T.theta.n16.base.ph	3.04	table-t1-v2exp.tex	базис T
-V.V2exp.T.theta.n32.base.Eh	1.374e-06	table-t1-v2exp.tex	базис T
-V.V2exp.T.theta.n32.base.ph	3.02	table-t1-v2exp.tex	базис T
-V.V2exp.T.theta.n64.base.Eh	1.69e-07	table-t1-v2exp.tex	базис T
-V.V2exp.T.theta.n8.base.Eh	9.604e-05	table-t1-v2exp.tex	базис T
-V.V2exp.T.theta.n8.base.ph	3.08	table-t1-v2exp.tex	базис T
+V.V2exp.T.theta.n16.base.Eh	1.133e-05	table-t1-v2exp.tex	basis T
+V.V2exp.T.theta.n16.base.ph	3.04	table-t1-v2exp.tex	basis T
+V.V2exp.T.theta.n32.base.Eh	1.374e-06	table-t1-v2exp.tex	basis T
+V.V2exp.T.theta.n32.base.ph	3.02	table-t1-v2exp.tex	basis T
+V.V2exp.T.theta.n64.base.Eh	1.69e-07	table-t1-v2exp.tex	basis T
+V.V2exp.T.theta.n8.base.Eh	9.604e-05	table-t1-v2exp.tex	basis T
+V.V2exp.T.theta.n8.base.ph	3.08	table-t1-v2exp.tex	basis T
 V.V2exp.T.xi1.n16.base.Eh	9.699e-05	table-xi-special.tex	V2exp
 V.V2exp.T.xi1.n16.base.ph	2.91	table-xi-special.tex	V2exp
 V.V2exp.T.xi1.n32.base.Eh	1.289e-05	table-xi-special.tex	V2exp
@@ -718,28 +718,28 @@ V.V2win.B.mu.n32.base.ph	2.97	table-families.tex	V2win
 V.V2win.B.mu.n64.base.Eh	5.261e-08	table-families.tex	V2win
 V.V2win.B.mu.n8.base.Eh	2.375e-05	table-families.tex	V2win
 V.V2win.B.mu.n8.base.ph	2.9	table-families.tex	V2win
-V.V2win.B.theta.n16.base.Eh	1.691e-06	table-t1-v2win.tex	базис B
-V.V2win.B.theta.n16.base.ph	3.02	table-t1-v2win.tex	базис B
+V.V2win.B.theta.n16.base.Eh	1.691e-06	table-t1-v2win.tex	basis B
+V.V2win.B.theta.n16.base.ph	3.02	table-t1-v2win.tex	basis B
 V.V2win.B.theta.n16.iterKulkarni.Eh	4.369e-12	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n16.iterKulkarni.ph	6.15	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n16.kulkarni.Eh	1.81e-10	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n16.kulkarni.ph	5.07	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n16.sloan.Eh	2.336e-08	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n16.sloan.ph	4.13	table-t2-volterra.tex	V2win
-V.V2win.B.theta.n32.base.Eh	2.085e-07	table-t1-v2win.tex	базис B
-V.V2win.B.theta.n32.base.ph	3.01	table-t1-v2win.tex	базис B
+V.V2win.B.theta.n32.base.Eh	2.085e-07	table-t1-v2win.tex	basis B
+V.V2win.B.theta.n32.base.ph	3.01	table-t1-v2win.tex	basis B
 V.V2win.B.theta.n32.iterKulkarni.Eh	6.14e-14	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n32.iterKulkarni.ph	4.94	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n32.kulkarni.Eh	5.373e-12	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n32.kulkarni.ph	5.04	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n32.sloan.Eh	1.337e-09	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n32.sloan.ph	4.07	table-t2-volterra.tex	V2win
-V.V2win.B.theta.n64.base.Eh	2.59e-08	table-t1-v2win.tex	базис B
+V.V2win.B.theta.n64.base.Eh	2.59e-08	table-t1-v2win.tex	basis B
 V.V2win.B.theta.n64.iterKulkarni.Eh	1.998e-15	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n64.kulkarni.Eh	1.629e-13	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n64.sloan.Eh	7.963e-11	table-t2-volterra.tex	V2win
-V.V2win.B.theta.n8.base.Eh	1.395e-05	table-t1-v2win.tex	базис B
-V.V2win.B.theta.n8.base.ph	3.04	table-t1-v2win.tex	базис B
+V.V2win.B.theta.n8.base.Eh	1.395e-05	table-t1-v2win.tex	basis B
+V.V2win.B.theta.n8.base.ph	3.04	table-t1-v2win.tex	basis B
 V.V2win.B.theta.n8.iterKulkarni.Eh	3.376e-10	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n8.iterKulkarni.ph	6.27	table-t2-volterra.tex	V2win
 V.V2win.B.theta.n8.kulkarni.Eh	6.446e-09	table-t2-volterra.tex	V2win
@@ -753,13 +753,13 @@ V.V2win.B.xi1.n32.base.ph	2.96	table-families.tex	V2win
 V.V2win.B.xi1.n64.base.Eh	1.815e-07	table-families.tex	V2win
 V.V2win.B.xi1.n8.base.Eh	7.7e-05	table-families.tex	V2win
 V.V2win.B.xi1.n8.base.ph	2.84	table-families.tex	V2win
-V.V2win.H.theta.n16.base.Eh	3.382e-06	table-t1-v2win.tex	базис H
-V.V2win.H.theta.n16.base.ph	3.02	table-t1-v2win.tex	базис H
-V.V2win.H.theta.n32.base.Eh	4.17e-07	table-t1-v2win.tex	базис H
-V.V2win.H.theta.n32.base.ph	3.01	table-t1-v2win.tex	базис H
-V.V2win.H.theta.n64.base.Eh	5.18e-08	table-t1-v2win.tex	базис H
-V.V2win.H.theta.n8.base.Eh	2.788e-05	table-t1-v2win.tex	базис H
-V.V2win.H.theta.n8.base.ph	3.04	table-t1-v2win.tex	базис H
+V.V2win.H.theta.n16.base.Eh	3.382e-06	table-t1-v2win.tex	basis H
+V.V2win.H.theta.n16.base.ph	3.02	table-t1-v2win.tex	basis H
+V.V2win.H.theta.n32.base.Eh	4.17e-07	table-t1-v2win.tex	basis H
+V.V2win.H.theta.n32.base.ph	3.01	table-t1-v2win.tex	basis H
+V.V2win.H.theta.n64.base.Eh	5.18e-08	table-t1-v2win.tex	basis H
+V.V2win.H.theta.n8.base.Eh	2.788e-05	table-t1-v2win.tex	basis H
+V.V2win.H.theta.n8.base.ph	3.04	table-t1-v2win.tex	basis H
 V.V2win.H.xi1.n16.base.Eh	2.151e-05	table-xi-special.tex	V2win
 V.V2win.H.xi1.n16.base.ph	2.93	table-xi-special.tex	V2win
 V.V2win.H.xi1.n32.base.Eh	2.832e-06	table-xi-special.tex	V2win
@@ -767,11 +767,11 @@ V.V2win.H.xi1.n32.base.ph	2.96	table-xi-special.tex	V2win
 V.V2win.H.xi1.n64.base.Eh	3.63e-07	table-xi-special.tex	V2win
 V.V2win.H.xi1.n8.base.Eh	0.0001538	table-xi-special.tex	V2win
 V.V2win.H.xi1.n8.base.ph	2.84	table-xi-special.tex	V2win
-V.V2win.T.theta.n16.base.Eh	2.273e-13	table-t1-v2win.tex	базис T
-V.V2win.T.theta.n32.base.Eh	2.505e-12	table-t1-v2win.tex	базис T
-V.V2win.T.theta.n64.base.Eh	1.574e-11	table-t1-v2win.tex	базис T
-V.V2win.T.theta.n8.base.Eh	4.996e-14	table-t1-v2win.tex	базис T
-V.V2win.T.theta.n8.base.ph	-2.19	table-t1-v2win.tex	базис T
+V.V2win.T.theta.n16.base.Eh	2.273e-13	table-t1-v2win.tex	basis T
+V.V2win.T.theta.n32.base.Eh	2.505e-12	table-t1-v2win.tex	basis T
+V.V2win.T.theta.n64.base.Eh	1.574e-11	table-t1-v2win.tex	basis T
+V.V2win.T.theta.n8.base.Eh	4.996e-14	table-t1-v2win.tex	basis T
+V.V2win.T.theta.n8.base.ph	-2.19	table-t1-v2win.tex	basis T
 V.V2win.T.xi1.n16.base.Eh	2.992e-13	table-xi-special.tex	V2win
 V.V2win.T.xi1.n32.base.Eh	3.288e-12	table-xi-special.tex	V2win
 V.V2win.T.xi1.n64.base.Eh	2.216e-11	table-xi-special.tex	V2win

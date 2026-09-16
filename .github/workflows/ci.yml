@@ -1,60 +1,60 @@
-# Непрерывная интеграция проекта integral-equations.
+# Continuous integration of the integral-equations project.
 #
-# ЗАВИСИМОСТИ-АРТЕФАКТЫ. Проект собирается против опубликованных библиотек
-# `numerical-core` и `minimal-splines` (см. gradle.properties). Обе берутся из GitHub Packages
-# (по одному реестру на библиотеку, объявлены в build.gradle.kts; чтение требует токена,
-# поэтому в `env` ниже — встроенный GITHUB_TOKEN и разрешение `packages: read`). Задача
-# `verifyArtifactDependencies` (входит в `check`) гарантирует, что библиотеки на classpath
-# присутствуют только как jar, а не как исходники соседних каталогов.
+# ARTIFACT DEPENDENCIES. The project is built against the published libraries
+# `numerical-core` and `minimal-splines` (see gradle.properties). Both are taken from GitHub Packages
+# (one registry per library, declared in build.gradle.kts; reading requires a token,
+# hence the built-in GITHUB_TOKEN in `env` below and the `packages: read` permission). The task
+# `verifyArtifactDependencies` (part of `check`) guarantees that the libraries are present on the
+# classpath only as jars and not as the sources of neighbouring directories.
 #
-# Разделение на job'ы повторяет разделение тестов по тегам в build.gradle.kts
-# и сделано по одной причине: обратная связь на каждый PR обязана быть быстрой.
-#   fast            — единицы секунд + покрытие + пороги покрытия и проверка classpath;
-#                     гоняется всегда и МАТРИЦЕЙ по обоим бэкендам линейной алгебры;
-#   characterization — гейт порядка сходимости (~2 мин), гоняется всегда;
-#   scipy           — внешняя сверка, требует venv с Python и потому вынесена отдельно;
-#   full            — прогон по крупным сеткам (`slowTest`), гоняется на каждый push и PR
-#                     параллельно остальным.
+# The division into jobs repeats the division of the tests by tag in build.gradle.kts
+# and is made for a single reason: the feedback on every PR must be fast.
+#   fast            — a few seconds + coverage + the coverage thresholds and the classpath check;
+#                     it always runs, and as a MATRIX over both linear-algebra backends;
+#   characterization — the convergence-order gate (~2 min), always runs;
+#   scipy           — the external cross-check; it requires a venv with Python and is therefore separate;
+#   full            — the run over large grids (`slowTest`); it runs on every push and PR
+#                     in parallel with the rest.
 #
-# ЧАСТИ `check`, КОТОРЫЕ ГОНЯЮТСЯ ЗДЕСЬ ЯВНО. Целиком `./gradlew check` в CI не
-# запускается: он тянет `fastTest` + `slowTest` + оба характеризационных набора, то есть
-# повторил бы job `full` и подорожал бы примерно на те же 10 минут. Поэтому две проверки
-# из `check`, которые НЕ являются тестами и потому не покрыты ни одним job'ом, вызываются
-# в job `fast` поимённо: `verifyArtifactDependencies` (ровно один jar каждой библиотеки
-# на compile classpath) и `koverVerify` (пороги покрытия). Обе бесплатны: единственный
-# источник покрытия — `fastTest`, который в этом job'е и так исполняется.
+# THE PARTS OF `check` THAT ARE RUN HERE EXPLICITLY. `./gradlew check` as a whole is not
+# run in CI: it pulls in `fastTest` + `slowTest` + both characterization sets, that is, it
+# would repeat the job `full` and would cost about the same extra 10 minutes. For that reason the two checks
+# from `check` that are NOT tests and are therefore covered by no job are invoked
+# by name in the job `fast`: `verifyArtifactDependencies` (exactly one jar of each library
+# on the compile classpath) and `koverVerify` (the coverage thresholds). Both are free: the only
+# source of coverage is `fastTest`, which is executed in this job anyway.
 #
-# ХАРАКТЕРИЗАЦИОННЫЕ ГЕЙТЫ ГОНЯЮТСЯ ЗДЕСЬ — с 2026-09-16 флага отключения
-# машинно-зависимых гейтов в шагах больше нет. Эталоны получили третью колонку
-# `класс`, вычисленную сравнением снимков двух путей LU (`-Dnumerics.backend=java`
-# против `native`): 54 ключа F1 сверяются с границей `2*cond*max(omega,eps)*||u||inf`,
-# считаемой в том же прогоне, остальные 2656 — прежним строгим правилом (отн. 1e-9,
-# пол 6e-13), которое перекрывает измеренное расхождение бэкендов (<= 1.0e-14) в 60 раз.
-# Прогон на ubuntu/OpenBLAS — ТРЕТИЙ независимый путь LU и главное подтверждение
-# классификации. Сам механизм отключения (свойство сборки, см. build.gradle.kts)
-# сохранён: им помечен единственный оставшийся машинно-зависимый метод —
-# `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (сверка с ЧИСЛАМИ ИЗ
-# СТАТЬИ, которые «переснять» под платформу нельзя).
-# Что CI проверяет: быстрый набор, 9 тестов сверки со SciPy, 168 сочетаний порядка
-# сходимости, оба характеризационных гейта (2710 значений) и 613 из 655 опубликованных
-# значений (всё, кроме 42 ключей F1).
+# THE CHARACTERIZATION GATES ARE RUN HERE — since 2026-09-16 the flag that disables
+# the machine-dependent gates is no longer present in the steps. The baselines received a third column
+# `class`, computed by comparing the snapshots of two LU routes (`-Dnumerics.backend=java`
+# against `native`): 54 keys of F1 are compared against the bound `2*cond*max(omega,eps)*||u||inf`,
+# computed in the same run, and the remaining 2656 by the former strict rule (rel. 1e-9,
+# floor 6e-13), which covers the measured divergence of the backends (<= 1.0e-14) 60 times over.
+# The run on ubuntu/OpenBLAS is a THIRD independent LU route and the main confirmation of the
+# classification. The disabling mechanism itself (a build property, see build.gradle.kts)
+# is kept: it marks the single remaining machine-dependent method —
+# `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` (a cross-check against the NUMBERS FROM
+# THE ARTICLE, which cannot be "recaptured" for a platform).
+# What CI checks: the fast set, 9 SciPy cross-check tests, 168 combinations of the convergence
+# order, both characterization gates (2710 values) and 613 of the 655 published
+# values (everything except the 42 keys of F1).
 name: CI
 
 on:
-  # `push` — ТОЛЬКО `main`. При `branches: ['**']` каждая ветка с открытым PR прогоняла
-  # весь workflow ДВАЖДЫ (событие `push` по ветке и событие `pull_request`): два
-  # одинаковых результата за двойное время раннера. Ветки закрывает `pull_request`,
-  # `main` — этот триггер. Тегов в репозитории нет (проект не публикуется); появятся —
-  # сюда добавится `tags:`.
+  # `push` — ONLY `main`. With `branches: ['**']` every branch with an open PR ran
+  # the whole workflow TWICE (a `push` event on the branch and a `pull_request` event): two
+  # identical results for twice the runner time. The branches are covered by `pull_request`,
+  # and `main` by this trigger. There are no tags in the repository (the project is not published); once
+  # they appear, `tags:` will be added here.
   push:
     branches: [main]
   pull_request:
   schedule:
-    # Ночной полный прогон: медленный набор не должен блокировать разработку днём.
+    # The nightly full run: the slow set must not block development during the day.
     - cron: '0 3 * * *'
 
-# Отменяем предыдущий прогон той же ветки: устаревший результат никому не нужен,
-# а медленные job'ы иначе выстраиваются в очередь.
+# The previous run of the same branch is cancelled: an outdated result is of no use to anyone,
+# and the slow jobs would otherwise queue up.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -64,103 +64,103 @@ permissions:
   packages: read
 
 env:
-  # Учётные данные для чтения numerical-core и minimal-splines из GitHub Packages
-  # (GITHUB_ACTOR выставляет раннер). Версии артефактов задаёт gradle.properties.
+  # Credentials for reading numerical-core and minimal-splines from GitHub Packages
+  # (GITHUB_ACTOR is set by the runner). The versions of the artifacts are set by gradle.properties.
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   fast:
-    name: Быстрый набор тестов и покрытие (${{ matrix.backend }})
+    name: Fast test set and coverage (${{ matrix.backend }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # МАТРИЦА БЭКЕНДОВ. `auto` МОЛЧА откатывается на чисто-Java F2J, если нативный
-    # LAPACK не поднялся, — и тогда весь набор гоняется НЕ НА ТОЙ реализации LU, на которой
-    # сняты эталоны. Явные леги `java` и `native` делают откат наблюдаемым: на леге
-    # `native` `ActiveBackendDiagnosticTest` ТРЕБУЕТ `Backends.isNativeAvailable()` и падает
-    # первым, а не сотни чисел после него. Лег `java` — доказательство того, что быстрый
-    # набор не опирается на конкретную реализацию BLAS/LAPACK (машинно-зависимые гейты —
-    # тег `machine` — в быстрый набор не входят).
-    # macOS в матрицу НЕ добавлен осознанно: раннеры медленнее и дефицитнее, а смена
-    # архитектуры проверяется локально на машине разработчика (macOS aarch64).
+    # THE MATRIX OF BACKENDS. `auto` SILENTLY falls back to the pure-Java F2J if the native
+    # LAPACK did not come up — and then the whole set runs on an LU implementation OTHER than the one on which
+    # the baselines were captured. The explicit legs `java` and `native` make the fallback observable: on the leg
+    # `native` `ActiveBackendDiagnosticTest` REQUIRES `Backends.isNativeAvailable()` and fails
+    # first rather than after hundreds of numbers. The leg `java` is the proof that the fast
+    # set does not rely on a particular BLAS/LAPACK implementation (the machine-dependent gates —
+    # tag `machine` — are not part of the fast set).
+    # macOS is deliberately NOT added to the matrix: the runners are slower and scarcer, while a change of
+    # architecture is checked locally on the developer machine (macOS aarch64).
     strategy:
       fail-fast: false
       matrix:
         backend: [java, native]
     env:
-      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
-      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      # The multi-threaded OpenBLAS dgetrf overflows the JVM thread stack (SIGSEGV, exit 139);
+      # the thread limit goes together with the `-Xss8m` of the test JVM in build.gradle.kts.
       OPENBLAS_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v7
 
-      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
-      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
-      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
-      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
-      - name: Системная BLAS/LAPACK (OpenBLAS)
+      # netlib (through numerical-core) loads the system libblas.so.3/liblapack.so.3;
+      # on a bare ubuntu runner they are absent and netlib SILENTLY falls back to F2J — while the baselines
+      # characterization/*.tsv were captured on the native LAPACK and are not reproduced on F2J
+      # (`ActiveBackendDiagnosticTest` is what catches this). Formerly OpenBLAS was shipped by multik inside the jar.
+      - name: System BLAS/LAPACK (OpenBLAS)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
-      - name: Установка JDK 21
+      - name: Install JDK 21
         uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Настройка Gradle с кэшем
+      - name: Set up Gradle with a cache
         uses: gradle/actions/setup-gradle@v6
 
-      # ОДИН ЗАПУСК GRADLE НА ВЕСЬ JOB. Раньше их было два: отдельный прогон
-      # `--tests solvers.core.ActiveBackendDiagnosticTest --info` ради одной строки в логе
-      # и затем весь набор заново — то есть второй старт демона и тестовой JVM
-      # ради диагностики, которая и так входит в `fastTest` (тег `fast`).
+      # ONE GRADLE INVOCATION FOR THE WHOLE JOB. There used to be two: a separate run of
+      # `--tests solvers.core.ActiveBackendDiagnosticTest --info` for the sake of a single line in the log
+      # and then the whole set again — that is, a second start of the daemon and of the test JVM
+      # for the sake of a diagnostic that is part of `fastTest` (tag `fast`) anyway.
       #
-      # Зачем диагностика вообще. `Backends.default()` в режиме `auto` при недоступности
-      # нативного BLAS/LAPACK МОЛЧА откатывается на чисто-Java реализацию (F2J), а эталон
-      # `baseline-eh.tsv` привязан к нативному LAPACK: на другой реализации LU гейт
-      # характеризации падает на ключах F1 с расхождением до 5.7e-2 при допуске 1e-9.
-      # Без явной проверки такой откат выглядел бы как «рефакторинг испортил числа»,
-      # и разбирательство ушло бы не туда. `ActiveBackendDiagnosticTest` УТВЕРЖДАЕТ согласие
-      # активного бэкенда со свойством `numerics.backend` и падает с внятным
-      # сообщением раньше сотен чисел. (Раньше эту роль играл
-      # `numerics.backend.BackendSpiTest`; после выделения numerical-core он живёт там.)
+      # Why the diagnostic is needed at all. `Backends.default()` in `auto` mode, when the
+      # native BLAS/LAPACK is unavailable, SILENTLY falls back to the pure-Java implementation (F2J), while the baseline
+      # `baseline-eh.tsv` is bound to the native LAPACK: on a different LU implementation the characterization
+      # gate fails on the F1 keys with a divergence of up to 5.7e-2 against a tolerance of 1e-9.
+      # Without an explicit check such a fallback would look like "a refactoring spoilt the numbers",
+      # and the investigation would go the wrong way. `ActiveBackendDiagnosticTest` ASSERTS the agreement of the
+      # active backend with the property `numerics.backend` and fails with a clear
+      # message before hundreds of numbers. (Formerly this role was played by
+      # `numerics.backend.BackendSpiTest`; after numerical-core was extracted it lives there.)
       #
-      # Состав команды. `koverVerify` и `verifyArtifactDependencies` — единственные части
-      # `check`, которые не являются тестами; сам `check` здесь НЕ зовётся, иначе он потянул
-      # бы `slowTest` и повторил job `full` (+~10 мин на каждый лег матрицы). `koverVerify`
-      # тянет тот же `fastTest` (единственный источник покрытия), то есть стоит нуль.
-      # Компиляция sourceSet'ов `demo` и `problems` включена намеренно: `fastTest`
-      # тянет только `problems` (он в classpath тестов), а `demo` — нет, поэтому
-      # сломанный `src/demo` проходил бы зелёным на всех PR.
-      - name: Быстрый набор, покрытие с порогами, classpath и компиляция demo
+      # The composition of the command. `koverVerify` and `verifyArtifactDependencies` are the only parts
+      # of `check` that are not tests; `check` itself is NOT called here, otherwise it would pull in
+      # `slowTest` and would repeat the job `full` (+~10 min for each leg of the matrix). `koverVerify`
+      # pulls in the same `fastTest` (the only source of coverage), that is, it costs nothing.
+      # The compilation of the `demo` and `problems` source sets is included deliberately: `fastTest`
+      # pulls in only `problems` (it is on the test classpath) and not `demo`, so a
+      # broken `src/demo` would pass green on every PR.
+      - name: Fast set, coverage with thresholds, classpath and compilation of demo
         run: >-
           ./gradlew fastTest koverXmlReport koverVerify verifyArtifactDependencies
           compileDemoKotlin compileProblemsKotlin
           -Dnumerics.backend=${{ matrix.backend }}
 
-      # ДОКАЗАТЕЛЬСТВО ЗАГРУЖЕННОГО БЭКЕНДА БЕЗ ВТОРОГО ЗАПУСКА JVM.
-      # Имя бэкенда печатает сам тест (`println("numerical-core: ${Backends.describe()}")`),
-      # и раньше эту строку в лог выводил `--info` (на уровне INFO Gradle показывает
-      # стандартные потоки тестов). На всех 142 быстрых тестах `--info` дал бы десятки
-      # тысяч строк ради одной, поэтому строка берётся из <system-out> JUnit-отчёта,
-      # который Gradle пишет всегда. `if: always()` — доказательство нужно ИМЕННО при
-      # падении; шаг сам по себе никогда не валит job (`|| true` на grep).
-      - name: Активный бэкенд линейной алгебры (из отчёта диагностики)
+      # PROOF OF THE LOADED BACKEND WITHOUT A SECOND JVM START.
+      # The name of the backend is printed by the test itself (`println("numerical-core: ${Backends.describe()}")`),
+      # and formerly that line was written to the log by `--info` (at the INFO level Gradle shows
+      # the standard streams of the tests). On all 142 fast tests `--info` would give tens of
+      # thousands of lines for the sake of one, so the line is taken from the <system-out> of the JUnit report,
+      # which Gradle always writes. `if: always()` — the proof is needed PRECISELY on a
+      # failure; the step itself never fails the job (`|| true` on the grep).
+      - name: Active linear-algebra backend (from the diagnostic report)
         if: always()
         run: |
           report='build/test-results/fastTest/TEST-solvers.core.ActiveBackendDiagnosticTest.xml'
-          echo "Запрошено: numerics.backend=${{ matrix.backend }}"
+          echo "Requested: numerics.backend=${{ matrix.backend }}"
           if [ -f "$report" ]; then
-            grep -o 'numerical-core: .*' "$report" | head -5 || echo 'Строка диагностики не найдена в отчёте'
+            grep -o 'numerical-core: .*' "$report" | head -5 || echo 'The diagnostic line was not found in the report'
           else
-            echo "::warning::Отчёт $report отсутствует — диагностический тест не запускался"
+            echo "::warning::The report $report is missing — the diagnostic test was not run"
           fi
 
-      - name: Отчёты тестов и покрытия
+      - name: Test and coverage reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          # Имя с бэкендом: иначе два лега матрицы конфликтуют за одно имя артефакта
-          # (actions/upload-artifact@v4+ падает на повторной загрузке того же имени).
+          # A name that includes the backend: otherwise the two legs of the matrix would clash over one artifact name
+          # (actions/upload-artifact@v4+ fails on a repeated upload of the same name).
           name: test-reports-fast-${{ matrix.backend }}
           path: |
             build/reports/tests/fastTest/**
@@ -169,60 +169,60 @@ jobs:
           if-no-files-found: warn
 
   characterization:
-    name: Гейты численной нейтральности и порядка сходимости
+    name: Numerical-neutrality and convergence-order gates
     runs-on: ubuntu-latest
     env:
-      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
-      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      # The multi-threaded OpenBLAS dgetrf overflows the JVM thread stack (SIGSEGV, exit 139);
+      # the thread limit goes together with the `-Xss8m` of the test JVM in build.gradle.kts.
       OPENBLAS_NUM_THREADS: 4
-    # Замеры на машине разработчика: `characterizationTest` 5 тестов ~27 с,
-    # `extraCharacterizationTest` ~19 с, `convergenceOrderTest` 1.5-2 мин — итого ~2.5 мин.
-    # Запас многократный — на холодный старт JVM и непрогретый кэш Gradle на раннере.
+    # Measurements on the developer machine: `characterizationTest` 5 tests ~27 s,
+    # `extraCharacterizationTest` ~19 s, `convergenceOrderTest` 1.5-2 min — about 2.5 min in total.
+    # The margin is manifold — for a cold JVM start and an unwarmed Gradle cache on the runner.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
-      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
-      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
-      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
-      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
-      - name: Системная BLAS/LAPACK (OpenBLAS)
+      # netlib (through numerical-core) loads the system libblas.so.3/liblapack.so.3;
+      # on a bare ubuntu runner they are absent and netlib SILENTLY falls back to F2J — while the baselines
+      # characterization/*.tsv were captured on the native LAPACK and are not reproduced on F2J
+      # (`ActiveBackendDiagnosticTest` is what catches this). Formerly OpenBLAS was shipped by multik inside the jar.
+      - name: System BLAS/LAPACK (OpenBLAS)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
-      - name: Установка JDK 21
+      - name: Install JDK 21
         uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Настройка Gradle с кэшем
+      - name: Set up Gradle with a cache
         uses: gradle/actions/setup-gradle@v6
 
-      # ГЕЙТЫ E_h ПРОТИВ ЭТАЛОНОВ ГОНЯЮТСЯ ЗДЕСЬ. Прежде они исключались как
-      # машинно-зависимые: эталон, снятый на macOS aarch64, был КРАСНЫМ на ubuntu
-      # x86_64 с первого прогона (30.07). Причина названа и устранена по существу —
-      # расходились 52 ключа задачи F1 (`cond_1 ~ 2.2e10`), и только они; теперь у них
-      # класс `sensitive` и сверка с вычисляемой границей, а не с допуском 1e-9.
-      # Прогон здесь — независимое подтверждение: OpenBLAS x86_64 — третий путь LU
-      # после Accelerate и F2J. Подробности — docs/TESTING.md и docs/baseline-changes.md.
+      # THE E_h GATES AGAINST THE BASELINES ARE RUN HERE. Formerly they were excluded as
+      # machine-dependent: a baseline captured on macOS aarch64 was RED on ubuntu
+      # x86_64 from the very first run (07-30). The cause has been named and removed in substance —
+      # 52 keys of the problem F1 (`cond_1 ~ 2.2e10`) diverged, and only they; now they carry the
+      # class `sensitive` and are compared against a computed bound rather than against a tolerance of 1e-9.
+      # The run here is an independent confirmation: OpenBLAS x86_64 is a third LU route
+      # after Accelerate and F2J. The details are in docs/TESTING.md and docs/baseline-changes.md.
 
-      # ГЕЙТ ПОРЯДКА СХОДИМОСТИ. Полная матрица из 168 сочетаний
-      # на сетках до n = 64. Почему ЗДЕСЬ, а не в job `fast`: полная матрица стоит полторы-две
-      # минуты и ломала бы требование «обратная связь на PR — единицы секунд»; быстрый
-      # поднабор того же класса (тег `fast`, 32 сочетания) уже гоняется там в составе `fastTest`.
-      # Почему ОТДЕЛЬНЫМ ШАГОМ, а не через `check`: задача осознанно исключена из источников
-      # покрытия Kover (`disabledForTestTasks` в build.gradle.kts) — она дорожала `check` на
-      # полторы-две минуты, не добавляя ни одной покрытой строки. Без этого шага гейт
-      # не запускался бы НИ В ОДНОМ job, хотя docs/TESTING.md утверждает обратное.
-      - name: Гейты численной нейтральности и порядка сходимости
+      # THE CONVERGENCE-ORDER GATE. The full matrix of 168 combinations
+      # on grids up to n = 64. Why HERE and not in the job `fast`: the full matrix costs one and a half to two
+      # minutes and would break the requirement "feedback on a PR takes seconds"; the fast
+      # subset of the same class (tag `fast`, 32 combinations) already runs there as part of `fastTest`.
+      # Why as a SEPARATE STEP and not through `check`: the task is deliberately excluded from the sources
+      # of Kover coverage (`disabledForTestTasks` in build.gradle.kts) — it made `check` more expensive by
+      # one and a half to two minutes without adding a single covered line. Without this step the gate
+      # would run in NO job, although docs/TESTING.md asserts the opposite.
+      - name: Numerical-neutrality and convergence-order gates
         run: ./gradlew characterizationTest extraCharacterizationTest convergenceOrderTest
 
-      - name: Отчёты гейтов
+      - name: Gate reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: test-reports-characterization
-          # Отчёты всех трёх гейтов этого job'а: оба характеризационных и порядок сходимости.
+          # The reports of all three gates of this job: both characterization ones and the convergence order.
           path: |
             build/reports/tests/characterizationTest/**
             build/test-results/characterizationTest/**
@@ -233,48 +233,48 @@ jobs:
           if-no-files-found: warn
 
   scipy:
-    name: Внешняя сверка со SciPy
+    name: External cross-check against SciPy
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
-      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      # The multi-threaded OpenBLAS dgetrf overflows the JVM thread stack (SIGSEGV, exit 139);
+      # the thread limit goes together with the `-Xss8m` of the test JVM in build.gradle.kts.
       OPENBLAS_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v7
 
-      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
-      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
-      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
-      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
-      - name: Системная BLAS/LAPACK (OpenBLAS)
+      # netlib (through numerical-core) loads the system libblas.so.3/liblapack.so.3;
+      # on a bare ubuntu runner they are absent and netlib SILENTLY falls back to F2J — while the baselines
+      # characterization/*.tsv were captured on the native LAPACK and are not reproduced on F2J
+      # (`ActiveBackendDiagnosticTest` is what catches this). Formerly OpenBLAS was shipped by multik inside the jar.
+      - name: System BLAS/LAPACK (OpenBLAS)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
-      - name: Установка JDK 21
+      - name: Install JDK 21
         uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Настройка Gradle с кэшем
+      - name: Set up Gradle with a cache
         uses: gradle/actions/setup-gradle@v6
 
-      # Ключ кэша — хеш файла требований: смена пиннинга обязана приводить к
-      # переустановке окружения, иначе сверка шла бы на старых версиях SciPy.
-      - name: Кэш окружения Python со SciPy
+      # The cache key is the hash of the requirements file: a change of the pinning must lead to a
+      # reinstallation of the environment, otherwise the cross-check would run on old versions of SciPy.
+      - name: Cache of the Python environment with SciPy
         uses: actions/cache@v6
         with:
           path: .venv-verify
           key: venv-verify-${{ runner.os }}-${{ hashFiles('tools/requirements-verify.txt') }}
 
-      # Задача выставляет `scipy.required=true`, поэтому битое окружение
-      # (интерпретатор есть, SciPy нет) даёт FAILURE, а не 9 тихих SKIP при
-      # зелёной сборке. Именно этого job'а не должно быть достаточно «пройти молча».
-      # Фактический замер: 9 тестов, 60 проверок, NumPy 2.5.1 / SciPy 1.18.0.
-      - name: Внешняя сверка со SciPy/NumPy
+      # The task sets `scipy.required=true`, so a broken environment
+      # (an interpreter is present, SciPy is not) yields a FAILURE rather than 9 silent SKIPs with a
+      # green build. It is precisely this job for which "passing silently" must not be enough.
+      # The actual measurement: 9 tests, 60 checks, NumPy 2.5.1 / SciPy 1.18.0.
+      - name: External cross-check against SciPy/NumPy
         run: ./gradlew scipyVerify
 
-      - name: Отчёты сверки
+      - name: Cross-check reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -286,107 +286,107 @@ jobs:
           if-no-files-found: warn
 
   # -------------------------------------------------------------------------
-  # JOB `full` — МЕДЛЕННЫЙ НАБОР ЦЕЛИКОМ (включён этапом 8.6).
+  # JOB `full` — THE SLOW SET IN FULL (enabled by stage 8.6).
   #
-  # ИСТОРИЯ. До этапа 8.6 job был ЗАКОММЕНТИРОВАН, и причина была не во времени
-  # прогона, а в КРАСНОМ РЕЗУЛЬТАТЕ: `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`
-  # давал 4 расхождения с публикацией на ключах `F.F1.H.theta.*` (до 6.78 % при
-  # допуске 2 %) — уравнение ПЕРВОГО рода F1 с регуляризацией Вазваза,
-  # `cond(I - M) ~ 1e10`. Пункт 8.6 закрыл это НЕ ослаблением общего допуска (он
-  # по-прежнему 2 %), а узким классом 8 % для шести ключей таблицы `table-f1.tex`,
-  # выведенным из измеренного разброса между реализациями LU на этих же ключах;
-  # компенсация — покрытие F1 в `baseline-eh.tsv` расширено с 4 до 54 ключей.
+  # HISTORY. Before stage 8.6 the job was COMMENTED OUT, and the reason was not the time
+  # of the run but the RED RESULT: `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues`
+  # gave 4 discrepancies with the publication on the keys `F.F1.H.theta.*` (up to 6.78 % against
+  # a tolerance of 2 %) — the equation of the FIRST kind F1 with the Wazwaz regularization,
+  # `cond(I - M) ~ 1e10`. Item 8.6 closed this NOT by relaxing the common tolerance (it is
+  # still 2 %) but by a narrow class of 8 % for the six keys of the table `table-f1.tex`,
+  # derived from the measured spread between the LU implementations on those very keys;
+  # the compensation is that the F1 coverage in `baseline-eh.tsv` was extended from 4 to 54 keys.
   #
-  # ЗАМЕР ПОСЛЕ ЗАКРЫТИЯ (`./gradlew slowTest --rerun`, машина разработчика):
-  # 23 теста, 0 падений, 8 мин 39 с (из них `PublishedValuesTest` ~190 с,
-  # `ConvergenceOrderTest` 1.5-2 мин). `timeout-minutes: 45` — запас пятикратный на
-  # более медленный раннер, холодный старт JVM и непрогретый кэш Gradle.
+  # THE MEASUREMENT AFTER THE CLOSURE (`./gradlew slowTest --rerun`, the developer machine):
+  # 23 tests, 0 failures, 8 min 39 s (of which `PublishedValuesTest` ~190 s and
+  # `ConvergenceOrderTest` 1.5-2 min). `timeout-minutes: 45` is a fivefold margin for a
+  # slower runner, a cold JVM start and an unwarmed Gradle cache.
   #
-  # ПОЧЕМУ ОТДЕЛЬНЫМ JOB'ОМ, а не шагом в `fast`. Восемь минут в job'е `fast`
-  # сломали бы его назначение — обратная связь на PR за единицы секунд.
-  # Отдельный job идёт ПАРАЛЛЕЛЬНО остальным и ничего не замедляет.
+  # WHY A SEPARATE JOB rather than a step in `fast`. Eight minutes in the job `fast`
+  # would break its purpose — feedback on a PR within seconds.
+  # A separate job runs IN PARALLEL with the rest and slows nothing down.
   #
-  # ПОЧЕМУ БЕЗ УСЛОВИЯ `if:` НА ВЕТКУ (было `github.ref == 'refs/heads/main'`).
-  # Смысл гейта — поймать регрессию ДО мержа, а не после. Гейт, работающий
-  # только на `main`, сообщает о поломке тогда, когда она уже в основной ветке.
-  # Сверка с публикацией и ограничитель ширины послабления живут именно здесь.
+  # WHY WITHOUT AN `if:` CONDITION ON THE BRANCH (it used to be `github.ref == 'refs/heads/main'`).
+  # The point of a gate is to catch a regression BEFORE a merge, not after. A gate that works
+  # only on `main` reports a breakage when it is already in the main branch.
+  # The cross-check against the publication and the limiter of the width of the relaxation live precisely here.
   #
-  # Вариант `continue-on-error: true` ОТВЕРГНУТ и сейчас: он даёт ЗЕЛЁНУЮ галочку
-  # при невыполненных проверках — ровно тот ложный сигнал, от которого этап
-  # избавлялся в остальных местах.
+  # The option `continue-on-error: true` is REJECTED here as well: it gives a GREEN tick
+  # with unperformed checks — exactly the false signal that the stage was
+  # eliminating everywhere else.
   #
-  # СООТНОШЕНИЕ С `check`: `slowTest` также входит в `check` (через источники Kover,
-  # см. build.gradle.kts), то есть исполняется и локально в `./gradlew build`.
-  # Этот job — гарантия на стороне CI, не зависящая от поведения плагина Kover.
+  # THE RELATION TO `check`: `slowTest` is also part of `check` (through the Kover sources,
+  # see build.gradle.kts), that is, it is executed locally in `./gradlew build` as well.
+  # This job is a guarantee on the CI side, independent of the behaviour of the Kover plugin.
   full:
-    name: Медленный набор тестов (сверка с публикацией)
+    name: Slow test set (cross-check against the publication)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      # Многопоточный dgetrf OpenBLAS переполняет стек потока JVM (SIGSEGV, exit 139);
-      # ограничение потоков — вместе с `-Xss8m` тестовой JVM в build.gradle.kts.
+      # The multi-threaded OpenBLAS dgetrf overflows the JVM thread stack (SIGSEGV, exit 139);
+      # the thread limit goes together with the `-Xss8m` of the test JVM in build.gradle.kts.
       OPENBLAS_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v7
 
-      # netlib (через numerical-core) загружает системные libblas.so.3/liblapack.so.3;
-      # на голом ubuntu-runner их нет, и netlib МОЛЧА уходит в F2J — а эталоны
-      # characterization/*.tsv сняты на нативном LAPACK и на F2J не воспроизводятся
-      # (`ActiveBackendDiagnosticTest` это и ловит). Раньше OpenBLAS приносил multik внутри jar.
-      - name: Системная BLAS/LAPACK (OpenBLAS)
+      # netlib (through numerical-core) loads the system libblas.so.3/liblapack.so.3;
+      # on a bare ubuntu runner they are absent and netlib SILENTLY falls back to F2J — while the baselines
+      # characterization/*.tsv were captured on the native LAPACK and are not reproduced on F2J
+      # (`ActiveBackendDiagnosticTest` is what catches this). Formerly OpenBLAS was shipped by multik inside the jar.
+      - name: System BLAS/LAPACK (OpenBLAS)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
 
-      - name: Установка JDK 21
+      - name: Install JDK 21
         uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Настройка Gradle с кэшем
+      - name: Set up Gradle with a cache
         uses: gradle/actions/setup-gradle@v6
 
-      # 23 теста тега `slow` за ОДИН запуск. Главное здесь и ни в одном другом job'е:
-      # `PublishedValuesTest` — сверка с ВНЕШНИМ источником правды, не замкнутая
-      # на собственные снимки проекта.
-      # ЕДИНСТВЕННОЕ МЕСТО, где флаг ещё нужен: набор `slow` содержит
-      # `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` с тегом `machine`
-      # (сверка 42 ключей F1 с числами ИЗ СТАТЬИ; переснять их под платформу нельзя).
-      # Флаг исключает ровно этот метод — остальные 613 опубликованных значений
-      # сверяются здесь как обычно. Характеризационные гейты им больше не управляются.
-      - name: Медленный набор тестов
+      # 23 tests of the tag `slow` in ONE invocation. The main point, here and in no other job:
+      # `PublishedValuesTest` — a cross-check against an EXTERNAL source of truth, not closed
+      # upon the project's own snapshots.
+      # THE ONLY PLACE where the flag is still needed: the `slow` set contains
+      # `PublishedValuesTest.fredholmFirstKindMatchesPublishedValues` with the tag `machine`
+      # (a cross-check of 42 F1 keys against the numbers FROM THE ARTICLE; they cannot be recaptured for a platform).
+      # The flag excludes exactly that method — the remaining 613 published values
+      # are cross-checked here as usual. The characterization gates are no longer governed by it.
+      - name: Slow test set
         run: ./gradlew slowTest -PmachineDependentGates=false
 
-      # ДИАГНОСТИКА ПАДЕНИЙ ЧЕРЕЗ АННОТАЦИИ — НЕ КОСМЕТИКА, А ЕДИНСТВЕННЫЙ КАНАЛ.
+      # DIAGNOSTICS OF FAILURES THROUGH ANNOTATIONS — NOT COSMETICS BUT THE ONLY CHANNEL.
       #
-      # Проблема, ради которой этот шаг существует: логи job'а и артефакты через
-      # REST API требуют админ-прав на репозиторий (403 Must have admin rights),
-      # а штатные аннотации при падении содержат лишь «Process completed with exit
-      # code 1». То есть без этого шага причина падения видна ТОЛЬКО владельцу
-      # репозитория вручную через UI, а любому другому участнику и любому
-      # автоматическому средству — не видна вообще.
+      # The problem for the sake of which this step exists: the logs of the job and the artifacts through the
+      # REST API require admin rights on the repository (403 Must have admin rights),
+      # while the standard annotations on a failure contain only "Process completed with exit
+      # code 1". That is, without this step the cause of a failure is visible ONLY to the owner of the
+      # repository, manually through the UI, and to any other participant and to any
+      # automatic tool it is not visible at all.
       #
-      # Команда рабочего процесса `::error::` создаёт аннотацию, которая видна
-      # и в UI, и через API БЕЗ привилегий. Здесь она наполняется из JUnit-отчётов,
-      # то есть в аннотацию попадают ИМЕНА тестов и САМИ РАСХОЖДЕНИЯ (ключ,
-      # опубликованное и вычисленное значение, процент расхождения).
+      # The workflow command `::error::` creates an annotation that is visible
+      # both in the UI and through the API WITHOUT privileges. Here it is filled from the JUnit reports,
+      # that is, the annotation carries the NAMES of the tests and the DISCREPANCIES themselves (the key,
+      # the published and the computed value, the percentage of the discrepancy).
       #
-      # Сторонние action’ы (dorny/test-reporter и пр.) сознательно НЕ использованы:
-      # задача решается встроенным механизмом, и гейт не должен зависеть от чужого
-      # репозитория и его прав на токен.
+      # Third-party actions (dorny/test-reporter and the like) are deliberately NOT used:
+      # the task is solved by the built-in mechanism, and a gate must not depend on someone else's
+      # repository and its rights on the token.
       #
-      # `if: ${{ !cancelled() }}` — шаг обязан отработать ИМЕННО при падении
-      # предыдущего; при отмене прогона — нет (поэтому не `always()`).
-      # Сам шаг ВСЕГДА завершается успехом: он только СООБЩАЕТ о падениях,
-      # а вердикт job'а остаётся за шагом с тестами.
-      - name: Детали падений в аннотации (видны без админ-прав)
+      # `if: ${{ !cancelled() }}` — the step must run PRECISELY when the previous one fails;
+      # on a cancelled run it must not (hence not `always()`).
+      # The step itself ALWAYS succeeds: it only REPORTS the failures,
+      # while the verdict of the job is left to the step with the tests.
+      - name: Failure details in annotations (visible without admin rights)
         if: ${{ !cancelled() }}
         run: |
           python3 - <<'PY'
           import glob, xml.etree.ElementTree as ET
 
           def annotate(text: str) -> str:
-              # Экранирование по спецификации workflow-команд: без него многострочное
-              # сообщение оборвётся на первой же строке.
+              # Escaping per the specification of the workflow commands: without it a multiline
+              # message would be cut off at the very first line.
               return (text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
 
           found = 0
@@ -399,13 +399,13 @@ jobs:
                   for bad in list(case.iter('failure')) + list(case.iter('error')):
                       found += 1
                       body = bad.get('message') or bad.text or ''
-                      # Лимит аннотации — порядка 64 КБ; берём с запасом.
+                      # The limit of an annotation is of the order of 64 KB; a margin is taken.
                       print(f"::error title={case.get('classname')}.{case.get('name')}::"
                             f"{annotate(body[:8000])}")
-          print(f"Найдено падений в отчётах: {found}")
+          print(f"Failures found in the reports: {found}")
           PY
 
-      - name: Отчёты тестов
+      - name: Test reports
         if: always()
         uses: actions/upload-artifact@v7
         with:

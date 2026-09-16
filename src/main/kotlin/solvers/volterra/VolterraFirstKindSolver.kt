@@ -9,62 +9,62 @@ import splines.metrics.*
 import solvers.core.RhsWithDerivatives
 
 /**
- * Решатель уравнения Вольтерры ПЕРВОГО рода `(V u)(t) = \int_a^t K(t,s) u(s) ds = f(t)`
- * сведением к уравнению второго рода дифференцированием.
+ * Solver for the FIRST-kind Volterra equation `(V u)(t) = \int_a^t K(t,s) u(s) ds = f(t)`
+ * by reduction to a second-kind equation through differentiation.
  *
- * Математическая идея. В отличие от уравнения Фредгольма первого рода (некорректного,
- * требующего регуляризации), задача Вольтерры при `K(t,t) != 0` КОРРЕКТНА. Дифференцируя
- * исходное уравнение по `t` по правилу Лейбница, получаем
+ * The mathematical idea. Unlike the first-kind Fredholm equation (ill-posed and
+ * requiring regularization), the Volterra problem is WELL-POSED when `K(t,t) != 0`. Differentiating
+ * the original equation with respect to `t` by the Leibniz rule gives
  *
  *     K(t,t) u(t) + \int_a^t K_t(t,s) u(s) ds = f'(t),
  *
- * и после деления на `K(t,t)` приходим к уравнению второго рода
+ * and after dividing by `K(t,t)` we arrive at the second-kind equation
  *
  *     u(t) - (W u)(t) = g(t),   (W u)(t) = \int_a^t [-K_t(t,s)/K(t,t)] u(s) ds,
  *     g(t) = f'(t)/K(t,t),
  *
- * которое решается обычной схемой второго рода с `c_L = 1`. Источник метода указан
- * в `docs/REFERENCES.md` (раздел «Уравнения первого рода»).
+ * which is solved by the usual second-kind scheme with `c_L = 1`. The source of the method is given
+ * in `docs/REFERENCES.md` (section "First-kind equations").
  *
- * Случай `m = 1` (однократное дифференцирование) применим только при `K(t,t) != 0`.
+ * The case `m = 1` (a single differentiation) applies only when `K(t,t) != 0`.
  *
- * ДИАГНОСТИКА ВЫРОЖДЕНИЯ ДИАГОНАЛИ — два независимых рубежа:
+ * DIAGNOSTICS OF A DEGENERATE DIAGONAL — two independent lines of defence:
  *
- *  1. *Предварительная проверка при создании* — по всем точкам, где деление реально
- *     выполняется на регулярной основе: узлы сетки, середины интервалов, гауссовы узлы
- *     составной квадратуры редуцированного оператора и точки шаблона конечной разности
- *     вокруг каждой из них. Даёт раннюю и дешёвую диагностику до начала счёта.
- *  2. *Защита в самой точке деления* ([safeDiagonal]) — срабатывает при ЛЮБОМ вычислении,
- *     в том числе в произвольной точке `t`, которую запросил пользователь у готового
- *     решения. Именно она даёт гарантию: молчаливого `NaN`/`Inf` не возникает нигде.
+ *  1. *A preliminary check at construction time* — over all points where the division is actually
+ *     performed on a regular basis: the grid breakpoints, the interval midpoints, the Gauss nodes
+ *     of the composite quadrature of the reduced operator, and the finite-difference stencil points
+ *     around each of them. It gives early and cheap diagnostics before the computation starts.
+ *  2. *A guard at the division site itself* ([safeDiagonal]) — it fires on ANY evaluation,
+ *     including one at an arbitrary point `t` requested by the user from a ready
+ *     solution. It is what provides the guarantee: a silent `NaN`/`Inf` cannot arise anywhere.
  *
- * Второй рубеж необходим, потому что множество точек деления не является конечным и
- * предвычислимым: оператор Вольтерры интегрирует по `[a,t]` с УСЕЧЁННОЙ последней
- * ячейкой, поэтому гауссовы узлы зависят от `t`, а итерация Слоана вычисляет `g(t)`
- * в любой запрошенной точке. Ранее в такой ситуации возвращался `NaN` без какого-либо
- * сигнала: например, при диагонали, положительной в узлах и серединах, но нулевой
- * в промежуточной точке, `base()` давала правдоподобное `E_h ~ 1.3e-5`, а `sloan()`
- * молча возвращала `NaN`.
+ * The second line of defence is necessary because the set of division points is neither finite nor
+ * precomputable: the Volterra operator integrates over `[a,t]` with a TRUNCATED last
+ * cell, so the Gauss nodes depend on `t`, while the Sloan iteration evaluates `g(t)`
+ * at any requested point. Previously such a situation returned `NaN` without any
+ * signal: for instance, with a diagonal positive at the breakpoints and midpoints but zero
+ * at an intermediate point, `base()` produced a plausible `E_h ~ 1.3e-5`, while `sloan()`
+ * silently returned `NaN`.
  *
- * @param basis базис минимальных сплайнов.
- * @param funcs семейство аппроксимационных функционалов.
- * @param kernel ядро ИСХОДНОГО уравнения первого рода — именно ядро, а не готовый
- *        [VolterraOperator]. Редукция делит на диагональ `K(t,t)` (операция над
- *        ЯДРОМ) и собирает СОБСТВЕННЫЙ оператор [reducedOperator] со своей
- *        квадратурой порядка `REDUCED_OPERATOR_QUADRATURE_ORDER`; у переданного
- *        оператора квадратура была бы проигнорирована, а ядро всё равно извлечено,
- *        то есть параметр оказался бы наполовину мёртвым.
- * @param rhsDeriv производная правой части `f'(t)` исходного уравнения.
- * @param smoothPart гладкая часть решения, известная аналитически; из-под конечной
- *        разности она выносится, чтобы не усиливать шум (см. пояснение к [gEffDeriv]).
- * @param smoothPartDeriv производная гладкой части.
- * @param throwOnDivergence политика обработки недостижения сходимости итерационными
- *        схемами внутреннего решателя; см. [VolterraSecondKindSolver.throwOnDivergence].
- * @throws IllegalArgumentException если `K(t,t)` близко к нулю в контрольных точках;
- *         если длина отрезка недостаточна для шаблона конечной разности; либо если
- *         выбрано семейство функционалов, требующее второй производной.
- * @throws IllegalStateException если `K(t,t)` обращается в ноль в точке деления,
- *         обнаруженной уже во время счёта (см. [safeDiagonal]).
+ * @param basis minimal spline basis.
+ * @param funcs family of approximation functionals.
+ * @param kernel kernel of the ORIGINAL first-kind equation — the kernel itself, not a ready
+ *        [VolterraOperator]. The reduction divides by the diagonal `K(t,t)` (an operation on the
+ *        KERNEL) and assembles its OWN operator [reducedOperator] with its own
+ *        quadrature of order `REDUCED_OPERATOR_QUADRATURE_ORDER`; the quadrature of a passed
+ *        operator would be ignored while its kernel would be extracted anyway,
+ *        i.e. the parameter would end up half dead.
+ * @param rhsDeriv derivative of the right-hand side `f'(t)` of the original equation.
+ * @param smoothPart smooth part of the solution, known analytically; it is taken out from under the
+ *        finite difference so as not to amplify noise (see the note on [gEffDeriv]).
+ * @param smoothPartDeriv derivative of the smooth part.
+ * @param throwOnDivergence policy for handling a failure to converge by the iterative
+ *        schemes of the inner solver; see [VolterraSecondKindSolver.throwOnDivergence].
+ * @throws IllegalArgumentException if `K(t,t)` is close to zero at the check points;
+ *         if the interval is too short for the finite-difference stencil; or if
+ *         a functional family requiring the second derivative was chosen.
+ * @throws IllegalStateException if `K(t,t)` vanishes at a division point
+ *         discovered during the computation (see [safeDiagonal]).
  */
 public class VolterraFirstKindSolver(
     public val basis: MinimalSplineBasis,
@@ -78,137 +78,137 @@ public class VolterraFirstKindSolver(
 ) {
     private companion object {
         /**
-         * Порог, ниже которого диагональ ядра `|K(t,t)|` считается нулевой и редукция
-         * первого рода ко второму объявляется неприменимой. Значение выбрано много
-         * больше машинного эпсилона, но много меньше типичных значений ядра: деление
-         * на меньшую величину даёт неконтролируемое усиление погрешности.
+         * Threshold below which the kernel diagonal `|K(t,t)|` is considered zero and the reduction
+         * of the first kind to the second is declared inapplicable. The value is chosen much
+         * larger than the machine epsilon but much smaller than typical kernel values: dividing
+         * by a smaller quantity gives an uncontrolled amplification of the error.
          */
         const val KERNEL_DIAGONAL_TOLERANCE = 1e-12
 
         /**
-         * Шаг конечной разности для численного дифференцирования.
+         * Finite-difference step for numerical differentiation.
          *
-         * Для формулы ЧЕТВЁРТОГО порядка оптимум по сумме ошибки аппроксимации `O(h^4)`
-         * и ошибки округления `O(eps/h)` достигается при `h ~ eps^{1/5} ~ 1e-3`.
-         * При меньшем шаге (например, `1e-6`, оптимальном для второго порядка) начинает
-         * доминировать ошибка округления и шум квадратуры.
+         * For a FOURTH-order formula the optimum of the sum of the approximation error `O(h^4)`
+         * and the round-off error `O(eps/h)` is attained at `h ~ eps^{1/5} ~ 1e-3`.
+         * With a smaller step (say `1e-6`, optimal for second order) the round-off error
+         * and the quadrature noise start to dominate.
          *
-         * ШАГ ОСТАВЛЕН АБСОЛЮТНЫМ ОСОЗНАННО. Относительный шаг (доля от `b - a`) снял бы
-         * ограничение на длину отрезка, но одновременно изменил бы численные результаты
-         * на ВСЕХ существующих задачах, включая V1: величина шага входит в ошибку
-         * аппроксимации `O(h^4)` и в ошибку округления `O(eps/h)`, поэтому смена шага
-         * сдвигает `E_h` в последних значащих цифрах. Такая замена — обоснованное
-         * изменение алгоритма, требующее осознанной пересъёмки эталона, и она не входит
-         * в задачу «добавить недостающую диагностику». Вместо этого отрезки, на которых
-         * шаблон не помещается, ЯВНО ЗАПРЕЩЕНЫ (см. [MIN_INTERVAL_STENCIL_STEPS]).
+         * THE STEP IS LEFT ABSOLUTE DELIBERATELY. A relative step (a fraction of `b - a`) would lift
+         * the restriction on the interval length, but it would at the same time change the numerical results
+         * on ALL existing problems, V1 included: the step size enters the approximation
+         * error `O(h^4)` and the round-off error `O(eps/h)`, so changing the step
+         * shifts `E_h` in the last significant digits. Such a replacement is a substantive
+         * change of the algorithm requiring a deliberate re-shooting of the baseline, and it is not part
+         * of the task "add the missing diagnostics". Instead, intervals on which
+         * the stencil does not fit are EXPLICITLY FORBIDDEN (see [MIN_INTERVAL_STENCIL_STEPS]).
          */
         const val FINITE_DIFFERENCE_STEP = 1e-3
 
         /**
-         * Минимальная длина отрезка `b - a`, выраженная в шагах [FINITE_DIFFERENCE_STEP].
+         * Minimal interval length `b - a`, expressed in steps of [FINITE_DIFFERENCE_STEP].
          *
-         * Оценка худшего случая по ветвям [deriv4]. Односторонняя ветвь выбирается для
-         * точек, отстоящих от конца меньше чем на `2h`, а её шаблон тянется на `4h` в
-         * противоположную сторону: суммарный охват достигает `2h + 4h = 6h`. Поэтому
-         * при `b - a >= 6h` шаблон гарантированно остаётся внутри `[a,b]` при любом `t`,
-         * а при меньшей длине — выходит за пределы, где ядро и оператор доопределены
-         * нулём, что молча исказило бы производную.
+         * A worst-case estimate over the branches of [deriv4]. The one-sided branch is chosen for
+         * points closer than `2h` to an end, and its stencil extends `4h` in
+         * the opposite direction: the total span reaches `2h + 4h = 6h`. Hence
+         * for `b - a >= 6h` the stencil is guaranteed to stay inside `[a,b]` for any `t`,
+         * whereas for a shorter interval it leaves the domain, where the kernel and the operator are
+         * extended by zero, which would silently distort the derivative.
          */
         const val MIN_INTERVAL_STENCIL_STEPS = 6
 
         /**
-         * Относительный допуск при сравнении точки с концами отрезка: защищает выбор
-         * ветви конечной разности от ошибок округления координат.
+         * Relative tolerance when comparing a point with the interval ends: it protects the choice of the
+         * finite-difference branch from round-off in the coordinates.
          */
         const val BOUNDARY_RELATIVE_TOLERANCE = 1e-9
 
-        /** Порядок квадратуры для редуцированного оператора. */
+        /** Quadrature order for the reduced operator. */
         const val REDUCED_OPERATOR_QUADRATURE_ORDER = 8
     }
 
     private val grid = basis.grid
     private val quad = GaussLegendre(REDUCED_OPERATOR_QUADRATURE_ORDER)
 
-    /** Ядро исходного уравнения I рода (нужно и в методах, не только в инициализаторах). */
+    /** Kernel of the original first-kind equation (needed in methods too, not only in the initializers). */
     private val sourceKernel = kernel
 
     /**
-     * Диагональ ядра `K(t,t)` С ПРОВЕРКОЙ — знаменатель редукции I рода ко II.
+     * The kernel diagonal `K(t,t)` WITH A CHECK — the denominator of the first-to-second-kind reduction.
      *
-     * ВСЕ деления на диагональ выполняются через эту функцию, поэтому вырождение не может
-     * пройти незамеченным ни в одной точке — включая те, что невозможно перечислить
-     * заранее (гауссовы узлы усечённой ячейки `[x_k, t]` и произвольные точки `t`,
-     * запрошенные у готового решения).
+     * ALL divisions by the diagonal go through this function, so a degeneracy cannot
+     * pass unnoticed at any point — including those that cannot be enumerated
+     * in advance (the Gauss nodes of the truncated cell `[x_k, t]` and arbitrary points `t`
+     * requested from a ready solution).
      *
-     * @throws IllegalStateException если `|K(t,t)|` ниже [KERNEL_DIAGONAL_TOLERANCE].
+     * @throws IllegalStateException if `|K(t,t)|` is below [KERNEL_DIAGONAL_TOLERANCE].
      */
     private fun safeDiagonal(t: Double): Double {
         val diagonal = sourceKernel.k(t, t)
         check(abs(diagonal) >= KERNEL_DIAGONAL_TOLERANCE) {
-            "Решатель уравнения Вольтерры I рода требует K(t,t) != 0 (случай m=1): " +
-                "в точке деления t=$t получено K(t,t)=$diagonal " +
-                "(|K(t,t)|=${abs(diagonal)} < порога $KERNEL_DIAGONAL_TOLERANCE). " +
-                "Эта точка не совпадает ни с узлом сетки, ни с серединой интервала, " +
-                "поэтому предварительная проверка её не охватила."
+            "the first-kind Volterra solver requires K(t,t) != 0 (the case m=1): " +
+                "at the division point t=$t we got K(t,t)=$diagonal " +
+                "(|K(t,t)|=${abs(diagonal)} < the threshold $KERNEL_DIAGONAL_TOLERANCE). " +
+                "This point coincides neither with a grid breakpoint nor with an interval midpoint, " +
+                "hence the preliminary check did not cover it."
         }
         return diagonal
     }
 
-    /** Диагональ ядра `K(t,t)` — знаменатель редукции первого рода ко второму. */
+    /** The kernel diagonal `K(t,t)` — the denominator of the first-to-second-kind reduction. */
     private val kernelDiagonal = { t: Double -> safeDiagonal(t) }
 
     init {
-        // Отрезок обязан вмещать шаблон конечной разности: шаг абсолютный, а значит,
-        // на коротком отрезке точки t ± k*h вышли бы за [a,b], где ядро и оператор
-        // доопределены нулём — производная была бы искажена молча.
+        // The interval must accommodate the finite-difference stencil: the step is absolute, hence
+        // on a short interval the points t ± k*h would leave [a,b], where the kernel and the operator
+        // are extended by zero — the derivative would be distorted silently.
         val intervalLength = grid.b - grid.a
         val requiredLength = MIN_INTERVAL_STENCIL_STEPS * FINITE_DIFFERENCE_STEP
         require(intervalLength >= requiredLength) {
-            "Решатель уравнения Вольтерры I рода неприменим на слишком коротком отрезке: " +
-                "b - a = $intervalLength, а шаблон конечной разности четвёртого порядка требует " +
-                "не менее $MIN_INTERVAL_STENCIL_STEPS шагов по $FINITE_DIFFERENCE_STEP, то есть " +
-                "b - a >= $requiredLength. Шаг разности абсолютен и не масштабируется с длиной " +
-                "отрезка, иначе точки шаблона выйдут за пределы области определения."
+            "the first-kind Volterra solver is inapplicable on a too short interval: " +
+                "b - a = $intervalLength, while the fourth-order finite-difference stencil requires " +
+                "at least $MIN_INTERVAL_STENCIL_STEPS steps of $FINITE_DIFFERENCE_STEP, that is " +
+                "b - a >= $requiredLength. The difference step is absolute and does not scale with the interval " +
+                "length, otherwise the stencil points would leave the domain of definition."
         }
-        // Редукция делит на K(t,t), поэтому обращение диагонали в ноль недопустимо.
-        // Проверяем ВСЕ точки, где деление выполняется на регулярной основе. Ранее
-        // проверялись только узлы и середины, хотя главный потребитель деления — это
-        // квадратура редуцированного оператора и шаблон конечной разности.
+        // The reduction divides by K(t,t), so a vanishing diagonal is inadmissible.
+        // We check ALL points where the division is performed on a regular basis. Previously
+        // only the breakpoints and the midpoints were checked, although the main consumer of the division is
+        // the quadrature of the reduced operator and the finite-difference stencil.
         for (t in diagonalCheckPoints()) {
             val diagonal = kernel.k(t, t)
             require(abs(diagonal) >= KERNEL_DIAGONAL_TOLERANCE) {
-                "Решатель уравнения Вольтерры I рода требует K(t,t) != 0 (случай m=1); " +
-                    "K(t,t)=$diagonal при t=$t (|K(t,t)|=${abs(diagonal)}) слишком мало"
+                "the first-kind Volterra solver requires K(t,t) != 0 (the case m=1); " +
+                    "K(t,t)=$diagonal at t=$t (|K(t,t)|=${abs(diagonal)}) is too small"
             }
         }
-        // Семейство xi^<0> требует ВТОРОЙ производной образа (Wu)'' и правой части g''.
-        // После редукции ядро K_W само задано через численное дифференцирование, а его
-        // производные K_W_s и K_W_tt аналитически недоступны: их получение потребовало бы
-        // трёхкратного численного дифференцирования с неконтролируемым шумом. Ранее такой
-        // вызов МОЛЧА возвращал неверный результат (обе производные считались нулевыми) —
-        // теперь это явная ошибка вместо тихого искажения.
+        // The family xi^<0> requires the SECOND derivative of the image (Wu)'' and of the right-hand side g''.
+        // After the reduction the kernel K_W is itself defined through numerical differentiation, and its
+        // derivatives K_W_s and K_W_tt are analytically unavailable: obtaining them would require
+        // a threefold numerical differentiation with uncontrolled noise. Previously such a
+        // call SILENTLY returned a wrong result (both derivatives were taken to be zero) —
+        // now it is an explicit error instead of a silent distortion.
         require(!funcs.usesSecondDerivative) {
-            "Решатель уравнения Вольтерры I рода не поддерживает семейство '${funcs.name}': " +
-                "после редукции I->II рода вторая производная ядра недоступна аналитически. " +
-                "Используйте theta, xi^<1>, xi^<2>, mu или lambda."
+            "the first-kind Volterra solver does not support the family '${funcs.name}': " +
+                "after the I->II kind reduction the second derivative of the kernel is analytically unavailable. " +
+                "Use theta, xi^<1>, xi^<2>, mu or lambda."
         }
     }
 
     /**
-     * Точки, в которых редукция гарантированно делит на `K(t,t)` при любом сценарии.
+     * Points at which the reduction is guaranteed to divide by `K(t,t)` in any scenario.
      *
-     * Собираются три группы:
+     * Three groups are collected:
      *
-     *  1. узлы сетки и середины интервалов — опорные точки функционалов `theta`;
-     *  2. гауссовы узлы составной квадратуры редуцированного оператора по полным ячейкам
-     *     сетки — именно здесь `gEff` и редуцированное ядро вычисляются чаще всего;
-     *  3. весь шаблон конечной разности `t ± k*h`, `k = 1..4`, вокруг каждой точки
-     *     групп 1 и 2 — эти точки не совпадают ни с узлами, ни с серединами.
+     *  1. the grid breakpoints and the interval midpoints — the support points of the `theta` functionals;
+     *  2. the Gauss nodes of the composite quadrature of the reduced operator over the full grid
+     *     cells — this is where `gEff` and the reduced kernel are evaluated most often;
+     *  3. the whole finite-difference stencil `t ± k*h`, `k = 1..4`, around every point
+     *     of groups 1 and 2 — these points coincide neither with breakpoints nor with midpoints.
      *
-     * Набор НЕ исчерпывающий и таким быть не может: оператор Вольтерры интегрирует по
-     * `[a,t]` с усечённой последней ячейкой, поэтому его гауссовы узлы зависят от `t`.
-     * Окончательную гарантию даёт [safeDiagonal], а этот список обеспечивает раннюю
-     * диагностику ещё до начала счёта.
+     * The set is NOT exhaustive and cannot be: the Volterra operator integrates over
+     * `[a,t]` with a truncated last cell, so its Gauss nodes depend on `t`.
+     * The ultimate guarantee is given by [safeDiagonal], while this list provides early
+     * diagnostics before the computation even starts.
      */
     private fun diagonalCheckPoints(): DoubleArray {
         val breakpoints = grid.breakpoints
@@ -220,14 +220,14 @@ public class VolterraFirstKindSolver(
                 val lo = breakpoints[i]
                 val hi = breakpoints[i + 1]
                 base.add(0.5 * (lo + hi))
-                // Гауссовы узлы ячейки [x_i, x_{i+1}] составной квадратуры.
+                // Gauss nodes of the cell [x_i, x_{i+1}] of the composite quadrature.
                 val half = 0.5 * (hi - lo)
                 val mid = 0.5 * (hi + lo)
                 for (node in referenceNodes) base.add(mid + half * node)
             }
         }
-        // Шаблон конечной разности вокруг каждой базовой точки; точки вне [a,b]
-        // отбрасываются — там срабатывает односторонняя ветвь deriv4.
+        // The finite-difference stencil around each base point; points outside [a,b]
+        // are discarded — there the one-sided branch of deriv4 takes over.
         val all = ArrayList<Double>(base)
         for (t in base) {
             for (k in 1..4) {
@@ -241,13 +241,13 @@ public class VolterraFirstKindSolver(
     }
 
     /**
-     * Первая производная по формуле четвёртого порядка.
+     * First derivative by a fourth-order formula.
      *
-     * Внутри отрезка применяется пятиточечная центральная разность
-     * `(-f(t+2h) + 8f(t+h) - 8f(t-h) + f(t-2h)) / (12h)`. Вблизи концов её шаблон вышел бы
-     * за пределы `[a,b]`, где ядро и оператор доопределены нулём, что исказило бы
-     * результат; поэтому там используются односторонние пятиточечные формулы того же
-     * четвёртого порядка — «вперёд» у левого конца и «назад» у правого.
+     * Inside the interval the five-point central difference
+     * `(-f(t+2h) + 8f(t+h) - 8f(t-h) + f(t-2h)) / (12h)` is used. Near the ends its stencil would leave
+     * `[a,b]`, where the kernel and the operator are extended by zero, which would distort the
+     * result; one-sided five-point formulas of the same fourth order are therefore used there —
+     * "forward" at the left end and "backward" at the right one.
      */
     private fun deriv4(t: Double, f: (Double) -> Double): Double {
         val leftEnd = grid.a
@@ -255,23 +255,23 @@ public class VolterraFirstKindSolver(
         val step = FINITE_DIFFERENCE_STEP
         val boundaryTolerance = BOUNDARY_RELATIVE_TOLERANCE * (rightEnd - leftEnd)
         return when {
-            // Левый конец: центральный шаблон (t - 2h) вышел бы за a.
+            // Left end: the central stencil (t - 2h) would leave a.
             t - 2 * step < leftEnd - boundaryTolerance ->
                 (-25 * f(t) + 48 * f(t + step) - 36 * f(t + 2 * step) +
                     16 * f(t + 3 * step) - 3 * f(t + 4 * step)) / (12 * step)
-            // Правый конец: центральный шаблон (t + 2h) вышел бы за b.
+            // Right end: the central stencil (t + 2h) would leave b.
             t + 2 * step > rightEnd + boundaryTolerance ->
                 (25 * f(t) - 48 * f(t - step) + 36 * f(t - 2 * step) -
                     16 * f(t - 3 * step) + 3 * f(t - 4 * step)) / (12 * step)
-            // Внутренняя область: центральная пятиточечная разность.
+            // Interior region: the central five-point difference.
             else ->
                 (-f(t + 2 * step) + 8 * f(t + step) - 8 * f(t - step) + f(t - 2 * step)) / (12 * step)
         }
     }
 
     /**
-     * Редуцированное ядро `K_W(t,s) = -K_t(t,s)/K(t,t)`.
-     * Его производная по `t` аналитически недоступна и вычисляется конечной разностью.
+     * Reduced kernel `K_W(t,s) = -K_t(t,s)/K(t,t)`.
+     * Its derivative with respect to `t` is analytically unavailable and is computed by a finite difference.
      */
     private val reducedKernel = KernelV(
         k = { t, s -> -kernel.kT(t, s) / kernelDiagonal(t) },
@@ -280,42 +280,42 @@ public class VolterraFirstKindSolver(
 
     private val reducedOperator = VolterraOperator(reducedKernel, grid, quad)
 
-    /** Правая часть редуцированного уравнения: `g(t) = f'(t)/K(t,t)`. */
+    /** Right-hand side of the reduced equation: `g(t) = f'(t)/K(t,t)`. */
     private val gEff = { t: Double -> rhsDeriv(t) / kernelDiagonal(t) }
 
     /**
-     * Производная правой части `g'(t)`, нужная семействам функционалов с производной.
+     * Derivative of the right-hand side `g'(t)`, needed by the functional families that use a derivative.
      *
-     * Прямое численное дифференцирование всей `g` означало бы ВТОРОЕ дифференцирование
-     * поверх `f'(t)`, которая сама получена аналитически по Лейбницу и содержит квадратуру:
-     * шум квадратуры и ошибка округления при этом резко усиливаются.
+     * Differentiating the whole `g` numerically would mean a SECOND differentiation
+     * on top of `f'(t)`, which is itself obtained analytically by Leibniz and contains a quadrature:
+     * the quadrature noise and the round-off error would then be amplified sharply.
      *
-     * Поэтому используется разложение `g(t) = s(t) + r(t)`, где `s` — известная гладкая
-     * часть решения, а `r = g - s` — малый остаток, несущий вклад квадратуры. Тогда
-     * `g'(t) = s'(t) + r'(t)`: гладкая часть дифференцируется АНАЛИТИЧЕСКИ, а конечная
-     * разность применяется только к остатку. Так из-под вычитания убран крупный гладкий
-     * член, и катастрофическая потеря точности затрагивает лишь малую величину `|r|`.
+     * The decomposition `g(t) = s(t) + r(t)` is used instead, where `s` is the known smooth
+     * part of the solution and `r = g - s` is a small remainder carrying the quadrature contribution. Then
+     * `g'(t) = s'(t) + r'(t)`: the smooth part is differentiated ANALYTICALLY, and the finite
+     * difference is applied only to the remainder. This removes the large smooth term from under the
+     * subtraction, and the catastrophic loss of accuracy affects only the small quantity `|r|`.
      */
     private val gEffResidual = { t: Double -> gEff(t) - smoothPart(t) }
     private val gEffDeriv = { t: Double -> smoothPartDeriv(t) + deriv4(t, gEffResidual) }
 
     private val inner = VolterraSecondKindSolver(
         basis, funcs, reducedOperator, cL = 1.0,
-        // Вторая производная не задаётся: сохранён прежний дефолт `{ 0.0 }`.
+        // The second derivative is not supplied: the previous default `{ 0.0 }` is kept.
         rhs = RhsWithDerivatives(value = gEff, deriv = gEffDeriv),
         throwOnDivergence = throwOnDivergence,
         ctx = ctx,
     )
 
-    /** Базовая коллокационная схема для редуцированного уравнения. */
+    /** Base collocation scheme for the reduced equation. */
     public fun base(): SolutionFunc = inner.base()
 
-    /** Итерация Слоана, применённая к редуцированному уравнению. */
+    /** Sloan iteration applied to the reduced equation. */
     public fun sloan(): SolutionFunc = inner.sloan()
 
-    /** Схема Кулкарни для редуцированного уравнения. */
+    /** Kulkarni scheme for the reduced equation. */
     public fun kulkarni(): SolutionFunc = inner.kulkarni()
 
-    /** Итерированная схема Кулкарни для редуцированного уравнения. */
+    /** Iterated Kulkarni scheme for the reduced equation. */
     public fun iteratedKulkarni(): SolutionFunc = inner.iteratedKulkarni()
 }

@@ -13,57 +13,57 @@ import solvers.fredholm.FredholmSecondKindSolver
 import java.io.File
 
 /**
- * ВЫГРУЗКА ВНУТРЕННИХ АРТЕФАКТОВ ВЫЧИСЛЕНИЙ для внешней сверки со SciPy/NumPy.
+ * THE DUMP OF THE INTERNAL COMPUTATION ARTIFACTS for the external cross-check against SciPy/NumPy.
  *
- * Почему выгружаются именно внутренние артефакты, а не только итоговые `E_h`:
- * сверка «числа с числами» на выходе проверяла бы совпадение двух реализаций
- * целиком, и при расхождении было бы неясно, какой слой виноват. Выгрузка узлов
- * квадратуры, значений базиса, собранных матриц и образов операторов позволяет
- * проверить каждый слой ОТДЕЛЬНО и указать место расхождения.
+ * Why exactly the internal artifacts are dumped and not only the resulting `E_h`:
+ * a cross-check of "numbers against numbers" at the output would check the coincidence of two implementations
+ * as a whole, and on a discrepancy it would be unclear which layer is to blame. Dumping the quadrature
+ * nodes, the basis values, the assembled matrices and the operator images makes it possible
+ * to check every layer SEPARATELY and to point at the place of the discrepancy.
  *
- * Вынесено в отдельный объект (а не оставлено внутри тестового класса), поскольку
- * используется двумя потребителями:
- *  - [ScipyCrossVerificationTest] — смоук-тест, готовит данные сам, чтобы не
- *    зависеть от того, запускалась ли перед ним отдельная задача Gradle;
- *  - [VerificationArtifactDumpTool] — задача `dumpVerificationArtifacts` для
- *    ручной выгрузки и разбора расхождений вне тестового прогона.
+ * Extracted into a separate object (rather than left inside a test class), since it is
+ * used by two consumers:
+ *  - [ScipyCrossVerificationTest] — a smoke test, it prepares the data itself so as not to
+ *    depend on whether a separate Gradle task was run before it;
+ *  - [VerificationArtifactDumpTool] — the task `dumpVerificationArtifacts` for
+ *    a manual dump and analysis of discrepancies outside a test run.
  */
 object VerificationArtifacts {
 
-    /** Каталог выгрузки по умолчанию; лежит в build/, поэтому в репозиторий не попадает. */
+    /** The default dump directory; it lies in build/, so it does not get into the repository. */
     val DEFAULT_DIR: File = File("build/verification")
 
-    /** Сетка, на которой выгружаются базис и матрицы: достаточно мелкая и быстрая. */
+    /** The grid on which the basis and the matrices are dumped: fine enough and fast. */
     private const val DUMP_GRID_SIZE = 8
 
     /**
-     * Границы отрезка выгрузки.
+     * The bounds of the dump interval.
      *
-     * Задаются ЯВНО и передаются в фабрики [Grid], а не оставляются на значения
-     * по умолчанию, потому что теперь выгружаются в `dump-meta.tsv` и задают
-     * пределы интегрирования во внешнем скрипте сверки. Раньше скрипт считал
-     * интегралы по зашитому [0,1], и согласие с дампером было СЛУЧАЙНЫМ совпадением
-     * со значениями по умолчанию.
+     * They are set EXPLICITLY and passed into the [Grid] factories rather than left at the default
+     * values, because they are now dumped into `dump-meta.tsv` and set
+     * the integration limits in the external cross-check script. Previously the script computed
+     * the integrals over a hard-wired [0,1], and the agreement with the dumper was an ACCIDENTAL coincidence
+     * with the default values.
      */
     private const val DUMP_A = 0.0
     private const val DUMP_B = 1.0
 
-    /** Число узлов квадратуры Гаусса–Лежандра в интегральных операторах выгрузки. */
+    /** The number of Gauss-Legendre quadrature nodes in the integral operators of the dump. */
     private const val DUMP_QUADRATURE_NODES = 8
 
-    /** Число точек выборки базиса; взаимно просто с числом узлов сетки. */
+    /** The number of basis sample points; coprime with the number of grid nodes. */
     private const val DUMP_SPLINE_SAMPLES = 97
 
-    /** Число интервалов выборки для образов операторов (точек — на одну больше). */
+    /** The number of sample intervals for the operator images (one more point than that). */
     private const val DUMP_OPERATOR_SAMPLES = 20
 
-    /** Максимальное m выгружаемой квадратуры Гаусса–Лежандра. */
+    /** The maximal m of the dumped Gauss-Legendre quadrature. */
     private const val DUMP_GAUSS_MAX_M = 16
 
-    /** Печать числа с полной точностью: сверка идёт на уровне 1e-15, округлять нельзя. */
+    /** Printing a number at full precision: the cross-check goes at the level of 1e-15, rounding is not allowed. */
     private fun Double.full(): String = "%.17g".format(this)
 
-    /** Выгружает все артефакты в каталог [dir]. */
+    /** Dumps all the artifacts into the directory [dir]. */
     fun dumpAll(dir: File = DEFAULT_DIR): List<File> {
         dir.mkdirs()
         return listOf(
@@ -78,15 +78,15 @@ object VerificationArtifacts {
     }
 
     /**
-     * Метаданные выгрузки: всё, без чего внешний скрипт не знает, ЧТО ему сверять.
+     * The metadata of the dump: everything without which the external script does not know WHAT to cross-check.
      *
-     * Зачем нужны. Скрипт сверки считает интегралы `scipy.integrate.quad` по ОТРЕЗКУ,
-     * а границы отрезка задаёт именно дампер. Пока границы были зашиты в скрипте
-     * литералами `0.0, 1.0`, согласие держалось на том, что дампер не передаёт `a`/`b`
-     * и пользуется значениями по умолчанию. Смена отрезка здесь привела бы к МОЛЧАЛИВОЙ
-     * сверке с другими интегралами — то есть сверка перестала бы быть сверкой, оставаясь
-     * зелёной или краснея без обьяснения. Формат `ключ<TAB>значение` выбран расширяемым:
-     * добавление ключа не ломает разбор.
+     * Why they are needed. The cross-check script computes the integrals `scipy.integrate.quad` over an INTERVAL,
+     * and the bounds of the interval are set by the dumper. While the bounds were hard-wired in the script
+     * as the literals `0.0, 1.0`, the agreement rested on the dumper not passing `a`/`b`
+     * and using the default values. A change of the interval here would lead to a SILENT
+     * cross-check against different integrals — that is, the cross-check would stop being a cross-check, staying
+     * green or turning red without an explanation. The format `key<TAB>value` is chosen to be extensible:
+     * adding a key does not break the parsing.
      */
     fun dumpMeta(dir: File): File {
         val file = File(dir, "dump-meta.tsv")
@@ -104,10 +104,10 @@ object VerificationArtifacts {
     }
 
     /**
-     * L1. Узлы и веса квадратуры Гаусса–Лежандра на `[-1,1]` для m = 1..16.
+     * L1. The nodes and weights of the Gauss-Legendre quadrature on `[-1,1]` for m = 1..16.
      *
-     * Эталон в SciPy — `numpy.polynomial.legendre.leggauss`: принципиально другой
-     * алгоритм (проект использует метод Ньютона по нулям многочлена Лежандра).
+     * The baseline in SciPy is `numpy.polynomial.legendre.leggauss`: a fundamentally different
+     * algorithm (the project uses Newton's method on the zeros of the Legendre polynomial).
      */
     fun dumpGaussLegendreNodes(dir: File): File {
         val file = File(dir, "gauss-legendre.tsv")
@@ -123,7 +123,7 @@ object VerificationArtifacts {
         return file
     }
 
-    /** Сетки, на которых сверяется базис: равномерная и три существенно неравномерные. */
+    /** The grids on which the basis is cross-checked: a uniform one and three substantially non-uniform ones. */
     private fun dumpGrids(): Map<String, Grid> = linkedMapOf(
         "uniform" to Grid.uniform(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B),
         "quasiUniform" to Grid.quasiUniform(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B),
@@ -132,11 +132,11 @@ object VerificationArtifacts {
     )
 
     /**
-     * Полный вектор узлов `x_{-2..n+2}`.
+     * The full knot vector `x_{-2..n+2}`.
      *
-     * Узлы кратности 3 на концах в точности задают клампованный вектор узлов
-     * степени 2, поэтому `scipy.interpolate.BSpline` строит на них то же
-     * пространство: число базисных функций совпадает, `(n+5) - 2 - 1 = n + 2`.
+     * Knots of multiplicity 3 at the ends define exactly a clamped knot vector
+     * of degree 2, so `scipy.interpolate.BSpline` builds the same space
+     * on them: the number of basis functions coincides, `(n+5) - 2 - 1 = n + 2`.
      */
     fun dumpSplineKnots(dir: File): File {
         val file = File(dir, "spline-knots.tsv")
@@ -150,15 +150,15 @@ object VerificationArtifacts {
     }
 
     /**
-     * L3. Значения базиса минимальных сплайнов и двух его производных для
-     * полиномиальной системы `B`.
+     * L3. The values of the minimal spline basis and of its two derivatives for
+     * the polynomial system `B`.
      *
-     * Сверка возможна именно для `B`: для систем `H` и `T` аналога в SciPy нет
-     * (см. docs/REFERENCES.md, раздел 6).
+     * The cross-check is possible exactly for `B`: for the systems `H` and `T` there is no analogue in SciPy
+     * (see docs/REFERENCES.md, section 6).
      */
     fun dumpSplineValues(dir: File): File {
         val file = File(dir, "spline-values.tsv")
-        // Число точек взаимно просто с числом узлов: выборка не попадает на стыки.
+        // The number of points is coprime with the number of knots: the sample does not fall on the joints.
         val sampleCount = DUMP_SPLINE_SAMPLES
         file.printWriter().use { out ->
             out.println("# grid\tj\tt\tomega\tomegaDeriv\tomegaDeriv2")
@@ -179,11 +179,11 @@ object VerificationArtifacts {
     }
 
     /**
-     * L2. Собранные матрицы `M`, `M2`, векторы `g`, `d` и коэффициенты базовой схемы.
+     * L2. The assembled matrices `M`, `M2`, the vectors `g`, `d` and the coefficients of the base scheme.
      *
-     * Эталон в SciPy — `scipy.linalg.solve` на той же системе `(I - M) c = g`;
-     * дополнительно сообщается обусловленность (`numpy.linalg.cond`), которая
-     * объясняет достижимую точность.
+     * The baseline in SciPy is `scipy.linalg.solve` on the same system `(I - M) c = g`;
+     * additionally the conditioning (`numpy.linalg.cond`) is reported, which
+     * explains the attainable accuracy.
      */
     fun dumpAssembledSystem(dir: File): File {
         val problem = FredholmProblem.F2
@@ -218,18 +218,18 @@ object VerificationArtifacts {
     }
 
     /**
-     * L4/L5. Образы интегральных операторов и правые части модельных задач.
+     * L4/L5. The images of the integral operators and the right-hand sides of the model problems.
      *
-     * Эталон в SciPy — `scipy.integrate.quad` (адаптивный QUADPACK), независимый от
-     * составной квадратуры проекта.
+     * The baseline in SciPy is `scipy.integrate.quad` (the adaptive QUADPACK), independent of
+     * the composite quadrature of the project.
      *
-     * Выгружаются четыре величины на задачу: образ (`Ku`/`Vu`), правая часть `rhs`
-     * и её две производные `rhsDeriv`, `rhsDeriv2` — и все четыре сверяются. Именно
-     * проверки `V/<задача>/rhsDeriv` и `V/<задача>/rhsDeriv2` составляют единственную
-     * численную проверку формул Лейбница для `(Vu)'` и `(Vu)''`, у которых отдельной
-     * публикации нет: эталон собран из независимо выведенных `K_t`, `K_tt` и ПОЛНОЙ
-     * производной диагонали (см. `volterra_image_deriv` в `tools/verify_with_scipy.py`).
-     * Без них выгружаемые здесь производные не сверялись бы ни с чем.
+     * Four quantities per problem are dumped: the image (`Ku`/`Vu`), the right-hand side `rhs`
+     * and its two derivatives `rhsDeriv`, `rhsDeriv2` — and all four are cross-checked. It is exactly
+     * the checks `V/<problem>/rhsDeriv` and `V/<problem>/rhsDeriv2` that constitute the only
+     * numerical check of the Leibniz formulas for `(Vu)'` and `(Vu)''`, for which there is no separate
+     * publication: the baseline is assembled from independently derived `K_t`, `K_tt` and the FULL
+     * derivative of the diagonal (see `volterra_image_deriv` in `tools/verify_with_scipy.py`).
+     * Without them the derivatives dumped here would be cross-checked against nothing.
      */
     fun dumpOperatorImages(dir: File): File {
         val grid = Grid.uniform(DUMP_GRID_SIZE, a = DUMP_A, b = DUMP_B)
@@ -269,8 +269,8 @@ object VerificationArtifacts {
     }
 
     /**
-     * L6. Итоговые погрешности `E_h` базовой схемы и итерации Слоана — для сверки
-     * с решением, построенным независимым методом Nyström средствами NumPy.
+     * L6. The resulting errors `E_h` of the base scheme and of the Sloan iteration — for a cross-check
+     * against a solution built by an independent Nyström method with NumPy.
      */
     fun dumpSolutionErrors(dir: File): File {
         val file = File(dir, "solution-errors.tsv")

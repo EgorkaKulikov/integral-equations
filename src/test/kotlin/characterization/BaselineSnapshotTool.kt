@@ -20,40 +20,40 @@ import java.util.Locale
 import kotlin.test.Test
 
 /**
- * Служебный инструмент: печатает ЭТАЛОННЫЙ СНИМОК величин E_h по всем сочетаниям
- * «задача x порождающая система x семейство функционалов x схема» для линейных
- * решателей (Фредгольм, Вольтерра) и нелинейного (Урысон).
+ * A utility tool: prints the BASELINE SNAPSHOT of the E_h quantities over all the combinations
+ * "problem x generating system x functional family x scheme" for the linear
+ * solvers (Fredholm, Volterra) and the nonlinear one (Uryson).
  *
- * Это НЕ проверочный тест: он ничего не утверждает и всегда завершается успешно.
- * Его единственное назначение — получить машинно-читаемый список значений, которые
- * затем дословно переносятся в характеризационные тесты (`CharacterizationTest`)
- * как сеть безопасности перед рефакторингом.
+ * This is NOT a checking test: it asserts nothing and always finishes successfully.
+ * Its only purpose is to obtain a machine-readable list of values that are
+ * then transferred verbatim into the characterization tests (`CharacterizationTest`)
+ * as a safety net before a refactoring.
  *
- * Запуск: `./gradlew captureBaseline` (вывод смотреть в отчёте либо с флагом `-i`).
- * Через `test --tests ...` запустить НЕЛЬЗЯ: этот класс намеренно исключён из
- * всех проверочных задач фильтром, и Gradle ответит `No tests found for given includes`.
+ * Run: `./gradlew captureBaseline` (see the output in the report or with the `-i` flag).
+ * It CANNOT be run through `test --tests ...`: this class is deliberately excluded from
+ * all the checking tasks by a filter, and Gradle will answer `No tests found for given includes`.
  *
- * Результат — файл `build/baseline/baseline-eh.tsv`, который после осмотра копируется
- * в `src/test/resources/characterization/baseline-eh.tsv`. Имя ДЕТЕРМИНИРОВАНО, файл
- * ПЕРЕЗАПИСЫВАЕТСЯ одной операцией, строки ОТСОРТИРОВАНЫ по ключу — то же устройство,
- * что и у [ExtraBaselineSnapshotTool], и по тем же причинам:
- *  - прежнее имя `snapshot-<имя потока>.tsv` зависело от планировщика JUnit, из-за чего
- *    снимки приходилось собирать шаблоном `snapshot-*.tsv`;
- *  - прежняя запись шла режимом `appendText`, поэтому повторный запуск без ручного
- *    `rm -rf build/baseline` удваивал содержимое файла;
- *  - прежний порядок строк был порядком вычисления, поэтому дифф двух снимков показывал
- *    перестановку строк вперемешку с изменением чисел.
+ * The result is the file `build/baseline/baseline-eh.tsv`, which after inspection is copied
+ * into `src/test/resources/characterization/baseline-eh.tsv`. The name is DETERMINISTIC, the file
+ * is OVERWRITTEN in one operation, the rows are SORTED by key — the same design
+ * as in [ExtraBaselineSnapshotTool], and for the same reasons:
+ *  - the former name `snapshot-<thread name>.tsv` depended on the JUnit scheduler, because of which
+ *    the snapshots had to be collected by the pattern `snapshot-*.tsv`;
+ *  - the former writing went in `appendText` mode, so a repeated run without a manual
+ *    `rm -rf build/baseline` doubled the contents of the file;
+ *  - the former row order was the computation order, so a diff of two snapshots showed
+ *    a permutation of rows mixed with a change of the numbers.
  *
- * Формат строки: `ключ<TAB>значение`, где значение печатается с 17 значащими цифрами.
- * 17 — минимальная точность, при которой десятичная запись `double` восстанавливается
- * ПОБИТОВО. Прежние 12 цифр round-trip НЕ дают: `"%.12g".format(0.1 + 0.2)` = `0.300000000000`,
- * что не равно `0.1 + 0.2`. То есть сам эталон вносил относительную погрешность хранения
- * ~1e-12 — грубее, чем реальное расхождение бэкендов (максимум 1.0e-14 на не-F1 ключах),
- * и грубее допуска гейта 1e-9 на ключах с сокращением. Хранить ровно то, что вычислено, —
- * единственный способ разделить «изменилась арифметика» и «изменилась запись числа».
+ * The row format: `key<TAB>value`, where the value is printed with 17 significant digits.
+ * 17 is the minimal precision at which the decimal record of a `double` is restored
+ * BITWISE. The former 12 digits do NOT give a round-trip: `"%.12g".format(0.1 + 0.2)` = `0.300000000000`,
+ * which is not equal to `0.1 + 0.2`. That is, the baseline itself introduced a relative storage error
+ * of ~1e-12 — coarser than the real discrepancy of the backends (at most 1.0e-14 on the non-F1 keys),
+ * and coarser than the gate tolerance 1e-9 on the keys with cancellation. Storing exactly what was computed is
+ * the only way to separate "the arithmetic changed" from "the record of the number changed".
  *
- * Локаль [Locale.ROOT] задана явно: `"%.17g".format(x)` берёт локаль по умолчанию и на
- * машине с русской локалью пишет запятую вместо точки, после чего снимок не читается.
+ * The locale [Locale.ROOT] is set explicitly: `"%.17g".format(x)` takes the default locale and on
+ * a machine with a Russian locale writes a comma instead of a dot, after which the snapshot is unreadable.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BaselineSnapshotTool {
@@ -61,25 +61,25 @@ class BaselineSnapshotTool {
     private fun family(name: String, basis: MinimalSplineBasis): FunctionalFamily = familyFor(name, basis)
 
     /**
-     * Буфер снимка: снятые пары «ключ - значение» всех тест-методов класса.
+     * The snapshot buffer: the shot "key - value" pairs of all the test methods of the class.
      *
-     * Накопление в памяти, а не дозапись в файл, — ровно то, что делает файл
-     * перезаписываемым и отсортированным. Жизненный цикл [TestInstance.Lifecycle.PER_CLASS]
-     * обязателен: при стандартном `PER_METHOD` JUnit создаёт по экземпляру на тест-метод,
-     * и буфер каждого из пяти методов терялся бы до записи.
+     * Accumulating in memory rather than appending to the file is exactly what makes the file
+     * overwritable and sorted. The lifecycle [TestInstance.Lifecycle.PER_CLASS]
+     * is mandatory: with the standard `PER_METHOD` JUnit creates one instance per test method,
+     * and the buffer of each of the five methods would be lost before writing.
      */
     private val rows = mutableListOf<Pair<String, String>>()
 
     /**
-     * Кладёт пару «ключ-значение» в буфер [rows].
+     * Puts a "key-value" pair into the buffer [rows].
      *
-     * Вывод идёт ТОЛЬКО в файл (в [writeSnapshot]), а не в stdout: печать более тысячи
-     * строк ломает формирование XML-отчёта Gradle. Каталог `build/` не попадает в систему
-     * контроля версий, что для временного артефакта и требуется.
+     * The output goes ONLY into the file (in [writeSnapshot]) and not to stdout: printing more than a thousand
+     * lines breaks the formation of the Gradle XML report. The `build/` directory is not under version
+     * control, which is what is needed for a temporary artifact.
      *
-     * `synchronized` — страховка на случай включения параллельного выполнения тестов
-     * JUnit: сегодня методы класса идут последовательно, но цена страховки нулевая,
-     * а её отсутствие проявилось бы как молча потерянные строки снимка.
+     * The `synchronized` is an insurance in case parallel test execution is enabled in
+     * JUnit: today the methods of the class go sequentially, but the price of the insurance is zero,
+     * while its absence would show up as silently lost rows of the snapshot.
      */
     private fun emit(key: String, value: Double) {
         val formatted = String.format(Locale.ROOT, "%.17g", value)
@@ -87,24 +87,24 @@ class BaselineSnapshotTool {
     }
 
     /**
-     * Пишет весь снимок ОДНОЙ операцией после последнего тест-метода.
+     * Writes the whole snapshot in ONE operation after the last test method.
      *
-     * Одна запись вместо тысячи дозаписей: и быстрее, и исключает частично записанный
-     * файл при падении посреди снятия. Сортировка по ключу делает дифф двух снимков
-     * содержательным.
+     * One write instead of a thousand appends: it is both faster and excludes a partially written
+     * file on a failure in the middle of the shooting. Sorting by key makes a diff of two snapshots
+     * meaningful.
      */
     @AfterAll
     fun writeSnapshot() {
-        // Каталог вывода задаётся свойством: задача `classifyBaseline` снимает матрицу
-        // ДВАЖДЫ (backend=java и backend=native) и обязана положить снимки в РАЗНЫЕ каталоги.
+        // The output directory is set by a property: the task `classifyBaseline` shoots the matrix
+        // TWICE (backend=java and backend=native) and must put the snapshots into DIFFERENT directories.
         val dir = File(System.getProperty("baseline.output.dir")?.takeIf { it.isNotBlank() } ?: "build/baseline").apply { mkdirs() }
         val target = File(dir, "baseline-eh.tsv")
         val sorted = rows.sortedBy { it.first }
         target.writeText(sorted.joinToString(separator = "") { (key, value) -> "$key\t$value\n" })
-        println("Снимок матрицы E_h: ${sorted.size} строк -> ${target.absolutePath}")
+        println("Snapshot of the E_h matrix: ${sorted.size} rows -> ${target.absolutePath}")
     }
 
-    /** Снимок линейного решателя Фредгольма. */
+    /** A snapshot of the linear Fredholm solver. */
     @Test
     fun snapshotFredholm() {
         val problems = listOf(
@@ -146,7 +146,7 @@ class BaselineSnapshotTool {
         }
     }
 
-    /** Снимок линейного решателя Вольтерры. */
+    /** A snapshot of the linear Volterra solver. */
     @Test
     fun snapshotVolterra() {
         val problems = listOf(
@@ -189,7 +189,7 @@ class BaselineSnapshotTool {
         }
     }
 
-    /** Снимок нелинейного решателя Урысона (II род). */
+    /** A snapshot of the nonlinear Uryson solver (second kind). */
     @Test
     fun snapshotUryson() {
         val urysonProblems = listOf(
@@ -217,7 +217,7 @@ class BaselineSnapshotTool {
         }
     }
 
-    /** Снимок решателей уравнений I рода (Фредгольм — Wazwaz, Вольтерра — дифференцирование). */
+    /** A snapshot of the first-kind solvers (Fredholm — Wazwaz, Volterra — differentiation). */
     @Test
     fun snapshotFirstKind() {
         for (n in listOf(8, 16)) {
@@ -240,10 +240,10 @@ class BaselineSnapshotTool {
     }
 
     /**
-     * РАСШИРЕННОЕ покрытие F1 (этап 8.6) — тот же набор сочетаний, что и
-     * в [F1_COVERAGE], см. KDoc там же. Отдельный тест-метод, а не дописка в
-     * [snapshotFirstKind]: тот содержит СУЩЕСТВУЮЩИЕ ключи эталона, и любая правка
-     * в нём рискует сдвинуть их; здесь же производятся ТОЛЬКО новые ключи.
+     * The EXTENDED F1 coverage (stage 8.6) — the same set of combinations as
+     * in [F1_COVERAGE], see the KDoc there. A separate test method rather than an addition to
+     * [snapshotFirstKind]: that one contains the EXISTING keys of the baseline, and any edit
+     * in it risks shifting them; here only NEW keys are produced.
      */
     @Test
     fun snapshotFirstKindExtendedFredholm() {
@@ -262,7 +262,7 @@ class BaselineSnapshotTool {
     }
 
     companion object {
-        /** Семейство функционалов по имени ключа эталона; общее с [F1ConditioningTest]. */
+        /** The functional family by the name in the baseline key; shared with [F1ConditioningTest]. */
         internal fun familyFor(name: String, basis: MinimalSplineBasis): FunctionalFamily = when (name) {
             "theta" -> splines.functionals.ProjFunctionals(basis)
             "xi0" -> DeBoorFixFunctionals(basis, 0)
@@ -275,38 +275,38 @@ class BaselineSnapshotTool {
         }
 
         /**
-         * РАСШИРЕННОЕ ПОКРЫТИЕ F1 в характеризационном эталоне (этап 8.6).
+         * THE EXTENDED F1 COVERAGE in the characterization baseline (stage 8.6).
          *
-         * Состав: тройки (порождающая система, семейство, сетка) — все три системы
-         * B/H/T × семейства theta/xi1/xi2 × сетки 8/16/32, каждая тройка даёт два
-         * ключа (`base` и `sloan`) — 54 ключа.
+         * The composition: triples (generating system, family, grid) — all three systems
+         * B/H/T × the families theta/xi1/xi2 × the grids 8/16/32, each triple giving two
+         * keys (`base` and `sloan`) — 54 keys.
          *
-         * Почему ИМЕННО такой набор. Он НАДМНОЖЕСТВО 42 ключей F1, покрытых
-         * сверкой с публикацией (`verification/published-values.tsv`: 7 сочетаний
-         * B.xi1, B.xi2, H.theta, H.xi1, H.xi2, T.xi1, T.xi2 × 3 сетки × 2 схемы). То есть
-         * каждая величина, которая сверяется с публикацией с допуском 2 % или 12 %,
-         * ЗДЕСЬ же защищена допуском 1e-9. Именно это делает широкий допуск
-         * сверки безопасным: арифметическую невоспроизводимость между путями LU
-         * он прощает, а изменение самого вычисления ловит эта сеть.
+         * Why EXACTLY this set. It is a SUPERSET of the 42 F1 keys covered
+         * by the cross-check with the publication (`verification/published-values.tsv`: 7 combinations
+         * B.xi1, B.xi2, H.theta, H.xi1, H.xi2, T.xi1, T.xi2 × 3 grids × 2 schemes). That is,
+         * every quantity that is cross-checked with the publication at a tolerance of 2 % or 12 %
+         * is HERE protected by the tolerance 1e-9. It is exactly this that makes the wide tolerance
+         * of the cross-check safe: it forgives the arithmetic irreproducibility between the LU paths,
+         * while a change of the computation itself is caught by this net.
          *
-         * Семейство `xi0` в набор НЕ входит: в таблицах статьи для F1 его нет,
-         * а его функционалы читают `f''`, то есть требуют `K_tt`-квадратур и стоят
-         * заметно дороже при нулевом приросте сопоставимости с публикацией.
+         * The family `xi0` is NOT in the set: the tables of the article do not have it for F1,
+         * while its functionals read `f''`, that is, they require `K_tt` quadratures and cost
+         * noticeably more at zero gain in comparability with the publication.
          *
-         * НАЛОЖЕНИЕ С СТАРЫМИ КЛЮЧАМИ. Сочетания `B.theta` при n = 8 и 16
-         * уже снимаются [snapshotFirstKind] и потому ИСКЛЮЧЕНЫ из этого набора:
-         * иначе один и тот же ключ писался бы в снимок дважды и в эталоне появилась
-         * бы дублирующая строка. `B.theta.n32` — НОВЫЙ ключ и в набор входит.
+         * THE OVERLAP WITH THE OLD KEYS. The combinations `B.theta` at n = 8 and 16
+         * are already shot by [snapshotFirstKind] and are therefore EXCLUDED from this set:
+         * otherwise one and the same key would be written into the snapshot twice and a duplicate
+         * row would appear in the baseline. `B.theta.n32` is a NEW key and is in the set.
          *
-         * Список общий для инструмента снятия и для
-         * `EhCharacterizationTest.firstKindExtendedFredholmMatchesBaseline`: рассинхронизация
-         * состава между ними невозможна по построению.
+         * The list is shared by the snapshot tool and by
+         * `EhCharacterizationTest.firstKindExtendedFredholmMatchesBaseline`: a desynchronization
+         * of the composition between them is impossible by construction.
          */
         val F1_COVERAGE: List<Triple<GeneratingSystem, String, Int>> = buildList {
             for (system in listOf(GeneratingSystem.B, GeneratingSystem.H, GeneratingSystem.T)) {
                 for (familyName in listOf("theta", "xi1", "xi2")) {
                     for (n in listOf(8, 16, 32)) {
-                        // Исключаем то, что уже есть в эталоне под теми же ключами.
+                        // We exclude what is already in the baseline under the same keys.
                         if (system == GeneratingSystem.B && familyName == "theta" && n != 32) continue
                         add(Triple(system, familyName, n))
                     }

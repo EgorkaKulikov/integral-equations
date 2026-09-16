@@ -14,9 +14,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * Golden/regression-тест сплайн-метода Nyström (базовый + итерированный) для V2.
- * Числа зафиксированы из реального прогона main() (таблица T3[V2], базис B, theta).
- * Проверяется также, что xi (де Бура--Фикса) кидает понятное исключение.
+ * A golden/regression test of the spline Nyström method (base + iterated) for V2.
+ * The numbers are recorded from a real run of main() (the table T3[V2], basis B, theta).
+ * It is also checked that xi (de Boor--Fix) throws a clear exception.
  */
 @Tag("fast")
 class VolterraNystromGoldenTest {
@@ -51,7 +51,7 @@ class VolterraNystromGoldenTest {
         assertTrue(e16 < e8, "iterated Nyström should converge")
     }
 
-    /** RAW xi (с производной) ПО-ПРЕЖНЕМУ не поддерживается в Nyström (usesDerivative=true). */
+    /** RAW xi (with a derivative) is STILL not supported in Nyström (usesDerivative=true). */
     @Test fun nystrom_xi_unsupported() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
@@ -72,7 +72,7 @@ class VolterraNystromGoldenTest {
             solvers.core.RhsWithDerivatives({ t -> p.rhsExact(t, op) }, { t -> p.rhsExactDeriv(t, op) })) to grid
     }
 
-    /** Дискретизованный xitilde^{<1>},xitilde^{<2>} ПРИНИМАЕТСЯ Nyström и сходится на V2. */
+    /** The discretized xitilde^{<1>},xitilde^{<2>} IS ACCEPTED by Nyström and converges on V2. */
     @Test fun nystrom_xitilde_v2_converges() {
         for (r in 1..2) {
             val (s8, g8) = xiTildeSolver(VolterraProblem.V2, 8, r)
@@ -84,7 +84,7 @@ class VolterraNystromGoldenTest {
         }
     }
 
-    /** Health-check: xitilde value-only — аргументы-производные игнорируются. */
+    /** A health check: xitilde is value-only — the derivative arguments are ignored. */
     @Test fun xitilde_is_value_only() {
         val grid = Grid.uniform(8)
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)

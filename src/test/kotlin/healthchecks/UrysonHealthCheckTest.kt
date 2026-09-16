@@ -21,46 +21,46 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Health-checks, СПЕЦИФИЧНЫЕ для решателя нелинейного уравнения Урысона.
+ * Health checks SPECIFIC to the solver of the nonlinear Uryson equation.
  *
- * Общие проверки вычислительного ядра (сплайны, функционалы, квадратура) вынесены
- * в [SplineCoreHealthCheckTest] и здесь не дублируются.
+ * The common checks of the numerical core (splines, functionals, quadrature) are moved
+ * into [SplineCoreHealthCheckTest] and are not duplicated here.
  *
- * Ранее эти проверки были оформлены как объект `HealthChecks` в производственном
- * коде и возвращали числовую «измеренную величину», сравниваемую с порогом. Часть
- * из них при этом была замаскированными БИНАРНЫМИ проверками: при невыполнении
- * условия величина искусственно приравнивалась единице, чтобы превысить порог.
- * Здесь такие проверки записаны явными утверждениями.
+ * Previously these checks were arranged as an object `HealthChecks` in the production
+ * code and returned a numerical "measured quantity" compared with a threshold. Some
+ * of them were in fact disguised BINARY checks: when the condition failed,
+ * the quantity was artificially set to one in order to exceed the threshold.
+ * Here such checks are written as explicit assertions.
  */
 @Tag("fast")
 class UrysonHealthCheckTest {
 
     private companion object {
-        /** Порог для тождеств, выполняющихся точно (с точностью до округления). */
+        /** The threshold for identities that hold exactly (up to rounding). */
         const val EXACT_IDENTITY_TOLERANCE = 1e-10
 
-        /** Порог для суммы весов: величина вычисляется без интегрирования, ошибка минимальна. */
+        /** The threshold for the sum of the weights: the quantity is computed without integration, the error is minimal. */
         const val WEIGHTS_SUM_TOLERANCE = 1e-12
 
-        /** Верхняя граница погрешности базовой схемы на грубой сетке (защита от расходимости). */
+        /** The upper bound of the error of the base scheme on a coarse grid (a protection against divergence). */
         const val MAX_COARSE_GRID_ERROR = 1e-2
 
-        /** Допустимое превышение невязки при сгущении сетки (невязка не обязана падать строго монотонно). */
+        /** The admissible excess of the residual under grid refinement (the residual is not obliged to fall strictly monotonically). */
         const val RESIDUAL_GROWTH_TOLERANCE = 1.1
 
-        /** Параметр регуляризации для проверок, где важен сам факт положительной определённости. */
+        /** The regularization parameter for the checks where the very fact of positive definiteness matters. */
         const val PROBE_ALPHA = 1e-3
     }
 
     private val quad = GaussLegendre(8)
 
     /**
-     * Матрица стабилизатора `R_h` симметрична, положительно определена и полосная.
+     * The stabilizer matrix `R_h` is symmetric, positive definite and banded.
      *
-     * Эти три свойства обеспечивают разрешимость системы Гаусса–Ньютона: без
-     * положительной определённости регуляризованная задача перестаёт быть выпуклой.
-     * Полосность (`|i-j| <= 2`) следует из того, что носители далёких сплайнов не
-     * пересекаются, и её нарушение означало бы ошибку в вычислении общего носителя.
+     * These three properties ensure the solvability of the Gauss-Newton system: without
+     * positive definiteness the regularized problem stops being convex.
+     * The bandedness (`|i-j| <= 2`) follows from the supports of distant splines not
+     * intersecting, and its violation would mean an error in computing the common support.
      */
     @Test
     fun gramMatrixIsSymmetricPositiveDefiniteAndBanded() {
@@ -73,21 +73,21 @@ class UrysonHealthCheckTest {
                 val asymmetry = LinearAlgebra.maxAsymmetry(gram)
                 assertTrue(
                     asymmetry < EXACT_IDENTITY_TOLERANCE,
-                    "Базис ${system.name}: матрица R_h должна быть симметричной, " +
+                    "Basis ${system.name}: the matrix R_h must be symmetric, " +
                         "max|R - R^T| = $asymmetry",
                 )
                 assertNotNull(
                     LinearAlgebra.cholesky(gram),
-                    "Базис ${system.name}: матрица R_h должна быть положительно определена " +
-                        "(разложение Холецкого не существует)",
+                    "Basis ${system.name}: the matrix R_h must be positive definite " +
+                        "(the Cholesky decomposition does not exist)",
                 )
                 for (i in 0 until space.dim) {
                     for (j in 0 until space.dim) {
                         if (abs(i - j) > 2) {
                             assertTrue(
                                 abs(gram[i, j]) < EXACT_IDENTITY_TOLERANCE,
-                                "Базис ${system.name}: элемент R_h[$i][$j] вне полосы должен быть " +
-                                    "нулевым, получено ${gram[i, j]}",
+                                "Basis ${system.name}: the element R_h[$i][$j] outside the band must be " +
+                                    "zero, got ${gram[i, j]}",
                             )
                         }
                     }
@@ -97,12 +97,12 @@ class UrysonHealthCheckTest {
     }
 
     /**
-     * Сумма весов дискретной нормы равна длине отрезка.
+     * The sum of the weights of the discrete norm equals the length of the interval.
      *
-     * Веса `w_j = (x_{j+3} - x_j)/3` в сумме дают `b - a`, поскольку каждый интервал
-     * входит в носители ровно трёх сплайнов. Нарушение означало бы, что дискретная
-     * норма не согласована с `L^2`, и оценка невязки в принципе Морозова была бы
-     * систематически смещена.
+     * The weights `w_j = (x_{j+3} - x_j)/3` sum to `b - a`, since every interval
+     * enters the supports of exactly three splines. A violation would mean that the discrete
+     * norm is inconsistent with `L^2`, and the residual estimate in Morozov's principle would be
+     * systematically biased.
      */
     @Test
     fun weightsSumEqualsIntervalLength() {
@@ -112,20 +112,20 @@ class UrysonHealthCheckTest {
             val deviation = abs(space.weightsSum() - (grid.b - grid.a))
             assertTrue(
                 deviation < WEIGHTS_SUM_TOLERANCE,
-                "Сумма весов должна равняться длине отрезка ${grid.b - grid.a}, " +
-                    "отклонение $deviation",
+                "The sum of the weights must equal the length of the interval ${grid.b - grid.a}, " +
+                    "the deviation is $deviation",
             )
         }
     }
 
     /**
-     * Матрица системы Гаусса–Ньютона `B^T W_h B + alpha R_h` симметрична и положительно
-     * определена при любом `alpha > 0`.
+     * The matrix of the Gauss-Newton system `B^T W_h B + alpha R_h` is symmetric and positive
+     * definite for any `alpha > 0`.
      *
-     * Слагаемое `B^T W_h B` неотрицательно определено, но может быть вырожденным
-     * (задача первого рода некорректна); именно добавление `alpha R_h` делает систему
-     * разрешимой. Проверка подтверждает, что регуляризация действительно выполняет
-     * свою роль.
+     * The term `B^T W_h B` is non-negative definite, but may be singular
+     * (a first-kind problem is ill posed); it is exactly the addition of `alpha R_h` that makes the system
+     * solvable. The check confirms that the regularization really plays
+     * its role.
      */
     @Test
     fun gaussNewtonMatrixIsPositiveDefinite() {
@@ -143,20 +143,20 @@ class UrysonHealthCheckTest {
         val asymmetry = LinearAlgebra.maxAsymmetry(regularized)
         assertTrue(
             asymmetry < EXACT_IDENTITY_TOLERANCE,
-            "Матрица B^T W B + alpha R должна быть симметричной, max|A - A^T| = $asymmetry",
+            "The matrix B^T W B + alpha R must be symmetric, max|A - A^T| = $asymmetry",
         )
         assertNotNull(
             LinearAlgebra.cholesky(regularized),
-            "Матрица B^T W B + alpha R при alpha = $PROBE_ALPHA должна быть положительно определена",
+            "The matrix B^T W B + alpha R at alpha = $PROBE_ALPHA must be positive definite",
         )
     }
 
     /**
-     * Согласованность правой части с оператором: подстановка точного решения в
-     * дискретную невязку даёт малую величину, которая убывает при сгущении сетки.
+     * The consistency of the right-hand side with the operator: substituting the exact solution into
+     * the discrete residual gives a small quantity that decreases under grid refinement.
      *
-     * Проверка ловит рассогласование между способом построения правой части
-     * `f = U x*` и способом её дискретизации функционалами `theta_j`.
+     * The check catches an inconsistency between the way the right-hand side
+     * `f = U x*` is built and the way it is discretized by the functionals `theta_j`.
      */
     @Test
     fun rightHandSideIsConsistentWithOperator() {
@@ -171,7 +171,7 @@ class UrysonHealthCheckTest {
             val xi = core.xiVector(coefficients)
             val thetaF = firstKindSolver(basis, funcs, space, op)
                 .thetaOf { t -> UrysonProblem.C.rhsExact(t, op) }
-            // Геттер отдаёт КОПИЮ массива — берём её один раз ДО цикла, а не на итерацию.
+            // The getter returns a COPY of the array — we take it once BEFORE the loop, not per iteration.
             val weights = space.weights
             var sum = 0.0
             for (j in 0 until grid.n + 2) {
@@ -185,21 +185,21 @@ class UrysonHealthCheckTest {
         val fine = residualOn(16)
         assertTrue(
             fine <= coarse * RESIDUAL_GROWTH_TOLERANCE,
-            "Невязка на точном решении должна убывать при сгущении сетки: " +
+            "The residual at the exact solution must decrease under grid refinement: " +
                 "res(n=8) = $coarse, res(n=16) = $fine",
         )
         assertTrue(
             fine.isFinite() && fine < MAX_COARSE_GRID_ERROR,
-            "Невязка на точном решении должна быть малой, получено $fine",
+            "The residual at the exact solution must be small, got $fine",
         )
     }
 
     /**
-     * Базовая схема второго рода сходится на модельной задаче A.
+     * The base second-kind scheme converges on the model problem A.
      *
-     * Ранее эта проверка возвращала «измеренную величину», равную погрешности при
-     * выполнении условия и единице при невыполнении, — то есть была бинарной под
-     * видом числовой. Здесь условие записано прямо.
+     * Previously this check returned a "measured quantity" equal to the error when the
+     * condition held and to one when it did not — that is, it was binary under
+     * the guise of a numerical one. Here the condition is written out directly.
      */
     @Test
     fun secondKindSchemeConverges() {
@@ -212,16 +212,16 @@ class UrysonHealthCheckTest {
         val error = errorEh({ t -> UrysonProblem.A.exact(t) }, solver.base().eval, grid)
         assertTrue(
             error.isFinite() && error < MAX_COARSE_GRID_ERROR,
-            "Базовая схема на задаче A должна давать малую погрешность, получено E_h = $error",
+            "The base scheme on problem A must give a small error, got E_h = $error",
         )
     }
 
     /**
-     * Итерация Гаусса–Ньютона уменьшает регуляризованный функционал Тихонова.
+     * The Gauss-Newton iteration decreases the regularized Tikhonov functional.
      *
-     * Это базовое свойство корректности спуска: если функционал растёт, значит
-     * система для шага собрана с неверным знаком либо матрица не соответствует
-     * градиенту.
+     * This is a basic property of the correctness of the descent: if the functional grows, then
+     * the system for the step is assembled with a wrong sign or the matrix does not correspond
+     * to the gradient.
      */
     @Test
     fun gaussNewtonStepDecreasesTikhonovFunctional() {
@@ -235,7 +235,7 @@ class UrysonHealthCheckTest {
             noisyThetaCoefficients(UrysonProblem.C, solver, op, grid, quad, 1e-2, 999L)
         val core = CollocationCore(basis, funcs, op)
 
-        // Геттер отдаёт КОПИЮ массива — берём её один раз, а не на каждой итерации цикла.
+        // The getter returns a COPY of the array — we take it once, not on every iteration of the loop.
         val weights = space.weights
 
         fun tikhonovFunctional(c: DoubleArray): Double {
@@ -254,8 +254,8 @@ class UrysonHealthCheckTest {
         val valueAfter = tikhonovFunctional(afterStep)
         assertTrue(
             valueAfter <= valueBefore,
-            "Итерации Гаусса–Ньютона должны уменьшать функционал Тихонова: " +
-                "было $valueBefore, стало $valueAfter",
+            "The Gauss-Newton iterations must decrease the Tikhonov functional: " +
+                "it was $valueBefore, it became $valueAfter",
         )
     }
 }

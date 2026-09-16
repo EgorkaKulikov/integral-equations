@@ -12,22 +12,22 @@ import solvers.uryson.UrysonFirstKindSolver
 import solvers.uryson.UrysonSecondKindSolver
 
 /**
- * Модельная задача для нелинейного уравнения Урысона: ядро, множитель и точное решение.
+ * Model problem for the nonlinear Uryson equation: kernel, multiplier and exact solution.
  *
- * Правая часть НЕ задаётся явно, а строится из точного решения численно (квадратурой),
- * поэтому тестовые данные всегда согласованы с оператором и квадратурной формулой.
+ * The right-hand side is NOT given explicitly but built from the exact solution numerically (by quadrature),
+ * so the test data is always consistent with the operator and the quadrature rule.
  *
- * Соотношения между точным решением `x*` и правой частью `f`:
- *  - уравнение второго рода: `f(t) = x*(t) - lambda \int K(t,s,x*(s)) ds`;
- *  - уравнение первого рода: `f(t) = \int K(t,s,x*(s)) ds`.
+ * Relations between the exact solution `x*` and the right-hand side `f`:
+ *  - equation of the second kind: `f(t) = x*(t) - lambda \int K(t,s,x*(s)) ds`;
+ *  - equation of the first kind: `f(t) = \int K(t,s,x*(s)) ds`.
  *
- * Отрезок задаётся не здесь, а сеткой [Grid], передаваемой в оператор.
+ * The interval is defined not here but by the grid [Grid] passed to the operator.
  *
- * @param name краткое имя задачи для таблиц и сообщений тестов.
- * @param kernel ядро `K(t,s,u)` вместе с производной по `u`.
- * @param lambda множитель перед интегральным оператором (для задач первого рода не используется).
- * @param exact точное решение — эталон для вычисления погрешности.
- * @param secondKind `true` — уравнение второго рода, `false` — первого.
+ * @param name short problem name for tables and test messages.
+ * @param kernel kernel `K(t,s,u)` together with its derivative in `u`.
+ * @param lambda multiplier in front of the integral operator (unused for problems of the first kind).
+ * @param exact exact solution — the baseline for computing the error.
+ * @param secondKind `true` — equation of the second kind, `false` — of the first.
  */
 class UrysonProblem(
     val name: String,
@@ -36,7 +36,7 @@ class UrysonProblem(
     val exact: (Double) -> Double,
     val secondKind: Boolean,
 ) {
-    /** Точная правая часть `f(t)`, вычисленная через оператор [op]. */
+    /** Exact right-hand side `f(t)`, computed through the operator [op]. */
     fun rhsExact(t: Double, op: UrysohnOperator): Double {
         val integral = op.apply(t) { s -> exact(s) }
         return if (secondKind) exact(t) - lambda * integral else integral
@@ -44,9 +44,9 @@ class UrysonProblem(
 
     companion object {
         /**
-         * Задача A (второго рода): `K = 1/(t+s+u)`, `lambda = -1`, `x* = 1/(t+1)`.
+         * Problem A (second kind): `K = 1/(t+s+u)`, `lambda = -1`, `x* = 1/(t+1)`.
          *
-         * Ядро гладкое и убывающее, оператор сжимающий — базовый сценарий сходимости.
+         * The kernel is smooth and decreasing, the operator is contractive — the base convergence scenario.
          */
         val A = UrysonProblem(
             name = "A",
@@ -60,11 +60,11 @@ class UrysonProblem(
         )
 
         /**
-         * Задача B (второго рода): `K = e^{t-2s} u^3`, `lambda = 1`, `x* = e^t`.
+         * Problem B (second kind): `K = e^{t-2s} u^3`, `lambda = 1`, `x* = e^t`.
          *
-         * Кубическая нелинейность при `lambda = 1` делает оператор НЕсжимающим:
-         * простая итерация расходится, поэтому задача проверяет именно ньютоновский путь.
-         * Решение `e^t` принадлежит гиперболической порождающей системе `phi^H`.
+         * The cubic nonlinearity at `lambda = 1` makes the operator NON-contractive:
+         * simple iteration diverges, so the problem exercises exactly the Newton path.
+         * The solution `e^t` belongs to the hyperbolic generating system `phi^H`.
          */
         val B = UrysonProblem(
             name = "B",
@@ -77,7 +77,7 @@ class UrysonProblem(
             secondKind = true,
         )
 
-        /** Задача C (первого рода, некорректная): `K = 1/(t+s+u)`, `x* = 1/(t+1)`. */
+        /** Problem C (first kind, ill-posed): `K = 1/(t+s+u)`, `x* = 1/(t+1)`. */
         val C = UrysonProblem(
             name = "C",
             kernel = object : Kernel {
@@ -90,11 +90,11 @@ class UrysonProblem(
         )
 
         /**
-         * Задача D (первого рода, некорректная): `K = e^{-(t-s)^2} u^3`, `x* = e^t`.
+         * Problem D (first kind, ill-posed): `K = e^{-(t-s)^2} u^3`, `x* = e^t`.
          *
-         * Особенность: `dK/du(t,s,0) = 0`, поэтому из НУЛЕВОГО начального приближения
-         * якобиан вырождается и метод Гаусса–Ньютона не сдвигается с места. Именно
-         * поэтому решатели стартуют с проекции постоянной функции.
+         * Special feature: `dK/du(t,s,0) = 0`, so from a ZERO initial guess
+         * the Jacobian is singular and the Gauss–Newton method never moves. That is exactly
+         * why the solvers start from the projection of a constant function.
          */
         val D = UrysonProblem(
             name = "D",
@@ -110,10 +110,10 @@ class UrysonProblem(
 }
 
 /**
- * Создаёт решатель уравнения второго рода для модельной задачи.
+ * Creates a solver of the equation of the second kind for a model problem.
  *
- * @param ctx контекст вычислений; обязан совпадать с контекстами [funcs] и [space]
- *        (проверяется конструктором решателя).
+ * @param ctx computation context; must coincide with the contexts of [funcs] and [space]
+ *        (checked by the solver constructor).
  */
 fun secondKindSolver(
     problem: UrysonProblem,
@@ -133,9 +133,9 @@ fun secondKindSolver(
 )
 
 /**
- * Создаёт регуляризованный решатель уравнения первого рода.
+ * Creates a regularized solver of the equation of the first kind.
  *
- * @param ctx контекст вычислений; обязан совпадать с контекстами [funcs] и [space].
+ * @param ctx computation context; must coincide with the contexts of [funcs] and [space].
  */
 fun firstKindSolver(
     basis: MinimalSplineBasis,
@@ -146,41 +146,41 @@ fun firstKindSolver(
 ): UrysonFirstKindSolver = UrysonFirstKindSolver(basis, funcs, space, op, ctx = ctx)
 
 /**
- * Число контрольных узлов профиля шума на один интервал сетки.
+ * Number of control nodes of the noise profile per grid interval.
  *
- * Профиль должен быть заметно мельче сетки, иначе шум окажется «видимым» для базиса
- * и будет частично воспроизведён вместо того, чтобы играть роль возмущения данных.
+ * The profile must be noticeably finer than the grid, otherwise the noise becomes "visible" to the basis
+ * and is partly reproduced instead of acting as a perturbation of the data.
  */
 private const val NOISE_NODES_PER_INTERVAL = 4
 
 /**
- * Норма, в которой задаётся уровень шума `delta` для [noisyRightHandSide].
+ * Norm in which the noise level `delta` for [noisyRightHandSide] is specified.
  *
- *  * [L2] — `||xi||_{L^2(a,b)} = delta` (прежнее поведение, используется golden-тестами);
- *  * [SUP] — `||xi||_infty = max_t |xi(t)| = delta` — согласована с условием (VII)
- *    статьи (шум задан в `C[a,b]`). Для кусочно-линейного профиля максимум модуля
- *    достигается в контрольном узле, поэтому вычисляется точно, без квадратуры.
+ *  * [L2] — `||xi||_{L^2(a,b)} = delta` (the former behaviour, used by the golden tests);
+ *  * [SUP] — `||xi||_infty = max_t |xi(t)| = delta` — matches condition (VII)
+ *    of the paper (the noise is given in `C[a,b]`). For a piecewise linear profile the maximum
+ *    modulus is attained at a control node, so it is computed exactly, without quadrature.
  */
 enum class NoiseNorm { L2, SUP }
 
 /**
- * Строит зашумлённую правую часть `f^delta = f + xi` с заданной нормой шума
- * `||xi|| = delta` в норме [norm] (по умолчанию `L^2`).
+ * Builds a noisy right-hand side `f^delta = f + xi` with a prescribed noise norm
+ * `||xi|| = delta` in the norm [norm] (`L^2` by default).
  *
- * Шум моделируется кусочно-линейным профилем со случайными значениями в контрольных
- * узлах, отмасштабированным точно под требуемый уровень `delta`.
+ * The noise is modelled by a piecewise linear profile with random values at the control
+ * nodes, scaled exactly to the required level `delta`.
  *
- * ВОСПРОИЗВОДИМОСТЬ: генератор инициализируется ЯВНО передаваемым [seed], поэтому
- * результат полностью детерминирован. Скрытого источника случайности здесь нет.
- * Профиль (узлы и случайные значения) при данном `seed` ОДИНАКОВ для обеих норм —
- * различается лишь масштабный множитель.
+ * REPRODUCIBILITY: the generator is initialized by the EXPLICITLY passed [seed], so the
+ * result is fully deterministic. There is no hidden source of randomness here.
+ * For a given `seed` the profile (nodes and random values) is THE SAME for both norms —
+ * only the scaling factor differs.
  *
- * @param exactRhs точная правая часть `f`.
- * @param grid сетка, задающая отрезок.
- * @param quad квадратура для вычисления `L^2`-нормы шума (при [NoiseNorm.SUP] не используется).
- * @param delta требуемая норма возмущения; при нуле возвращается исходная функция.
- * @param seed зерно генератора псевдослучайных чисел.
- * @param norm норма, в которой задан `delta`.
+ * @param exactRhs exact right-hand side `f`.
+ * @param grid grid defining the interval.
+ * @param quad quadrature for computing the `L^2` norm of the noise (unused for [NoiseNorm.SUP]).
+ * @param delta required perturbation norm; at zero the original function is returned.
+ * @param seed seed of the pseudo-random number generator.
+ * @param norm norm in which `delta` is given.
  */
 fun noisyRightHandSide(
     exactRhs: (Double) -> Double,
@@ -205,7 +205,7 @@ fun noisyRightHandSide(
     }
     val profileNorm = when (norm) {
         NoiseNorm.L2 -> Math.sqrt(quad.integrate(noiseNodes) { t -> noiseProfile(t) * noiseProfile(t) })
-        // Кусочно-линейная функция достигает максимума модуля в узле.
+        // A piecewise linear function attains its maximum modulus at a node.
         NoiseNorm.SUP -> noiseValues.maxOf { Math.abs(it) }
     }
     val scale = if (profileNorm > 0) delta / profileNorm else 0.0
@@ -213,12 +213,12 @@ fun noisyRightHandSide(
 }
 
 /**
- * Возвращает вектор `theta_j(f^delta)` зашумлённых данных для задачи первого рода —
- * входные данные метода [UrysonFirstKindSolver.solveMorozov].
+ * Returns the vector `theta_j(f^delta)` of noisy data for a problem of the first kind —
+ * the input of the method [UrysonFirstKindSolver.solveMorozov].
  *
- * @param delta уровень шума в норме [norm] (по умолчанию `L^2`).
- * @param seed зерно генератора; фиксируется явно ради воспроизводимости.
- * @param norm норма, в которой задан `delta` (см. [NoiseNorm]).
+ * @param delta noise level in the norm [norm] (`L^2` by default).
+ * @param seed generator seed; fixed explicitly for reproducibility.
+ * @param norm norm in which `delta` is given (see [NoiseNorm]).
  */
 fun noisyThetaCoefficients(
     problem: UrysonProblem,

@@ -20,12 +20,12 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Характеризационные тесты решателей нелинейного уравнения Урысона и вспомогательных типов.
+ * Characterization tests of the solvers of the nonlinear Uryson equation and of the auxiliary types.
  *
- * ВАЖНО: числовые пороги здесь не являются аналитической истиной. Эталонные значения
- * зафиксированы однократным запуском текущей реализации и служат сетью безопасности
- * от регрессий: они ловят появление NaN, расходимость и «взрыв» решения, но не
- * подтверждают теоретические порядки сходимости.
+ * IMPORTANT: the numerical thresholds here are not an analytic truth. The baseline values
+ * were recorded by a single run of the current implementation and serve as a safety net
+ * against regressions: they catch the appearance of a NaN, a divergence and a "blow-up" of the solution, but do not
+ * confirm the theoretical convergence orders.
  */
 @Tag("fast")
 class UrysonCoverageTest {
@@ -47,7 +47,7 @@ class UrysonCoverageTest {
         return secondKindSolver(problem, basis, funcs, space, op)
     }
 
-    /** Поля и вычислитель [FirstKindSolution] — простой носитель данных. */
+    /** The fields and the evaluator of [FirstKindSolution] — a simple data holder. */
     @Test
     fun firstKindSolutionFields() {
         val solution = FirstKindSolution(doubleArrayOf(1.0, 2.0), { t -> t * t }, 1e-3, 1e-4, 0.5)
@@ -57,8 +57,8 @@ class UrysonCoverageTest {
     }
 
     /**
-     * Поля [SolutionFunc]: вычислитель, признак сходимости, счётчик итераций
-     * и достигнутая невязка.
+     * The fields of [SolutionFunc]: the evaluator, the convergence flag, the iteration counter
+     * and the attained residual.
      */
     @Test
     fun solutionFuncFields() {
@@ -73,19 +73,19 @@ class UrysonCoverageTest {
     }
 
     /**
-     * Значения по умолчанию [SolutionFunc] отвечают ПРЯМЫМ схемам: такие схемы
-     * решают СЛАУ и итераций не выполняют, поэтому сходимость тривиальна.
+     * The default values of [SolutionFunc] correspond to the DIRECT schemes: such schemes
+     * solve a linear system and perform no iterations, so the convergence is trivial.
      */
     @Test
     fun solutionFuncDefaultsDescribeDirectSchemes() {
         val direct = SolutionFunc(eval = { t -> t })
-        assertTrue(direct.converged, "Прямая схема считается сошедшейся по построению")
+        assertTrue(direct.converged, "A direct scheme is considered converged by construction")
         assertTrue(direct.iterations == 0 && direct.residual == 0.0)
     }
 
     /**
-     * Свойства [SplineSpace]: сумма весов равна длине отрезка, матрица Грама
-     * симметрична, квадратичная форма стабилизатора неотрицательна.
+     * The properties of [SplineSpace]: the sum of the weights equals the length of the interval, the Gram matrix
+     * is symmetric, the quadratic form of the stabilizer is non-negative.
      */
     @Test
     fun splineSpaceWeightsGramAndRegularizer() {
@@ -94,8 +94,8 @@ class UrysonCoverageTest {
         val space = SplineSpace(basis, quad)
         assertTrue(abs(space.weightsSum() - 1.0) < 1e-12)
         assertTrue(space.weights.sum() > 0 && space.wInt.all { finite(it) })
-        // Геттер отдаёт ГЛУБОКУЮ копию — берём её один раз ДО циклов, иначе каждая
-        // итерация копировала бы всю матрицу целиком (дважды).
+        // The getter returns a DEEP copy — we take it once BEFORE the loops, otherwise every
+        // iteration would copy the whole matrix (twice).
         val gram = space.gramR
         for (i in 0 until space.dim) {
             for (j in 0 until space.dim) {
@@ -107,9 +107,9 @@ class UrysonCoverageTest {
     }
 
     /**
-     * Согласованность интерфейсов [UrysohnOperator] и правой части для всех четырёх
-     * модельных задач: вычисление по предвычисленным узлам совпадает с вычислением
-     * через замыкание.
+     * The consistency of the interfaces [UrysohnOperator] and of the right-hand side for all four
+     * model problems: the evaluation over the precomputed nodes coincides with the evaluation
+     * through a closure.
      */
     @Test
     fun operatorApisAgreeForAllProblems() {
@@ -125,7 +125,7 @@ class UrysonCoverageTest {
             val viaClosure = op.apply(t) { s -> problem.exact(s) }
             assertTrue(
                 abs(viaNodes - viaClosure) < 1e-9,
-                "${problem.name}: applyNodes и apply должны совпадать",
+                "${problem.name}: applyNodes and apply must coincide",
             )
             assertTrue(finite(op.frechet(t, { s -> problem.exact(s) }, { 1.0 })))
             assertTrue(finite(problem.rhsExact(t, op)))
@@ -133,7 +133,7 @@ class UrysonCoverageTest {
         }
     }
 
-    /** Вектор `Xi` и якобиан `B` имеют правильные размеры и конечны. */
+    /** The vector `Xi` and the Jacobian `B` have the right sizes and are finite. */
     @Test
     fun collocationCoreProducesFiniteXiAndJacobian() {
         val grid = Grid.uniform(8)
@@ -152,7 +152,7 @@ class UrysonCoverageTest {
         assertTrue(core.uAtSupport(coefficients).all { finite(it) })
     }
 
-    /** Все четыре схемы второго рода дают конечный результат на сжимающей задаче A. */
+    /** All four second-kind schemes give a finite result on the contractive problem A. */
     @Test
     fun problemAllSchemesAreFinite() {
         val solver = solverFor(UrysonProblem.A, GeneratingSystem.B, 8)
@@ -160,13 +160,13 @@ class UrysonCoverageTest {
         val solutions = listOf(solver.base(), solver.sloan(), solver.kulkarni(), solver.nystrom())
         for (solution in solutions) {
             val error = errorEh(exact, solution.eval, solver.grid)
-            assertTrue(finite(error) && error < 1e-2, "Задача A: E_h = $error")
+            assertTrue(finite(error) && error < 1e-2, "Problem A: E_h = $error")
         }
     }
 
     /**
-     * Задача B с кубическим ядром при `lambda = 1` НЕсжимающая: простая итерация
-     * расходится, поэтому тест проверяет именно ньютоновский путь решателя.
+     * The problem B with a cubic kernel at `lambda = 1` is NON-contractive: the simple iteration
+     * diverges, so the test checks exactly the Newton path of the solver.
      */
     @Test
     fun problemBNonContractiveSchemesConverge() {
@@ -174,22 +174,22 @@ class UrysonCoverageTest {
         val exact = { t: Double -> UrysonProblem.B.exact(t) }
         for (solution in listOf(solver.base(), solver.sloan(), solver.nystrom())) {
             val error = errorEh(exact, solution.eval, solver.grid)
-            assertTrue(finite(error) && error < 1e-1, "Задача B: E_h = $error")
+            assertTrue(finite(error) && error < 1e-1, "Problem B: E_h = $error")
         }
     }
 
-    /** Базовая схема сходится: погрешность убывает при переходе n = 8 -> 16. */
+    /** The base scheme converges: the error decreases on the transition n = 8 -> 16. */
     @Test
     fun problemAConverges() {
         val exact = { t: Double -> UrysonProblem.A.exact(t) }
         val errorN8 = errorEh(exact, solverFor(UrysonProblem.A, GeneratingSystem.B, 8).base().eval, Grid.uniform(8))
         val errorN16 = errorEh(exact, solverFor(UrysonProblem.A, GeneratingSystem.B, 16).base().eval, Grid.uniform(16))
-        assertTrue(errorN16 < errorN8, "Нет сходимости: E_8 = $errorN8, E_16 = $errorN16")
+        assertTrue(errorN16 < errorN8, "No convergence: E_8 = $errorN8, E_16 = $errorN16")
     }
 
     /**
-     * Регуляризованный решатель на задаче C: ветви генератора шума при нулевом и
-     * ненулевом уровне, шаг Гаусса–Ньютона, вычисление невязки и путь Морозова без шума.
+     * The regularized solver on the problem C: the branches of the noise generator at a zero and
+     * a non-zero level, the Gauss-Newton step, the residual computation and the Morozov path without noise.
      */
     @Test
     fun firstKindSolverOnProblemCWithoutNoise() {
@@ -216,8 +216,8 @@ class UrysonCoverageTest {
     }
 
     /**
-     * Путь Морозова с шумом на задаче D с кубическим ядром: `dK/du(t,s,0) = 0`,
-     * поэтому проверяется ветвь перезапуска с ненулевого начального приближения.
+     * The Morozov path with noise on the problem D with a cubic kernel: `dK/du(t,s,0) = 0`,
+     * so the branch of a restart from a non-zero initial approximation is checked.
      */
     @Test
     fun firstKindSolverOnProblemDWithNoise() {
@@ -234,8 +234,8 @@ class UrysonCoverageTest {
     }
 
     /**
-     * Генератор шума детерминирован: при одном зерне результат воспроизводится
-     * побитово, при разных — различается.
+     * The noise generator is deterministic: with one seed the result is reproduced
+     * bitwise, with different ones it differs.
      */
     @Test
     fun noiseGeneratorIsReproducible() {
@@ -248,11 +248,11 @@ class UrysonCoverageTest {
         var differsFromOther = false
         for (i in 0..20) {
             val t = i / 20.0
-            assertTrue(first(t) == second(t), "Одно зерно должно давать идентичный шум в точке $t")
+            assertTrue(first(t) == second(t), "One seed must give identical noise at the point $t")
             if (abs(first(t) - other(t)) > 1e-15) differsFromOther = true
         }
-        assertTrue(differsFromOther, "Разные зёрна должны давать различный шум")
-        // При нулевом уровне шума возвращается исходная правая часть.
+        assertTrue(differsFromOther, "Different seeds must give different noise")
+        // At a zero noise level the original right-hand side is returned.
         val noiseless = noisyRightHandSide(exactRhs, grid, quad, 0.0, 1L)
         assertTrue(noiseless(0.5) == exactRhs(0.5))
     }

@@ -16,46 +16,46 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Health-checks, СПЕЦИФИЧНЫЕ для решателя уравнения Вольтерры.
+ * Health checks SPECIFIC to the Volterra equation solver.
  *
- * Общие проверки вычислительного ядра (сплайны, функционалы, квадратура) вынесены
- * в [SplineCoreHealthCheckTest] и здесь не дублируются: ранее наборы проверок
- * Фредгольма и Вольтерры совпадали примерно на 90 %, хотя девять из двенадцати
- * проверок вообще не зависели от типа интегрального оператора.
+ * The common checks of the numerical core (splines, functionals, quadrature) are moved
+ * into [SplineCoreHealthCheckTest] and are not duplicated here: previously the sets of checks
+ * of Fredholm and Volterra coincided by about 90 %, although nine of the twelve
+ * checks did not depend on the type of the integral operator at all.
  *
- * Здесь остаются только те свойства, которые касаются самого оператора Вольтерры
- * с переменным верхним пределом и построенных на нём схем.
+ * Only the properties concerning the Volterra operator itself, with a variable upper limit,
+ * and the schemes built on it are left here.
  */
 @Tag("fast")
 class VolterraHealthCheckTest {
 
     private companion object {
-        /** Порог для схем, точных на порождающем пространстве. */
+        /** The threshold for the schemes exact on the generating space. */
         const val EXACT_ON_SPAN_TOLERANCE = 1e-8
 
         /**
-         * Минимальный допустимый множитель убывания погрешности при удвоении числа
-         * узлов. Значение 4 соответствует наблюдаемому порядку не ниже второго
-         * (`2^2 = 4`) — заведомо слабее теоретического порядка 3, чтобы проверка
-         * реагировала на поломку схемы, а не на колебания константы.
+         * The minimal admissible factor of the decrease of the error when the number of nodes
+         * is doubled. The value 4 corresponds to an observed order not below the second
+         * (`2^2 = 4`) — certainly weaker than the theoretical order 3, so that the check
+         * reacts to a breakage of the scheme and not to fluctuations of a constant.
          */
         const val MIN_ERROR_REDUCTION_FACTOR = 4.0
 
-        /** Верхняя граница абсолютной погрешности на грубой сетке (защита от расходимости). */
+        /** The upper bound of the absolute error on a coarse grid (a protection against divergence). */
         const val MAX_COARSE_GRID_ERROR = 1e-1
     }
 
     private val quad = GaussLegendre(8)
 
     /**
-     * Согласованность правой части с оператором: на задаче, решение которой лежит
-     * в порождающем пространстве (`u* = t^2` при полиномиальном базисе), базовая
-     * схема обязана давать машинную точность.
+     * The consistency of the right-hand side with the operator: on a problem whose solution lies
+     * in the generating space (`u* = t^2` with a polynomial basis), the base
+     * scheme must give machine accuracy.
      *
-     * Проверка ловит рассогласование между способом построения правой части
-     * `f = u* - V u*` и способом её дискретизации в решателе. Для оператора Вольтерры
-     * это особенно значимо: интеграл берётся по переменному отрезку `[a,t]`, и любая
-     * ошибка в составном разбиении немедленно нарушает точное воспроизведение.
+     * The check catches an inconsistency between the way the right-hand side
+     * `f = u* - V u*` is built and the way it is discretized in the solver. For the Volterra operator
+     * this is especially significant: the integral is taken over the variable interval `[a,t]`, and any
+     * error in the composite partition immediately breaks the exact reproduction.
      */
     @Test
     fun rightHandSideIsConsistentWithOperator() {
@@ -68,19 +68,19 @@ class VolterraHealthCheckTest {
         val error = errorEh({ t -> problem.exact(t) }, solver.base().eval, grid)
         assertTrue(
             error < EXACT_ON_SPAN_TOLERANCE,
-            "На задаче V2span (u* = t^2 лежит в span порождающей системы B) базовая схема " +
-                "должна быть точна, получено E_h = $error",
+            "On the problem V2span (u* = t^2 lies in the span of the generating system B) the base scheme " +
+                "must be exact, got E_h = $error",
         )
     }
 
     /**
-     * Сходимость базовой схемы: при удвоении числа узлов погрешность должна убывать
-     * не менее чем в [MIN_ERROR_REDUCTION_FACTOR] раз.
+     * The convergence of the base scheme: when the number of nodes is doubled the error must decrease
+     * by at least a factor of [MIN_ERROR_REDUCTION_FACTOR].
      *
-     * Ранее эта проверка возвращала инвертированную величину `ratioMin / ratio`
-     * и «штрафное» значение 1e9 при провале, что скрывало смысл измеряемого.
-     * Здесь проверяются напрямую три содержательных условия: погрешность конечна и
-     * мала, она убывает, и убывает достаточно быстро.
+     * Previously this check returned the inverted quantity `ratioMin / ratio`
+     * and a "penalty" value of 1e9 on a failure, which hid the meaning of what was measured.
+     * Here three substantial conditions are checked directly: the error is finite and
+     * small, it decreases, and it decreases fast enough.
      */
     @Test
     fun baseSchemeConvergesUnderRefinement() {
@@ -100,31 +100,31 @@ class VolterraHealthCheckTest {
 
         assertTrue(
             coarseError.isFinite() && coarseError < MAX_COARSE_GRID_ERROR,
-            "Погрешность на грубой сетке должна быть конечной и малой, получено E_8 = $coarseError",
+            "The error on the coarse grid must be finite and small, got E_8 = $coarseError",
         )
         assertTrue(
             fineError < coarseError,
-            "Погрешность обязана убывать при измельчении сетки: E_8 = $coarseError, E_16 = $fineError",
+            "The error must decrease under grid refinement: E_8 = $coarseError, E_16 = $fineError",
         )
 
         val reductionFactor = coarseError / fineError
         val observedOrder = ln(reductionFactor) / ln(2.0)
         assertTrue(
             reductionFactor >= MIN_ERROR_REDUCTION_FACTOR,
-            "Погрешность должна убывать не менее чем в $MIN_ERROR_REDUCTION_FACTOR раза " +
-                "(наблюдаемый порядок >= 2), получено: E_8 = $coarseError, E_16 = $fineError, " +
-                "отношение = $reductionFactor, наблюдаемый порядок = $observedOrder",
+            "The error must decrease by at least a factor of $MIN_ERROR_REDUCTION_FACTOR " +
+                "(an observed order >= 2), got: E_8 = $coarseError, E_16 = $fineError, " +
+                "ratio = $reductionFactor, observed order = $observedOrder",
         )
     }
 
     /**
-     * Точность схемы Nyström на согласованной задаче.
+     * The accuracy of the Nyström scheme on a matched problem.
      *
-     * Если ядро зависит только от `t` (здесь `K = 1 + t`), то подынтегральная функция
-     * `g_t(s) = K(t) * u*(s)` при `u* = s^2` целиком лежит в `span{1, s, s^2}`,
-     * совпадающем с полиномиальной порождающей системой. Значит, сплайновая квадратура
-     * с весами `W_j(t) = \int_a^t omega_j` воспроизводит интеграл по переменному отрезку
-     * точно, и приближение обязано совпасть с точным решением до машинной точности.
+     * If the kernel depends only on `t` (here `K = 1 + t`), then the integrand
+     * `g_t(s) = K(t) * u*(s)` at `u* = s^2` lies entirely in `span{1, s, s^2}`,
+     * which coincides with the polynomial generating system. Hence the spline quadrature
+     * with the weights `W_j(t) = \\int_a^t omega_j` reproduces the integral over the variable interval
+     * exactly, and the approximation must coincide with the exact solution up to machine accuracy.
      */
     @Test
     fun nystromIsExactWhenIntegrandLiesInSpan() {
@@ -145,8 +145,8 @@ class VolterraHealthCheckTest {
         val error = errorEh({ t -> problem.exact(t) }, solver.nystrom().eval, grid)
         assertTrue(
             error < EXACT_ON_SPAN_TOLERANCE,
-            "Схема Nyström должна быть точна, когда подынтегральная функция лежит в span " +
-                "порождающей системы, получено E_h = $error",
+            "The Nyström scheme must be exact when the integrand lies in the span " +
+                "of the generating system, got E_h = $error",
         )
     }
 }

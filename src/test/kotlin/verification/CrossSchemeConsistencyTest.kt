@@ -18,75 +18,75 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * ПЕРЕКРЁСТНАЯ ПРОВЕРКА СХЕМ (задача 2.4).
+ * A CROSS-CHECK OF THE SCHEMES (task 2.4).
  *
- * Разные схемы приближают ОДНО И ТО ЖЕ решение одного уравнения, поэтому при
- * достаточно мелкой сетке обязаны быть согласованы между собой: попарная разность
- * не может существенно превосходить сумму их собственных погрешностей.
+ * Different schemes approximate ONE AND THE SAME solution of one equation, so on a
+ * sufficiently fine grid they must be consistent with each other: the pairwise difference
+ * cannot substantially exceed the sum of their own errors.
  *
- * Что даёт проверка. Она не доказывает правильность (все схемы могли бы ошибаться
- * согласованно — например, из-за общей ошибки в базисе или квадратуре), но
- * обнаруживает ситуацию, когда ОДНА схема рассогласована с остальными. Это
- * дополняет сверку с публикацией: там проверяются числа, здесь — взаимная
- * непротиворечивость независимо реализованных путей вычисления.
+ * What the check gives. It does not prove correctness (all the schemes could err
+ * consistently — because of a common error in the basis or the quadrature, say), but it
+ * detects the situation where ONE scheme is out of agreement with the rest. This
+ * complements the cross-check with the publication: there the numbers are checked, here the mutual
+ * consistency of independently implemented computation paths.
  *
- * Отличие от `PublishedValuesTest`: сравниваются не сводные величины `E_h`,
- * а ЗНАЧЕНИЯ РЕШЕНИЙ в наборе точек. Совпадение `E_h` двух схем ещё не означает,
- * что они дают одну функцию: максимум погрешности мог бы достигаться в разных
- * точках при разном поведении между ними.
+ * The difference from `PublishedValuesTest`: what is compared is not the aggregate quantities `E_h`,
+ * but the VALUES OF THE SOLUTIONS at a set of points. A coincidence of the `E_h` of two schemes does not yet mean
+ * that they give one function: the maximum of the error could be attained at different
+ * points with a different behaviour in between.
  */
 @Tag("slow")
 class CrossSchemeConsistencyTest {
 
     private companion object {
         /**
-         * Множитель запаса при сравнении двух схем.
+         * The margin factor when comparing two schemes.
          *
-         * Обоснование. Из неравенства треугольника
+         * The justification. From the triangle inequality
          *   |u_A(t) - u_B(t)| <= |u_A(t) - u*(t)| + |u*(t) - u_B(t)| <= E_A + E_B <= 2 max(E_A, E_B),
-         * то есть математически гарантированная граница равна 2. Множитель 4 берёт
-         * двукратный запас на то, что `E_h` измеряется на конечной выборке точек
-         * (`errorEh` — 100n+1 точка) и может слегка недооценивать истинный максимум
-         * равномерной нормы.
+         * that is, the mathematically guaranteed bound equals 2. The factor 4 takes
+         * a twofold margin for the fact that `E_h` is measured on a finite sample of points
+         * (`errorEh` uses 100n+1 points) and may slightly underestimate the true maximum
+         * of the uniform norm.
          *
-         * Больший запас брать нельзя: при множителе порядка десятков проверка
-         * перестала бы отличать согласованные схемы от рассогласованной.
+         * A larger margin must not be taken: at a factor of the order of tens the check
+         * would stop distinguishing consistent schemes from an inconsistent one.
          */
         const val PAIRWISE_SAFETY_FACTOR = 4.0
 
         /**
-         * Абсолютный «пол» сравнения.
+         * The absolute "floor" of the comparison.
          *
-         * Когда обе схемы вышли на машинную точность, их погрешности определяются
-         * округлением, и требование `|u_A - u_B| <= 4 max(E_A, E_B)` превратилось бы
-         * в сравнение двух шумов. Ниже этого порога расхождение считается
-         * несущественным независимо от отношения величин.
+         * When both schemes have reached machine accuracy, their errors are determined by
+         * rounding, and the requirement `|u_A - u_B| <= 4 max(E_A, E_B)` would turn
+         * into a comparison of two noises. Below this threshold a discrepancy is considered
+         * insubstantial regardless of the ratio of the quantities.
          */
         const val ABSOLUTE_FLOOR = 1e-12
 
-        /** Порядок квадратуры — тот же, что в остальных проверках и демонстрациях. */
+        /** The quadrature order — the same as in the other checks and demos. */
         const val QUADRATURE_ORDER = 8
 
-        /** Число точек сравнения решений внутри отрезка. */
+        /** The number of points of comparison of the solutions inside the interval. */
         const val COMPARISON_POINTS = 200
     }
 
-    /** Точки сравнения, равномерно покрывающие отрезок сетки (включая концы). */
+    /** The comparison points, uniformly covering the interval of the grid (the ends included). */
     private fun comparisonPoints(grid: Grid): DoubleArray =
         DoubleArray(COMPARISON_POINTS + 1) { i ->
             grid.a + (grid.b - grid.a) * i / COMPARISON_POINTS
         }
 
-    /** Именованное решение: вычислитель и его собственная погрешность `E_h`. */
+    /** A named solution: the evaluator and its own error `E_h`. */
     private class NamedSolution(val name: String, val eval: (Double) -> Double, val error: Double)
 
     /**
-     * Проверяет попарную согласованность всех схем набора.
+     * Checks the pairwise consistency of all the schemes of the set.
      *
-     * @param context описание сочетания «задача/базис/семейство/сетка» для сообщения.
-     * @param solutions схемы, решающие одну и ту же задачу.
-     * @param points точки, в которых сравниваются значения.
-     * @param failures накопитель обнаруженных рассогласований.
+     * @param context the description of the combination "problem/basis/family/grid" for the message.
+     * @param solutions the schemes solving one and the same problem.
+     * @param points the points at which the values are compared.
+     * @param failures the accumulator of the detected inconsistencies.
      */
     private fun checkPairwise(
         context: String,
@@ -114,10 +114,10 @@ class CrossSchemeConsistencyTest {
                 if (worstDifference > allowed) {
                     failures += buildString {
                         append(context)
-                        append(": схемы '").append(a.name).append("' и '").append(b.name)
-                        append("' рассогласованы. max|u_A - u_B| = ").append(worstDifference)
-                        append(" в точке t = ").append(worstPoint)
-                        append(", допустимо ").append(allowed)
+                        append(": the schemes '").append(a.name).append("' and '").append(b.name)
+                        append("' are inconsistent. max|u_A - u_B| = ").append(worstDifference)
+                        append(" at the point t = ").append(worstPoint)
+                        append(", allowed ").append(allowed)
                         append(" (= ").append(PAIRWISE_SAFETY_FACTOR).append(" * max(E_A, E_B)); ")
                         append("E(").append(a.name).append(") = ").append(a.error)
                         append(", E(").append(b.name).append(") = ").append(b.error)
@@ -128,7 +128,7 @@ class CrossSchemeConsistencyTest {
     }
 
     private fun families(basis: MinimalSplineBasis): List<FunctionalFamily> = listOf(
-        // Только семейства БЕЗ производной: схемы Nyström не поддерживают xi.
+        // Only the families WITHOUT a derivative: the Nyström schemes do not support xi.
         ProjFunctionals(basis),
         AveragingFunctionals(basis),
         ThreePointFunctionals(basis),
@@ -137,18 +137,18 @@ class CrossSchemeConsistencyTest {
     private fun reportFailures(failures: List<String>, title: String) {
         assertTrue(
             failures.isEmpty(),
-            "$title: обнаружено рассогласование схем (${failures.size} шт.). " +
-                "Разные схемы приближают одно решение и обязаны сходиться к одному пределу:\n" +
+            "$title: an inconsistency of the schemes was detected (${failures.size} cases). " +
+                "Different schemes approximate one solution and must converge to one limit:\n" +
                 failures.joinToString("\n").take(6000),
         )
     }
 
     /**
-     * Фредгольм II рода, n = 64: base, sloan, kulkarni, nystrom, combinedNystrom.
+     * Fredholm of the second kind, n = 64: base, sloan, kulkarni, nystrom, combinedNystrom.
      *
-     * Сетка максимальна из используемых в статье; для уравнения Фредгольма все
-     * схемы на ней ещё считаются за разумное время (образы базисных сплайнов
-     * предвычисляются в фиксированных узлах квадратуры).
+     * The grid is the largest of those used in the article; for the Fredholm equation all
+     * the schemes are still computed on it in a reasonable time (the images of the basis splines
+     * are precomputed at fixed quadrature nodes).
      */
     @Test
     fun fredholmSchemesAgreeAtFinestGrid() {
@@ -182,22 +182,22 @@ class CrossSchemeConsistencyTest {
                     NamedSolution(name, solution.eval, errorEh(exact, solution.eval, grid))
                 }
                 checkPairwise(
-                    "Фредгольм ${problem.name}, базис ${system.name}, " +
-                        "семейство ${funcs.name}, n=$n",
+                    "Fredholm ${problem.name}, basis ${system.name}, " +
+                        "family ${funcs.name}, n=$n",
                     solutions, points, failures,
                 )
             }
         }
-        reportFailures(failures, "Фредгольм II рода")
+        reportFailures(failures, "Fredholm of the second kind")
     }
 
     /**
-     * Вольтерра II рода, n = 32.
+     * Volterra of the second kind, n = 32.
      *
-     * Сетка вдвое грубее, чем для Фредгольма: у оператора Вольтерры область
-     * интегрирования зависит от `t`, поэтому предвычисление на фиксированных узлах
-     * невозможно, а веса Nyström `W_j(t)` приходится пересчитывать для каждой точки.
-     * По этой же причине в статье таблицы Nyström для Вольтерры ограничены n <= 32.
+     * The grid is twice as coarse as for Fredholm: the Volterra operator has an integration
+     * domain depending on `t`, so precomputation at fixed nodes
+     * is impossible, and the Nyström weights `W_j(t)` have to be recomputed for every point.
+     * For the same reason the Nyström tables for Volterra in the article are limited to n <= 32.
      */
     @Test
     fun volterraSchemesAgreeAtFinestGrid() {
@@ -231,22 +231,22 @@ class CrossSchemeConsistencyTest {
                     NamedSolution(name, solution.eval, errorEh(exact, solution.eval, grid))
                 }
                 checkPairwise(
-                    "Вольтерра ${problem.name}, базис ${system.name}, " +
-                        "семейство ${funcs.name}, n=$n",
+                    "Volterra ${problem.name}, basis ${system.name}, " +
+                        "family ${funcs.name}, n=$n",
                     solutions, points, failures,
                 )
             }
         }
-        reportFailures(failures, "Вольтерра II рода")
+        reportFailures(failures, "Volterra of the second kind")
     }
 
     /**
-     * Согласованность на задаче, решение которой лежит в span порождающей системы.
+     * The consistency on a problem whose solution lies in the span of the generating system.
      *
-     * Здесь погрешности схем близки к машинной точности, и проверка вырождается в
-     * требование «все схемы дают практически одну и ту же функцию». Случай ценен
-     * тем, что порог сравнения определяется абсолютным полом, а не собственными
-     * ошибками схем: рассогласование любой из них видно немедленно.
+     * Here the errors of the schemes are close to machine accuracy, and the check degenerates into
+     * the requirement "all the schemes give practically one and the same function". The case is valuable
+     * in that the comparison threshold is determined by the absolute floor and not by the own
+     * errors of the schemes: an inconsistency of any of them is visible immediately.
      */
     @Test
     fun schemesAgreeOnSpanProblem() {
@@ -269,10 +269,10 @@ class CrossSchemeConsistencyTest {
                 { t -> problem.rhsExactDeriv2(t, op) },
             ),
         )
-        // Схема nystrom исключена намеренно: её приближение лежит ВНЕ сплайнового
-        // пространства, поэтому на span-задаче она не обязана давать машинную
-        // точность (см. KDoc FredholmSecondKindSolver.nystrom) и её погрешность ~5e-5
-        // определяет порог сравнения, обесценивая проверку.
+        // The nystrom scheme is excluded on purpose: its approximation lies OUTSIDE the spline
+        // space, so on a span problem it is not obliged to give machine
+        // accuracy (see the KDoc of FredholmSecondKindSolver.nystrom) and its error ~5e-5
+        // determines the comparison threshold, devaluing the check.
         val solutions = listOf(
             "base" to solver.base(),
             "sloan" to solver.sloan(),
@@ -282,9 +282,9 @@ class CrossSchemeConsistencyTest {
             NamedSolution(name, solution.eval, errorEh(exact, solution.eval, grid))
         }
         checkPairwise(
-            "Фредгольм ${problem.name} (решение в span), базис B, семейство theta, n=$n",
+            "Fredholm ${problem.name} (the solution is in the span), basis B, family theta, n=$n",
             solutions, points, failures,
         )
-        reportFailures(failures, "Задача с решением в span порождающей системы")
+        reportFailures(failures, "A problem with the solution in the span of the generating system")
     }
 }

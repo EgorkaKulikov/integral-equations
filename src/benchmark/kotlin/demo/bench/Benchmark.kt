@@ -20,25 +20,25 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
 // ============================================================================
-// Бенчмарк вычислительной эффективности (без внешних зависимостей).
+// Benchmark of computational efficiency (no external dependencies).
 //
-//   (A) Масштабирование по размеру задачи: время полного решения от N.
-//   (B) Масштабируемость по числу потоков: 1, 2, 4, 8, ... на ОДНОМ И ТОМ ЖЕ
-//       коде сборки матрицы, с вычислением ускорения и эффективности.
+//   (A) Scaling with problem size: time of the full solve versus N.
+//   (B) Scalability with the number of threads: 1, 2, 4, 8, ... on ONE AND THE SAME
+//       matrix assembly code, with speedup and efficiency computed.
 //
-// Используется System.nanoTime, прогрев, повторы и робастная агрегация.
-// Результаты можно выгрузить в CSV для приложения к отчёту.
+// System.nanoTime, warm-up, repetitions and robust aggregation are used.
+// The results can be exported to CSV to be attached to a report.
 // ============================================================================
 
 /**
- * Параметры запуска бенчмарка.
+ * Benchmark run parameters.
  *
- * @param problemSizes размеры сетки n для исследования масштабирования (размер системы dim = n+2)
- * @param threadCounts числа потоков для исследования масштабируемости
- * @param speedupSize размер сетки, на котором измеряется масштабируемость по потокам
- * @param repetitions число измеряемых повторов (после прогрева)
- * @param warmupRuns число прогревочных прогонов перед каждой серией измерений
- * @param csvPath путь для выгрузки результатов в CSV; null — не выгружать
+ * @param problemSizes grid sizes n for the scaling study (system size dim = n+2)
+ * @param threadCounts thread counts for the scalability study
+ * @param speedupSize grid size at which the thread scalability is measured
+ * @param repetitions number of measured repetitions (after the warm-up)
+ * @param warmupRuns number of warm-up runs before every measurement series
+ * @param csvPath path for exporting the results to CSV; null — do not export
  */
 private data class BenchmarkConfig(
     val problemSizes: List<Int> = listOf(16, 32, 64, 128, 256),
@@ -50,9 +50,9 @@ private data class BenchmarkConfig(
 )
 
 /**
- * Числа потоков для исследования масштабируемости: степени двойки до числа
- * доступных ядер включительно. Одной или двух точек недостаточно для вывода об
- * эффективности распараллеливания, поэтому берётся вся развёртка.
+ * Thread counts for the scalability study: powers of two up to the number of
+ * available cores inclusive. One or two points are not enough to conclude anything about
+ * parallelization efficiency, so the whole sweep is taken.
  */
 private fun defaultThreadCounts(): List<Int> {
     val cores = Runtime.getRuntime().availableProcessors()
@@ -61,14 +61,14 @@ private fun defaultThreadCounts(): List<Int> {
     return counts
 }
 
-/** Сводка по выборке измерений: все величины в миллисекундах. */
+/** Summary of a measurement sample: all quantities in milliseconds. */
 private data class Measurement(
     val median: Double,
     val min: Double,
     val max: Double,
     val standardDeviation: Double,
 ) {
-    /** Разброс относительно медианы, в процентах — показатель стабильности измерения. */
+    /** Spread relative to the median, in percent — an indicator of measurement stability. */
     val spreadPercent: Double get() = if (median > 0.0) 100.0 * (max - min) / median else 0.0
 }
 
@@ -81,11 +81,11 @@ private fun summarize(samplesNanos: LongArray): Measurement {
     return Measurement(median, sortedMs.first(), sortedMs.last(), sqrt(variance))
 }
 
-/** Накопитель результата: не даёт JIT удалить вычисление как неиспользуемое. */
+/** Result accumulator: keeps the JIT from eliminating the computation as unused. */
 @Volatile
 private var blackHole: Double = 0.0
 
-/** Строит представительный решатель уравнения Фредгольма (задача F2) размера dim = n+2. */
+/** Builds a representative solver of the Fredholm equation (problem F2) of size dim = n+2. */
 private fun buildSolver(n: Int, ctx: NumericsContext = NumericsContext.default()): FredholmSecondKindSolver {
     val grid = Grid.uniform(n)
     val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
@@ -102,12 +102,12 @@ private fun buildSolver(n: Int, ctx: NumericsContext = NumericsContext.default()
 }
 
 /**
- * Измеряет время ПОЛНОГО решения: построение решателя (предвычисление образов
- * базисных сплайнов в узлах квадратуры), сборка матрицы и решение СЛАУ.
+ * Measures the time of the FULL solve: building the solver (precomputing the images
+ * of the basis splines at the quadrature nodes), matrix assembly and solving the linear system.
  *
- * Ранее построение решателя выполнялось до запуска таймера, из-за чего в замер не
- * попадала предвычислительная фаза, которая для больших n доминирует. Теперь
- * измеряется вся работа, необходимая пользователю для получения решения.
+ * Formerly the solver was built before the timer started, so the measurement excluded
+ * the precomputation phase, which dominates for large n. Now
+ * all the work a user needs to obtain the solution is measured.
  */
 private fun timeFullSolve(n: Int): Long {
     val start = System.nanoTime()
@@ -117,7 +117,7 @@ private fun timeFullSolve(n: Int): Long {
     return System.nanoTime() - start
 }
 
-/** Измеряет время только сборки матрицы (без предвычислений и решения СЛАУ). */
+/** Measures the time of the matrix assembly only (without precomputation and the linear solve). */
 private fun timeMatrixAssembly(solver: FredholmSecondKindSolver): Long {
     val start = System.nanoTime()
     val matrix = solver.matrixM()
@@ -132,16 +132,16 @@ private fun repeatMeasurement(repetitions: Int, warmupRuns: Int, action: () -> L
 }
 
 /**
- * Исследование (A): время полного решения в зависимости от размера задачи.
+ * Study (A): time of the full solve versus problem size.
  *
- * Прогрев выполняется перед КАЖДЫМ размером, а не однократно: иначе JIT остаётся
- * оптимизированным под профиль другого размера и малые n измеряются недостоверно.
+ * The warm-up is performed before EVERY size, not once: otherwise the JIT stays
+ * optimized for the profile of another size and small n are measured unreliably.
  */
 private fun runScalingStudy(config: BenchmarkConfig): List<Pair<Int, Measurement>> {
     println()
-    println("(A) Масштабирование: полное решение уравнения Фредгольма (задача F2, базис B)")
+    println("(A) Scaling: full solve of the Fredholm equation (problem F2, basis B)")
     println("-".repeat(78))
-    println("%6s %8s %12s %12s %12s %12s".format("n", "dim", "медиана,мс", "мин,мс", "макс,мс", "разброс,%"))
+    println("%6s %8s %12s %12s %12s %12s".format("n", "dim", "median,ms", "min,ms", "max,ms", "spread,%"))
     val results = config.problemSizes.map { n ->
         val measurement = repeatMeasurement(config.repetitions, config.warmupRuns) { timeFullSolve(n) }
         println(
@@ -155,36 +155,36 @@ private fun runScalingStudy(config: BenchmarkConfig): List<Pair<Int, Measurement
 }
 
 /**
- * Исследование (B): масштабируемость сборки матрицы по числу потоков.
+ * Study (B): scalability of the matrix assembly with the number of threads.
  *
- * Число потоков задаётся ЯВНО через выделенный [ForkJoinPool] с нужным
- * parallelism, а не берётся из общего пула — иначе число потоков не является
- * управляемым параметром эксперимента и результат невоспроизводим.
+ * The thread count is set EXPLICITLY through a dedicated [ForkJoinPool] with the required
+ * parallelism instead of being taken from the common pool — otherwise the thread count is not
+ * a controlled parameter of the experiment and the result is not reproducible.
  *
- * Для каждой точки вычисляются ускорение S(p) = T(1)/T(p) и эффективность
- * E(p) = S(p)/p, а также оценка последовательной доли по формуле Карпа–Флэтта
- * f = (1/S(p) - 1/p) / (1 - 1/p), позволяющая судить о пределе масштабируемости.
+ * For every point the speedup S(p) = T(1)/T(p) and the efficiency
+ * E(p) = S(p)/p are computed, as well as the serial fraction estimated by the Karp–Flatt formula
+ * f = (1/S(p) - 1/p) / (1 - 1/p), which allows judging the scalability limit.
  */
 private fun runScalabilityStudy(config: BenchmarkConfig): List<Triple<Int, Measurement, Double>> {
     val solver = buildSolver(config.speedupSize)
     println()
-    println("(B) Масштабируемость сборки матрицы по числу потоков (n = ${config.speedupSize})")
+    println("(B) Scalability of the matrix assembly with the number of threads (n = ${config.speedupSize})")
     println("-".repeat(78))
     println(
         "%8s %12s %12s %12s %10s %10s %10s".format(
-            "потоков", "медиана,мс", "мин,мс", "разброс,%", "ускор.", "эффект.", "посл.доля",
+            "threads", "median,ms", "min,ms", "spread,%", "speedup", "effic.", "serial.fr",
         ),
     )
 
-    // Опорная точка: строго последовательное выполнение ТОГО ЖЕ кода — отдельный
-    // решатель с контекстом `parallel = false`, а не глобальный переключатель:
-    // так бенчмарк не меняет поведение чужого кода в той же JVM.
+    // Reference point: strictly sequential execution of THE SAME code — a separate
+    // solver with the context `parallel = false`, not a global switch:
+    // that way the benchmark does not change the behaviour of other code in the same JVM.
     val sequentialSolver = buildSolver(config.speedupSize, NumericsContext(parallel = false))
     val sequential =
         repeatMeasurement(config.repetitions, config.warmupRuns) { timeMatrixAssembly(sequentialSolver) }
     println(
         "%8s %12.3f %12.3f %12.1f %10s %10s %10s".format(
-            "1 (посл.)", sequential.median, sequential.min, sequential.spreadPercent, "1.00", "1.00", "-",
+            "1 (seq.)", sequential.median, sequential.min, sequential.spreadPercent, "1.00", "1.00", "-",
         ),
     )
 
@@ -218,35 +218,35 @@ private fun runScalabilityStudy(config: BenchmarkConfig): List<Triple<Int, Measu
 }
 
 /**
- * Исследование (C): сравнение бэкендов линейной алгебры.
+ * Study (C): comparison of the linear algebra backends.
  *
- * Зачем: нативный бэкенд (multik/OpenBLAS) платит за каждый вызов конвертацией
- * `Array<DoubleArray>` <-> `NDArray`, а `fromD2` читает результат поэлементно. На малых
- * размерностях эти накладные расходы могут перевешивать выигрыш от нативного BLAS.
- * Решение об оптимизации должно опираться на измерения, а не на предположения.
+ * Why: the native backend (multik/OpenBLAS) pays on every call for the conversion
+ * `Array<DoubleArray>` <-> `NDArray`, and `fromD2` reads the result element by element. At small
+ * dimensions this overhead may outweigh the gain from the native BLAS.
+ * An optimization decision must rest on measurements, not on assumptions.
  *
- * Измеряются четыре операции на размерностях 16, 64, 256, 1024. Данные
- * детерминированы (фиксированное зерно), матрица для `solve` строго диагонально
- * доминирующая — иначе на больших размерностях случайная матрица вырождается.
+ * Four operations are measured at dimensions 16, 64, 256, 1024. The data is
+ * deterministic (fixed seed), and the matrix for `solve` is strictly diagonally
+ * dominant — otherwise a random matrix becomes singular at large dimensions.
  */
 private fun runBackendComparison(config: BenchmarkConfig) {
     println()
-    println("(C) Сравнение бэкендов линейной алгебры (медиана, мс)")
+    println("(C) Comparison of the linear algebra backends (median, ms)")
     println("-".repeat(78))
     println(
         "%6s %10s %14s %14s %10s".format(
-            "размер", "операция", "multik,мс", "reference,мс", "multik/ref",
+            "size", "operation", "multik,ms", "reference,ms", "multik/ref",
         ),
     )
 
-    // Бэкенды сравниваются НАПРЯМУЮ, без подмены глобального состояния и без
-    // восстановления в finally: каждый замер вызывает свой экземпляр [LinAlgBackend].
+    // The backends are compared DIRECTLY, without substituting global state and without
+    // restoring it in finally: every measurement calls its own [LinAlgBackend] instance.
     for (size in listOf(16, 64, 256, 1024)) {
         val random = kotlin.random.Random(seed = 20240517 + size)
         val a = DenseMatrix.build(size, size) { _, _ -> random.nextDouble(-1.0, 1.0) }
         val b = DenseMatrix.build(size, size) { _, _ -> random.nextDouble(-1.0, 1.0) }
         val x = DoubleArray(size) { random.nextDouble(-1.0, 1.0) }
-        // Строго диагонально доминирующая матрица — гарантированно невырожденная.
+        // A strictly diagonally dominant matrix — guaranteed nonsingular.
         val solvable = DenseMatrix.build(size, size) { i, j ->
             if (i == j) size + 1.0 else a[i, j] / size
         }
@@ -261,8 +261,8 @@ private fun runBackendComparison(config: BenchmarkConfig) {
         for ((operationName, operation) in operations) {
             val timings = LinkedHashMap<String, Measurement>()
             for (backend in listOf<LinAlgBackend>(Backends.native(), Backends.java())) {
-                // matMat и solve кубичны: на 1024 повторы сокращаются, чтобы бенчмарк
-                // завершался за разумное время даже на медленном JVM-бэкенде.
+                // matMat and solve are cubic: at 1024 the repetitions are reduced so that the benchmark
+                // finishes in reasonable time even on the slow JVM backend.
                 val heavy = operationName == "matMat" || operationName == "solve"
                 val repetitions = if (size >= 512 && heavy) 3 else config.repetitions
                 val warmups = if (size >= 512 && heavy) 1 else config.warmupRuns
@@ -283,10 +283,10 @@ private fun runBackendComparison(config: BenchmarkConfig) {
         }
     }
     println()
-    println(" Колонка multik/ref: <1 — нативный бэкенд быстрее, >1 — быстрее чистый JVM.")
+    println(" Column multik/ref: <1 — the native backend is faster, >1 — pure JVM is faster.")
 }
 
-/** Выгружает результаты в CSV, чтобы измерения можно было приложить к отчёту. */
+/** Exports the results to CSV, so that the measurements can be attached to a report. */
 private fun exportCsv(
     path: String,
     scaling: List<Pair<Int, Measurement>>,
@@ -304,37 +304,37 @@ private fun exportCsv(
         }
     }.let { file.writeText(it) }
     println()
-    println("Результаты выгружены в ${file.absolutePath}")
+    println("Results exported to ${file.absolutePath}")
 }
 
 /**
- * Печатает конфигурацию окружения. Без неё числа невоспроизводимы: результат
- * зависит от процессора, версии JVM и — критично — от активного бэкенда линейной
- * алгебры, который может тихо откатиться на реализацию без нативного BLAS.
+ * Prints the environment configuration. Without it the numbers are not reproducible: the result
+ * depends on the processor, the JVM version and — critically — on the active linear algebra
+ * backend, which may silently fall back to an implementation without a native BLAS.
  */
 private fun printEnvironment(config: BenchmarkConfig) {
     println("=".repeat(78))
-    println("Бенчмарк вычислительной эффективности")
+    println("Benchmark of computational efficiency")
     println("=".repeat(78))
-    println("ОС              : ${System.getProperty("os.name")} ${System.getProperty("os.version")}")
-    println("Архитектура     : ${System.getProperty("os.arch")}")
-    println("Доступно ядер   : ${Runtime.getRuntime().availableProcessors()}")
+    println("OS              : ${System.getProperty("os.name")} ${System.getProperty("os.version")}")
+    println("Architecture    : ${System.getProperty("os.arch")}")
+    println("Available cores : ${Runtime.getRuntime().availableProcessors()}")
     println("JVM             : ${System.getProperty("java.vm.name")} ${System.getProperty("java.version")}")
-    println("Бэкенд линалг.  : ${Backends.default().name}")
-    println("Повторов        : ${config.repetitions} (прогрев: ${config.warmupRuns} перед каждой серией)")
-    println("Агрегация       : медиана; приводятся мин., макс. и разброс")
-    println("Размеры задачи  : ${config.problemSizes.joinToString(", ")}")
-    println("Числа потоков   : ${config.threadCounts.joinToString(", ")}")
+    println("LinAlg backend  : ${Backends.default().name}")
+    println("Repetitions     : ${config.repetitions} (warm-up: ${config.warmupRuns} before every series)")
+    println("Aggregation     : median; min, max and spread are reported")
+    println("Problem sizes   : ${config.problemSizes.joinToString(", ")}")
+    println("Thread counts   : ${config.threadCounts.joinToString(", ")}")
 }
 
 /**
- * Точка входа бенчмарка.
+ * Benchmark entry point.
  *
- * Аргументы (все необязательные):
- *   1. размеры задачи через запятую, например `16,32,64`;
- *   2. число повторов;
- *   3. размер задачи для исследования масштабируемости;
- *   4. путь к CSV-файлу для выгрузки результатов.
+ * Arguments (all optional):
+ *   1. problem sizes separated by commas, e.g. `16,32,64`;
+ *   2. number of repetitions;
+ *   3. problem size for the scalability study;
+ *   4. path to the CSV file for exporting the results.
  */
 fun main(args: Array<String>) {
     val config = BenchmarkConfig(
@@ -352,11 +352,11 @@ fun main(args: Array<String>) {
     config.csvPath?.let { exportCsv(it, scaling, scalability) }
 
     println()
-    println("Примечания к интерпретации:")
-    println(" - ускорение измерено на сборке матрицы; плотное решение СЛАУ дополнительно")
-    println("   использует внутреннюю многопоточность нативного BLAS и здесь не разделяется;")
-    println(" - последовательная доля оценена по формуле Карпа–Флэтта: рост её значения")
-    println("   с числом потоков указывает на накладные расходы распараллеливания;")
-    println(" - при разбросе свыше 10 % измерение считать ориентировочным.")
-    if (blackHole.isNaN()) println("(недостижимо: $blackHole)")
+    println("Notes on interpretation:")
+    println(" - the speedup is measured on the matrix assembly; the dense linear solve additionally")
+    println("   uses the internal multithreading of the native BLAS and is not separated here;")
+    println(" - the serial fraction is estimated by the Karp-Flatt formula: a growth of its value")
+    println("   with the thread count indicates parallelization overhead;")
+    println(" - at a spread above 10 % the measurement should be taken as indicative only.")
+    if (blackHole.isNaN()) println("(unreachable: $blackHole)")
 }

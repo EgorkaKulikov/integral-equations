@@ -29,18 +29,18 @@ import solvers.volterra.VolterraOperator
 import solvers.volterra.VolterraSecondKindSolver
 
 /**
- * НЕЗАВИСИМЫЙ ВЕРИФИКАЦИОННЫЙ ДРАЙВЕР ТАБЛИЦ §4 (роль 12).
+ * AN INDEPENDENT VERIFICATION DRIVER OF THE §4 TABLES (role 12).
  *
- * Не входит в состав библиотеки и ничего в ней не меняет: пользуется ТОЛЬКО
- * публичным API ветки `main`. Модельные задачи M1--M5 и частотно-настроенные
- * порождающие системы определены здесь заново (на `main` их нет), чтобы прогон
- * был независим от кода, которым таблицы изготавливались.
+ * It is not part of the library and changes nothing in it: it uses ONLY
+ * the public API of the `main` branch. The model problems M1--M5 and the frequency-tuned
+ * generating systems are defined here anew (they are absent on `main`), so that the run
+ * is independent of the code the tables were produced with.
  *
- * Результат: TSV в stdout + файл, заданный system property `sec4.out`.
+ * The result: a TSV in stdout + a file given by the system property `sec4.out`.
  */
 class Sec4VerificationTool {
 
-    // ==================== порождающие системы ====================
+    // ==================== generating systems ====================
 
     private fun sysT(w: Double) = GeneratingSystem(
         name = "T$w",
@@ -62,12 +62,12 @@ class Sec4VerificationTool {
         tag == "T" -> GeneratingSystem.T
         tag.startsWith("H") -> sysH(tag.removePrefix("H").toDouble())
         tag.startsWith("T") -> sysT(tag.removePrefix("T").toDouble())
-        else -> error("неизвестная система $tag")
+        else -> error("unknown system $tag")
     }
 
-    // ==================== модельные задачи ====================
+    // ==================== model problems ====================
 
-    /** u*(t) = cos(w t)/(1+t) и две производные; p = 1/(1+t), p' = -p^2, p'' = 2p^3. */
+    /** u*(t) = cos(w t)/(1+t) and two derivatives; p = 1/(1+t), p' = -p^2, p'' = 2p^3. */
     private fun oscSolution(w: Double): Triple<(Double) -> Double, (Double) -> Double, (Double) -> Double> {
         val u = { t: Double -> cos(w * t) / (1.0 + t) }
         val uD = { t: Double ->
@@ -81,7 +81,7 @@ class Sec4VerificationTool {
         return Triple(u, uD, uDD)
     }
 
-    /** Ядро M2/M4: cos(w d) e^{-d^2}, d = t-s; производные по t. */
+    /** The M2/M4 kernel: cos(w d) e^{-d^2}, d = t-s; derivatives in t. */
     private fun gaussOsc(w: Double): Triple<(Double) -> Double, (Double) -> Double, (Double) -> Double> {
         val k = { d: Double -> cos(w * d) * exp(-d * d) }
         val kd = { d: Double -> (-w * sin(w * d) - 2.0 * d * cos(w * d)) * exp(-d * d) }
@@ -109,7 +109,7 @@ class Sec4VerificationTool {
         val secondKind: Boolean,
     )
 
-    /** M1: Фредгольм II, K = 1/(1+t+s), u* = 1/(1+t). */
+    /** M1: Fredholm II, K = 1/(1+t+s), u* = 1/(1+t). */
     private val m1 = FredProblem(
         "M1",
         KernelF(
@@ -123,7 +123,7 @@ class Sec4VerificationTool {
         secondKind = true,
     )
 
-    /** M2: Фредгольм II, K = cos(40 d) e^{-d^2}, u* = cos(40t)/(1+t). */
+    /** M2: Fredholm II, K = cos(40 d) e^{-d^2}, u* = cos(40t)/(1+t). */
     private val m2 = run {
         val (k, kd, kdd) = gaussOsc(40.0)
         val (u, uD, uDD) = oscSolution(40.0)
@@ -134,7 +134,7 @@ class Sec4VerificationTool {
         )
     }
 
-    /** M4: Фредгольм I, ядро при w=20, u* = cos(20t)/(1+t). */
+    /** M4: Fredholm I, the kernel at w=20, u* = cos(20t)/(1+t). */
     private val m4 = run {
         val (k, kd, kdd) = gaussOsc(20.0)
         val (u, uD, uDD) = oscSolution(20.0)
@@ -145,7 +145,7 @@ class Sec4VerificationTool {
         )
     }
 
-    /** M3: Вольтерра II, K = cos(30 d), u* = cos(30t)/(1+t); K(t,t)=1. */
+    /** M3: Volterra II, K = cos(30 d), u* = cos(30t)/(1+t); K(t,t)=1. */
     private val m3 = run {
         val w = 30.0
         val (u, uD, uDD) = oscSolution(w)
@@ -161,7 +161,7 @@ class Sec4VerificationTool {
         )
     }
 
-    /** M5: Вольтерра I, K = 1 + d - sin(30 d)/30, u* = cos(30t)/(1+t); K(t,t)=1. */
+    /** M5: Volterra I, K = 1 + d - sin(30 d)/30, u* = cos(30t)/(1+t); K(t,t)=1. */
     private val m5 = run {
         val w = 30.0
         val (u, uD, uDD) = oscSolution(w)
@@ -177,7 +177,7 @@ class Sec4VerificationTool {
         )
     }
 
-    // ==================== семейства функционалов ====================
+    // ==================== functional families ====================
 
     private fun family(tag: String, basis: MinimalSplineBasis): FunctionalFamily = when (tag) {
         "theta" -> ProjFunctionals(basis)
@@ -186,21 +186,21 @@ class Sec4VerificationTool {
         "xi2" -> DeBoorFixFunctionals(basis, 2)
         "xit1" -> DiscreteDeBoorFixFunctionals(basis, 1)
         "xit2" -> DiscreteDeBoorFixFunctionals(basis, 2)
-        else -> error("неизвестное семейство $tag")
+        else -> error("unknown family $tag")
     }
 
     private fun grid(kind: String, n: Int): Grid =
         if (kind == "uniform") Grid.uniform(n) else Grid.graded(n, ratio = 2.0)
 
     /**
-     * МЕМОИЗАЦИЯ ПРАВОЙ ЧАСТИ. `f` строится методом сфабрикованного решения, то есть
-     * КАЖДЫЙ её вызов — квадратура по ng узлам. При сборке вектора `d_j = chi_j(L f)`
-     * она вызывается ИЗ квадратуры, что даёт O(ng^2) обращений к ядру на узел (для
-     * n=128 это ~2e8 и практически незавершимо).
+     * MEMOIZATION OF THE RIGHT-HAND SIDE. `f` is built by the method of manufactured solutions, that is,
+     * EVERY call of it is a quadrature over ng nodes. When assembling the vector `d_j = chi_j(L f)`
+     * it is called FROM a quadrature, which gives O(ng^2) kernel evaluations per node (for
+     * n=128 that is ~2e8 and practically unfinishable).
      *
-     * Кэш не меняет чисел: `f` — чистая функция от `t`, множество запрашиваемых точек
-     * конечно (гауссовы узлы и опорные точки функционалов) и повторяется для всех j.
-     * Возвращается ровно то же значение, что и прямой вызов; проверяется health-check
+     * The cache does not change the numbers: `f` is a pure function of `t`, the set of requested points
+     * is finite (the Gauss nodes and the support points of the functionals) and repeats for all j.
+     * Exactly the same value is returned as by a direct call; this is checked by a health check
      * `memo consistency`.
      */
     private fun memo(f: (Double) -> Double): (Double) -> Double {
@@ -208,7 +208,7 @@ class Sec4VerificationTool {
         return { t -> cache.getOrPut(t) { f(t) } }
     }
 
-    // ==================== сбор результатов ====================
+    // ==================== collecting the results ====================
 
     private val log = StringBuilder()
     private val results = LinkedHashMap<String, Double>()
@@ -255,7 +255,7 @@ class Sec4VerificationTool {
                     "iterNystrom" -> solver.iteratedNystrom().eval
                     "combinedNystrom" -> solver.combinedNystrom().eval
                     "iterCombinedNystrom" -> solver.iteratedCombinedNystrom().eval
-                    else -> error("схема $s")
+                    else -> error("scheme $s")
                 }, g)
             }
         } else {
@@ -266,7 +266,7 @@ class Sec4VerificationTool {
                     "sloan" -> solver.sloan().eval
                     "kulkarni" -> solver.kulkarni().eval
                     "iterKulkarni" -> solver.iteratedKulkarni().eval
-                    else -> error("схема $s для F1")
+                    else -> error("scheme $s for F1")
                 }, g)
             }
         }
@@ -301,7 +301,7 @@ class Sec4VerificationTool {
                     "iterNystrom" -> solver.iteratedNystrom().eval
                     "combinedNystrom" -> solver.combinedNystrom().eval
                     "iterCombinedNystrom" -> solver.iteratedCombinedNystrom().eval
-                    else -> error("схема $s")
+                    else -> error("scheme $s")
                 }, g)
             }
         } else {
@@ -313,7 +313,7 @@ class Sec4VerificationTool {
                     "sloan" -> solver.sloan().eval
                     "kulkarni" -> solver.kulkarni().eval
                     "iterKulkarni" -> solver.iteratedKulkarni().eval
-                    else -> error("схема $s для V1")
+                    else -> error("scheme $s for V1")
                 }, g)
             }
         }
@@ -364,7 +364,7 @@ class Sec4VerificationTool {
         return worst
     }
 
-    /** ||P(P g) - P g||_inf: проверка P^2 = P. */
+    /** ||P(P g) - P g||_inf: a check of P^2 = P. */
     private fun projectorDefect(basis: MinimalSplineBasis, funcs: FunctionalFamily): Double {
         val n = basis.n
         val g = { t: Double -> exp(t) * cos(3.0 * t) }
@@ -387,7 +387,7 @@ class Sec4VerificationTool {
     }
 
     private fun healthChecks() {
-        hc.append("=== HEALTH-CHECKS (до измерений) ===\n")
+        hc.append("=== HEALTH CHECKS (before the measurements) ===\n")
         quadratureSmoke()
 
         for (tag in listOf("B", "H", "T", "T20.0", "T30.0", "T40.0")) {
@@ -410,15 +410,15 @@ class Sec4VerificationTool {
             }
         }
 
-        // xitilde: биортогональность ДОЛЖНА быть нарушена (rem:no-biorth).
+        // xitilde: the biorthogonality MUST be violated (rem:no-biorth).
         for (n in listOf(16, 32, 64, 128)) {
             val basis = MinimalSplineBasis(sysT(30.0), Grid.uniform(n))
             val d = biorthDefect(basis, DiscreteDeBoorFixFunctionals(basis, 1))
             emit("biorth.xit1.T30.n$n", d)
-            hcLine("biorth xitilde1(T30) n=$n (ожидается O(1))", d, 0.1, d > 0.1)
+            hcLine("biorth xitilde1(T30) n=$n (O(1) expected)", d, 0.1, d > 0.1)
         }
 
-        // Точная представимость: cos(30t) in span{1, sin 30t, cos 30t}.
+        // Exact representability: cos(30t) in span{1, sin 30t, cos 30t}.
         run {
             val w = 30.0
             val g = Grid.uniform(32)
@@ -437,7 +437,7 @@ class Sec4VerificationTool {
             hcLine("reproduction cos(30t) by theta(T30) n=32", worst, 1e-10, worst <= 1e-10)
         }
 
-        // Сходимость правой части по числу узлов квадратуры.
+        // The convergence of the right-hand side in the number of quadrature nodes.
         run {
             val g = Grid.uniform(64)
             val vals = listOf(8, 16, 32).map { q ->
@@ -451,7 +451,7 @@ class Sec4VerificationTool {
             hcLine("rhs M2 quad 16 vs 32 (n=64)", d2, 1e-12, d2 <= 1e-12)
         }
 
-        // Мемоизация правой части не должна менять числа (кэш — только ускорение).
+        // The memoization of the right-hand side must not change the numbers (the cache is only a speed-up).
         run {
             val g = Grid.uniform(16)
             val op = FredholmOperator(m2.kernel, g, GaussLegendre(8))
@@ -461,15 +461,15 @@ class Sec4VerificationTool {
             for (k in 0..500) {
                 val t = k / 500.0
                 worst = maxOf(worst, abs(cached(t) - direct(t)))
-                worst = maxOf(worst, abs(cached(t) - direct(t))) // второй вызов — из кэша
+                worst = maxOf(worst, abs(cached(t) - direct(t))) // the second call comes from the cache
             }
-            hcLine("memo consistency (rhs M2, 501 точек)", worst, 0.0, worst == 0.0)
+            hcLine("memo consistency (rhs M2, 501 points)", worst, 0.0, worst == 0.0)
         }
 
-        hc.append(if (hcFailures == 0) "ИТОГ: все health-checks PASS\n" else "ИТОГ: FAIL=$hcFailures\n")
+        hc.append(if (hcFailures == 0) "RESULT: all health checks PASS\n" else "RESULT: FAIL=$hcFailures\n")
     }
 
-    // ==================== таблицы ====================
+    // ==================== tables ====================
 
     private fun fredTable(
         tab: String, p: FredProblem, gridKind: String, ns: List<Int>,
@@ -528,11 +528,11 @@ class Sec4VerificationTool {
     }
 
     /**
-     * Выгрузка результатов. Путь ФИКСИРОВАН, а не задаётся system property: Gradle
-     * не пробрасывает `-D` из командной строки в форкнутый test-JVM (проверено:
-     * в `build.gradle.kts` передаются только `scipy.*` и `numerics.backend`), а правка
-     * `build.gradle.kts` была бы изменением репозитория вне зоны роли 12.
-     * Область прогона выбирается МЕТОДОМ через `--tests ...Sec4VerificationTool.<метод>`.
+     * The dump of the results. The path is FIXED and not set by a system property: Gradle
+     * does not forward `-D` from the command line into the forked test JVM (verified:
+     * `build.gradle.kts` passes only `scipy.*` and `numerics.backend`), while editing
+     * `build.gradle.kts` would be a change of the repository outside the scope of role 12.
+     * The scope of the run is chosen BY METHOD through `--tests ...Sec4VerificationTool.<method>`.
      */
     private fun dump(tag: String) {
         log.append("# elapsed: ").append((System.currentTimeMillis() - t0) / 1000.0).append(" s\n")
@@ -549,22 +549,22 @@ class Sec4VerificationTool {
             })
             append("\n}\n")
         })
-        println("записано: " + File(dir, "$tag.txt").absolutePath)
-        println("записано: " + File(dir, "$tag.json").absolutePath)
+        println("written: " + File(dir, "$tag.txt").absolutePath)
+        println("written: " + File(dir, "$tag.json").absolutePath)
         println("health-check FAIL: $hcFailures")
     }
 
     private val t0 = System.currentTimeMillis()
 
     private fun header(tag: String) {
-        log.append("# Sec4VerificationTool — независимая верификация таблиц §4\n")
+        log.append("# Sec4VerificationTool — an independent verification of the §4 tables\n")
         log.append("# scope: ").append(tag).append('\n')
         log.append("# backend: ").append(System.getProperty("numerics.backend", "default")).append('\n')
         log.append("# quad nodes/cell: ").append(QUAD).append('\n')
         log.append("# started: ").append(java.time.Instant.now()).append('\n')
     }
 
-    /** Число узлов составной квадратуры Гаусса--Лежандра на ячейку (-Dsec4.quad=16). */
+    /** The number of nodes of the composite Gauss--Legendre quadrature per cell (-Dsec4.quad=16). */
     private val QUAD: Int = (System.getProperty("sec4.quad") ?: "8").toInt()
 
     private val four = listOf("base", "sloan", "kulkarni", "iterKulkarni")
@@ -631,11 +631,11 @@ class Sec4VerificationTool {
     }
 
     /**
-     * Ошибка численного дифференцирования правой части в сведении M5 (Вольтерра I).
+     * The error of the numerical differentiation of the right-hand side in the reduction of M5 (Volterra I).
      *
-     * Библиотека вычисляет g'(t) = s'(t) + deriv4(t, g - s), где s — гладкая часть
-     * (в наших прогонах точное решение), а deriv4 — пятиточечная разность 4-го порядка
-     * с шагом 1e-3. Здесь та же величина сравнивается с аналитическим g' = f''.
+     * The library computes g'(t) = s'(t) + deriv4(t, g - s), where s is the smooth part
+     * (in our runs the exact solution), and deriv4 is a five-point difference of the 4th order
+     * with the step 1e-3. Here the same quantity is compared with the analytic g' = f''.
      */
     @Test
     fun sec4M5DerivError() {
@@ -644,11 +644,11 @@ class Sec4VerificationTool {
         val fdStep = 1e-3
         val g = Grid.uniform(128)
         val op = VolterraOperator(m5.kernel, g, GaussLegendre(8))
-        // g_eff(t) = f'(t) / K(t,t), K(t,t) = 1 для M5
+        // g_eff(t) = f'(t) / K(t,t), K(t,t) = 1 for M5
         val gEff = memo { t: Double -> op.applyDeriv(t) { s -> m5.exact(s) } / m5.kernel.k(t, t) }
         val residual = { t: Double -> gEff(t) - m5.exact(t) }
-        // deriv4 — воспроизведение формул библиотеки (центральная + односторонние у концов)
-        val tolB = 1e-9 * (g.b - g.a)   // BOUNDARY_RELATIVE_TOLERANCE библиотеки
+        // deriv4 is a reproduction of the library formulas (central + one-sided near the ends)
+        val tolB = 1e-9 * (g.b - g.a)   // BOUNDARY_RELATIVE_TOLERANCE of the library
         fun deriv4(t: Double, f: (Double) -> Double): Double = when {
             t - 2 * fdStep < g.a - tolB ->
                 (-25 * f(t) + 48 * f(t + fdStep) - 36 * f(t + 2 * fdStep) +
@@ -664,21 +664,21 @@ class Sec4VerificationTool {
             val exactGD = op.applyDeriv2(t, { s -> m5.exact(s) }, m5.exactD) / m5.kernel.k(t, t)
             return abs(fd - exactGD)
         }
-        // (а) по всей контрольной сетке
+        // (a) over the whole control grid
         var wAll = 0.0; var atAll = 0.0
         val m = 1281
         for (k in 0..m) {
             val t = g.a + (g.b - g.a) * k / m
             val e = err(t); if (e > wAll) { wAll = e; atAll = t }
         }
-        // (б) вне пятиточечного пограничного слоя (|t-a|,|t-b| > 4h_fd)
+        // (b) outside the five-point boundary layer (|t-a|,|t-b| > 4h_fd)
         var wIn = 0.0
         for (k in 0..m) {
             val t = g.a + (g.b - g.a) * k / m
             if (t - g.a <= 4 * fdStep || g.b - t <= 4 * fdStep) continue
             wIn = maxOf(wIn, err(t))
         }
-        // (в) ТОЛЬКО в узлах сетки — именно там функционалы xi берут производную
+        // (c) ONLY at the grid nodes — it is there that the xi functionals take the derivative
         var wNodes = 0.0; var atNodes = 0.0
         for (j in -2..g.n + 1) {
             val t = g.a + j * (g.b - g.a) / g.n
@@ -690,22 +690,22 @@ class Sec4VerificationTool {
         emit("m5.derivError.interior", wIn)
         emit("m5.derivError.nodes", wNodes)
         emit("m5.derivError.nodesAt", atNodes)
-        println("eps_D по всей сетке      = " + fmt(wAll) + "  при t = " + fmt(atAll))
-        println("eps_D вне погранслоя     = " + fmt(wIn))
-        println("eps_D в узлах сетки      = " + fmt(wNodes) + "  при t = " + fmt(atNodes))
+        println("eps_D over the whole grid    = " + fmt(wAll) + "  at t = " + fmt(atAll))
+        println("eps_D outside the layer     = " + fmt(wIn))
+        println("eps_D at the grid nodes     = " + fmt(wNodes) + "  at t = " + fmt(atNodes))
         dump("m5deriv")
     }
 
     /**
-     * КОНТРОЛЬ: определены ли числа tab:m5 ошибкой численного дифференцирования?
+     * A CONTROL: are the numbers of tab:m5 determined by the error of the numerical differentiation?
      *
-     * Редуцированное уравнение M5 выписывается аналитически:
+     * The reduced equation M5 is written out analytically:
      *   K(t,t)=1, K_t(t,s)=1-cos(w(t-s))  =>  u - W u = g,
-     *   W: ядро -(1-cos(w(t-s))), d/dt[-(1-cos)] = -w sin(w(t-s)),
+     *   W: the kernel -(1-cos(w(t-s))), d/dt[-(1-cos)] = -w sin(w(t-s)),
      *   g = f' = u + \int (1-cos) u,  g' = f''.
-     * Здесь g и g' задаются АНАЛИТИЧЕСКИ (через applyDeriv/applyDeriv2 исходного
-     * оператора), то есть пятиточечная разность не участвует вовсе. Сравнение с
-     * tab:m5 показывает вклад ошибки дифференцирования.
+     * Here g and g' are given ANALYTICALLY (through applyDeriv/applyDeriv2 of the original
+     * operator), that is, the five-point difference does not take part at all. The comparison with
+     * tab:m5 shows the contribution of the differentiation error.
      */
     @Test
     fun sec4M5AnalyticVsFD() {
@@ -722,7 +722,7 @@ class Sec4VerificationTool {
                 val funcs = family("xi1", basis)
                 val opOrig = VolterraOperator(m5.kernel, g, GaussLegendre(8))
                 val opRed = VolterraOperator(reduced, g, GaussLegendre(8))
-                // g = f'/K(t,t) и g' = f''/K(t,t) — аналитически (K(t,t)=1)
+                // g = f'/K(t,t) and g' = f''/K(t,t) — analytically (K(t,t)=1)
                 val gEff = memo { t: Double -> opOrig.applyDeriv(t) { s -> m5.exact(s) } }
                 val gEffD = memo { t: Double -> opOrig.applyDeriv2(t, { s -> m5.exact(s) }, m5.exactD) }
                 val solver = VolterraSecondKindSolver(

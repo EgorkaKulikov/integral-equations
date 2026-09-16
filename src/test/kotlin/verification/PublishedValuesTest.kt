@@ -21,208 +21,208 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * СВЕРКА С ОПУБЛИКОВАННЫМИ РЕЗУЛЬТАТАМИ (задача 2.2).
+ * CROSS-CHECK AGAINST PUBLISHED RESULTS (task 2.2).
  *
- * В отличие от `characterization.EhCharacterizationTest`, который фиксирует
- * собственное поведение реализации, этот тест сверяет вычисленные значения с
- * ВНЕШНИМ источником — таблицами статьи, помеченными «Do not alter numbers».
- * Числа получены другим запуском на другой ревизии кода, поэтому совпадение
- * является независимым подтверждением, а не самопроверкой.
+ * Unlike `characterization.EhCharacterizationTest`, which records
+ * the implementation's own behaviour, this test cross-checks the computed values against an
+ * EXTERNAL source — the tables of the article, marked "Do not alter numbers".
+ * The numbers were obtained by another run on another code revision, so a match
+ * is an independent confirmation and not a self-check.
  *
- * Эталон: `src/test/resources/verification/published-values.tsv`
- * (ключ, значение, файл-источник, расположение в файле).
+ * Baseline: `src/test/resources/verification/published-values.tsv`
+ * (key, value, source file, location in the file).
  *
- * ВАЖНО. Допуск [RELATIVE_TOLERANCE] определяется точностью публикации (четыре
- * значащие цифры) и НЕ подлежит ослаблению для «прохождения» теста. Расхождение
- * свыше допуска означает либо реальное расхождение с опубликованным результатом,
- * либо ошибку переноса числа — и то, и другое требует разбирательства.
+ * IMPORTANT. The tolerance [RELATIVE_TOLERANCE] is determined by the precision of the publication (four
+ * significant digits) and is NOT subject to loosening in order to "pass" the test. A discrepancy
+ * above the tolerance means either a real discrepancy with the published result,
+ * or an error in transcribing a number — both require investigation.
  *
- * УТОЧНЕНИЕ (этап 8.6). Сказанное выше остаётся в силе без изменений: общий допуск
- * [RELATIVE_TOLERANCE] = 2 % НЕ ОСЛАБЛЕН и применяется к 702 ключам из 708,
- * включая 60 ключей F1 из `table-xi-f1.tex`. Дополнительно введён ОТДЕЛЬНЫЙ класс
- * допуска [LU_PATH_DEPENDENT_TOLERANCE] для ОДНОЙ таблицы-источника (6 ключей),
- * которая, как ИЗМЕРЕНО, снята на ДРУГОМ пути LU, чем остальные таблицы F1.
- * Причина документирована числами в KDoc самого допуска и в шапке
- * `published-values.tsv`; принадлежность определяется ПО ДАННЫМ — по полю
- * файла-источника в эталоне, а не списком ключей в коде теста.
+ * REFINEMENT (stage 8.6). What is said above stays in force unchanged: the general tolerance
+ * [RELATIVE_TOLERANCE] = 2 % is NOT LOOSENED and applies to 702 keys out of 708,
+ * including the 60 F1 keys from `table-xi-f1.tex`. Additionally a SEPARATE tolerance
+ * class [LU_PATH_DEPENDENT_TOLERANCE] is introduced for ONE source table (6 keys),
+ * which, as MEASURED, was shot on a DIFFERENT LU path than the other F1 tables.
+ * The reason is documented with numbers in the KDoc of the tolerance itself and in the header of
+ * `published-values.tsv`; membership is determined BY THE DATA — by the source file
+ * field in the baseline, and not by a list of keys in the test code.
  *
- * УТОЧНЕНИЕ (2026-09-09, numerical-core 1.0.0). Реализация LAPACK сменилась
- * (multik/OpenBLAS → netlib с системной библиотекой), и 17 из 42 ключей F1 разошлись
- * с публикацией на 2.03–14.82 %. Допуск 2 % НЕ ослаблен: эти ключи перечислены в
- * [KNOWN_LU_PATH_DEVIATIONS] как ИЗВЕСТНОЕ расхождение и проверяются границей прямой
- * ошибки `2·cond₁·ω·‖u‖∞` ([F1_LU_PATH_DEVIATION_BOUND]), измеренной
- * `characterization.F1ConditioningTest`; обоснование — `docs/baseline-changes.md`.
+ * REFINEMENT (2026-09-09, numerical-core 1.0.0). The LAPACK implementation changed
+ * (multik/OpenBLAS → netlib with a system library), and 17 of the 42 F1 keys diverged
+ * from the publication by 2.03–14.82 %. The 2 % tolerance is NOT loosened: these keys are listed in
+ * [KNOWN_LU_PATH_DEVIATIONS] as a KNOWN discrepancy and are checked against the forward
+ * error bound `2·cond₁·ω·‖u‖∞` ([F1_LU_PATH_DEVIATION_BOUND]), measured by
+ * `characterization.F1ConditioningTest`; the justification is in `docs/baseline-changes.md`.
  *
- * УТОЧНЕНИЕ (2026-09-10, minimal-splines 1.0.0). Базис минимальных сплайнов вычисляется
- * в локальных координатах интервала (`cond(M̃_k) ≈ 13…21` вместо `10³…10⁴` в 0.1.0).
- * Для задач с точным решением в `span φ` (F2exp и V2exp с базисом H, V2win с базисом T)
- * опубликованные `E_h ~ 10⁻¹²…10⁻¹⁰` оказались погрешностью обращения матриц
- * аппроксимационного соотношения реализацией 0.1.0, а не погрешностью метода: 17 ключей
- * [KNOWN_CONDITIONING_ARTIFACTS] проверяются машинным уровнем
- * [CONDITIONING_ARTIFACT_MACHINE_LEVEL], а не сравнением с публикацией. Ещё 6 ключей F1
- * вышли за 2 % (2.29–8.69 %) в пределах той же границы `2·cond₁·ω·‖u‖∞` и добавлены в
- * [KNOWN_LU_PATH_DEVIATIONS] (17 → 23). Допуск 2 % не менялся; обоснование —
- * `docs/baseline-changes.md` (запись от 2026-09-10).
+ * REFINEMENT (2026-09-10, minimal-splines 1.0.0). The minimal spline basis is computed
+ * in local coordinates of the interval (`cond(M̃_k) ≈ 13…21` instead of `10³…10⁴` in 0.1.0).
+ * For the problems with the exact solution in `span φ` (F2exp and V2exp with the basis H, V2win with the basis T)
+ * the published `E_h ~ 10⁻¹²…10⁻¹⁰` turned out to be the error of inverting the matrices
+ * of the approximation relation by the 0.1.0 implementation, and not the error of the method: 17 keys
+ * [KNOWN_CONDITIONING_ARTIFACTS] are checked against the machine level
+ * [CONDITIONING_ARTIFACT_MACHINE_LEVEL] rather than by comparison with the publication. Another 6 F1 keys
+ * went beyond 2 % (2.29–8.69 %) within the same bound `2·cond₁·ω·‖u‖∞` and were added to
+ * [KNOWN_LU_PATH_DEVIATIONS] (17 → 23). The 2 % tolerance was not changed; the justification is in
+ * `docs/baseline-changes.md` (the entry of 2026-09-10).
  *
- * Чего широкий допуск НЕ делает: он НЕ заменяет гейт численной неизменности.
- * Мелкие регрессии в F1 ловит `characterization.EhCharacterizationTest` с допуском
- * 1e-9, чьё покрытие F1 расширено в том же этапе ИМЕННО в качестве компенсации
- * (замер: огрубление квадратуры 8→6 проходит сверку с публикацией незамеченным
- * даже при допуске 2 %, но роняет характеризационный гейт на всех ключах F1).
+ * What the wide tolerance does NOT do: it does NOT replace the numerical invariance gate.
+ * Small regressions in F1 are caught by `characterization.EhCharacterizationTest` with the tolerance
+ * 1e-9, whose F1 coverage was extended in the same stage EXACTLY as compensation
+ * (measurement: coarsening the quadrature 8→6 passes the cross-check with the publication unnoticed
+ * even at the 2 % tolerance, but breaks the characterization gate on all the F1 keys).
  */
 @Tag("slow")
 class PublishedValuesTest {
 
     private companion object {
         /**
-         * Относительный допуск сверки.
+         * The relative tolerance of the cross-check.
          *
-         * В таблицах статьи приведено четыре значащие цифры, поэтому собственная
-         * погрешность записи числа достигает 0.05 %. Допуск 2 % даёт запас на
-         * различие версий JDK, порядка суммирования при параллельной сборке матриц
-         * и накопление ошибки округления, оставаясь при этом на два порядка строже
-         * любого содержательного изменения алгоритма.
+         * The tables of the article give four significant digits, so the intrinsic
+         * error of writing down a number reaches 0.05 %. A tolerance of 2 % gives a margin for
+         * a difference of JDK versions, of the summation order in a parallel matrix assembly
+         * and for the accumulation of rounding error, while staying two orders stricter
+         * than any substantial change of the algorithm.
          */
         const val RELATIVE_TOLERANCE = 0.02
 
         /**
-         * УЗКИЙ ДОПУСК для таблиц, снятых на ДРУГОМ пути линейной алгебры.
+         * A NARROW TOLERANCE for the tables shot on a DIFFERENT linear algebra path.
          *
-         * Применяется ТОЛЬКО к ключам из [LU_PATH_DEPENDENT_SOURCES] — шести значений
-         * `F.F1.H.theta.*` из `table-f1.tex`. Остальные 702 ключа эталона, в том числе
-         * 60 ключей F1 из `table-xi-f1.tex` (36 из них — `Eh`), остаются под
+         * Applies ONLY to the keys from [LU_PATH_DEPENDENT_SOURCES] — six values
+         * `F.F1.H.theta.*` from `table-f1.tex`. The other 702 keys of the baseline, including
+         * the 60 F1 keys from `table-xi-f1.tex` (36 of them `Eh`), stay under
          * [RELATIVE_TOLERANCE] = 2 %.
          *
-         * ПОЧЕМУ ТАКОЙ КЛАСС НУЖЕН. F1 — уравнение ПЕРВОГО рода, решаемое
-         * регуляризацией Вазваза с `alpha = 1e-10`, то есть `c_L = -1/alpha = -1e10`.
-         * Измерено (этап 8.6, отчёт `MEASURE-8.6-f1-tolerance.md`):
-         * `cond_inf(I-M)` = 1.18e10–2.70e10, `‖g‖_inf` = 1.59e10, а в схеме Слоана два
-         * слагаемых порядка 1.38e10 сокращаются до 2.7 (потеря ~9.7 из 16 цифр).
-         * Поэтому `E_h` для F1 ограниченно воспроизводима между реализациями LU:
-         * одна и та же формула на бэкендах `multik` и `reference` даёт разные числа.
+         * WHY SUCH A CLASS IS NEEDED. F1 is an equation of the FIRST kind, solved by
+         * Wazwaz regularization with `alpha = 1e-10`, that is, `c_L = -1/alpha = -1e10`.
+         * Measured (stage 8.6, report `MEASURE-8.6-f1-tolerance.md`):
+         * `cond_inf(I-M)` = 1.18e10–2.70e10, `‖g‖_inf` = 1.59e10, while in the Sloan scheme two
+         * terms of order 1.38e10 cancel down to 2.7 (a loss of ~9.7 of the 16 digits).
+         * Therefore `E_h` for F1 is only boundedly reproducible between LU implementations:
+         * one and the same formula on the backends `multik` and `reference` gives different numbers.
          *
-         * ВЫВОД ВЕЛИЧИНЫ. Допуск = точность публикации + ИЗМЕРЕННЫЙ разброс между
-         * путями LU ВНУТРИ САМОЙ `table-f1.tex` (6 ключей, оба бэкенда, JDK 21):
-         *   5e-4   — четыре значащие цифры в таблицах статьи → 0.05 %
-         *            (тот же множитель, что у [RELATIVE_TOLERANCE]);
-         *   0.07267 — МАКСИМАЛЬНОЕ измеренное расхождение `multik` против
-         *            `reference` НА ЭТИХ ЖЕ 6 ключах: ключ `F.F1.H.theta.n8.sloan`,
-         *            multik 6.14224e-5 против reference 6.58861e-5. Разность
-         *            нормирована на МЕНЬШЕЕ из двух значений (7.267 %), а не на
-         *            большее (6.775 %): сама сверка делит на опубликованное
-         *            значение, которое может оказаться любым из двух, и меньший
-         *            знаменатель даёт добросовестную верхнюю границу.
-         * Сумма 0.07317 округлена вверх до 0.08: округление вниз отбросило бы часть
-         * измеренного разброса и сделало бы допуск необоснованным снизу.
+         * DERIVATION OF THE VALUE. The tolerance = the precision of the publication + the MEASURED spread between
+         * the LU paths INSIDE `table-f1.tex` ITSELF (6 keys, both backends, JDK 21):
+         *   5e-4   — four significant digits in the tables of the article → 0.05 %
+         *            (the same factor as for [RELATIVE_TOLERANCE]);
+         *   0.07267 — the MAXIMUM measured discrepancy of `multik` against
+         *            `reference` ON THESE VERY 6 keys: the key `F.F1.H.theta.n8.sloan`,
+         *            multik 6.14224e-5 against reference 6.58861e-5. The difference is
+         *            normalized by the SMALLER of the two values (7.267 %) and not by the
+         *            larger one (6.775 %): the cross-check itself divides by the published
+         *            value, which may turn out to be either of the two, and the smaller
+         *            denominator gives a conscientious upper bound.
+         * The sum 0.07317 is rounded up to 0.08: rounding down would discard part of the
+         * measured spread and would make the tolerance unjustified from below.
          *
-         * ПОЧЕМУ ИМЕННО ВНУТРИ ТАБЛИЦЫ, а не по всей группе F1. Максимум по всем
-         * 42 ключам F1 равен 11.483 % (ключ `F.F1.B.xi1.n32.sloan`, медиана 0.98 %),
-         * и допуск из него дал бы 0.12 — в 1.5 раза шире необходимого. Но тот ключ
-         * лежит в ДРУГОЙ таблице (`table-xi-f1.tex`), которая послаблению НЕ
-         * подлежит и проверяется строгими 2 %. Переносить его разброс сюда —
-         * значит расширять послабление величиной, измеренной на других данных.
-         * Чем уже допуск, тем он полезнее, если запас над фактом сохраняется.
+         * WHY INSIDE THE TABLE and not over the whole F1 group. The maximum over all
+         * 42 F1 keys equals 11.483 % (the key `F.F1.B.xi1.n32.sloan`, median 0.98 %),
+         * and a tolerance derived from it would give 0.12 — 1.5 times wider than needed. But that key
+         * lies in a DIFFERENT table (`table-xi-f1.tex`), which is NOT subject to a
+         * relaxation and is checked by the strict 2 %. Transferring its spread here
+         * would mean widening the relaxation by a value measured on other data.
+         * The narrower the tolerance, the more useful it is, as long as the margin over the fact is kept.
          *
-         * ЗАПАС НАД ФАКТОМ. Фактические отклонения этих шести ключей от публикации
-         * на `multik`: 0.43 / 6.78 / 0.74 / 3.14 / 3.47 / 4.23 % — запас над худшим 1.18×.
-         * На `reference` — 0.00 / 0.01 / 0.01 / 2.17 / 0.01 / 4.23 %, запас 1.89×. То есть
-         * сверка этих ключей бэкенд-НЕЗАВИСИМА (проверено прогоном на обоих),
-         * тогда как до этого тест падал на 4 ключах при `multik` и на 13 при `reference`.
-         * Запас 1.18× сознательно невелик: шире делать нечем — всё, что шире, уже не
-         * измерено на этих данных и было бы подгонкой.
+         * THE MARGIN OVER THE FACT. The actual deviations of these six keys from the publication
+         * on `multik`: 0.43 / 6.78 / 0.74 / 3.14 / 3.47 / 4.23 % — the margin over the worst is 1.18×.
+         * On `reference`: 0.00 / 0.01 / 0.01 / 2.17 / 0.01 / 4.23 %, the margin is 1.89×. That is,
+         * the cross-check of these keys is backend-INDEPENDENT (verified by a run on both),
+         * whereas before this the test failed on 4 keys with `multik` and on 13 with `reference`.
+         * The margin 1.18× is deliberately small: there is nothing to make it wider with — anything wider is not
+         * measured on these data and would be fitting.
          */
         const val LU_PATH_DEPENDENT_TOLERANCE = 0.08
 
         /**
-         * Файлы-источники, к ключам которых применяется [LU_PATH_DEPENDENT_TOLERANCE].
+         * The source files whose keys [LU_PATH_DEPENDENT_TOLERANCE] applies to.
          *
-         * Признак берётся ИЗ ДАННЫХ — из третьего поля эталона (`файл-источник`),
-         * а НЕ из списка ключей. Это принципиально: список ключей в коде теста
-         * превратил бы послабление в перечисление «какие ключи сегодня падают»
-         * — тогда новое расхождение в той же таблице проверялось бы строго, а сами
-         * послабления пришлось бы поддерживать вручную. Критерий — СВОЙСТВО
-         * ИСТОЧНИКА («эта таблица статьи снята на другом пути LU»), а не состояние
-         * теста, и потому он живёт в тех же данных, что и само свойство.
+         * The criterion is taken FROM THE DATA — from the third field of the baseline (`source file`),
+         * and NOT from a list of keys. This is essential: a list of keys in the test code
+         * would turn the relaxation into an enumeration of "which keys fail today"
+         * — then a new discrepancy in the same table would be checked strictly, while the
+         * relaxations themselves would have to be maintained by hand. The criterion is a PROPERTY
+         * OF THE SOURCE ("this table of the article was shot on a different LU path"), and not a state
+         * of the test, and therefore it lives in the same data as the property itself.
          *
-         * Формат эталона расширять НЕ ПОНАДОБИЛОСЬ: поле файла-источника в нём
-         * было с самого начала и уже проверяется на непустоту в
+         * Extending the format of the baseline was NOT NEEDED: the source file field was in it
+         * from the very beginning and is already checked for non-emptiness in
          * [publishedValuesResourceIsWellFormed].
          */
         val LU_PATH_DEPENDENT_SOURCES = setOf("table-f1.tex")
 
         /**
-         * Граница расхождения двух обратно устойчивых решений F1-системы разными путями
-         * LU: `2·cond₁·ω·‖u‖∞` = 2 · 2.33e10 · 3.0e-16 · 2.718 ≈ 3.8e-5 (абсолютная, по `E_h`).
+         * The bound on the discrepancy of two backward stable solutions of the F1 system by different
+         * LU paths: `2·cond₁·ω·‖u‖∞` = 2 · 2.33e10 · 3.0e-16 · 2.718 ≈ 3.8e-5 (absolute, in `E_h`).
          *
-         * Числа измерены `characterization.F1ConditioningTest` на всех 27 системах F1
+         * The numbers are measured by `characterization.F1ConditioningTest` on all 27 F1 systems
          * (numerical-core 1.0.0, netlib + Apple Accelerate, JDK 21): `cond₁ ∈ [2.14e10, 2.33e10]`,
-         * `ω ∈ [7.6e-17, 3.0e-16]`; `‖u‖∞ = e` — максимум точного решения `e^t` на `[0,1]`.
-         * Множитель 2: каждое из двух решений отстоит от точного не более чем на
-         * `cond·ω·‖u‖`. Взяты максимумы по всем системам, поэтому граница одна на все ключи.
+         * `ω ∈ [7.6e-17, 3.0e-16]`; `‖u‖∞ = e` is the maximum of the exact solution `e^t` on `[0,1]`.
+         * The factor 2: each of the two solutions is at most
+         * `cond·ω·‖u‖` away from the exact one. The maxima over all systems are taken, so the bound is one for all keys.
          */
         const val F1_LU_PATH_DEVIATION_BOUND = 2 * 2.33e10 * 3.0e-16 * 2.718
 
         /**
-         * Ключи F1, для которых расхождение с публикацией свыше допуска — ИЗВЕСТНОЕ и
-         * объяснённое: опубликованные значения воспроизводимы только тем же путём
-         * LU-разложения (multik/OpenBLAS), которым были сняты. С numerical-core 1.0.0
-         * (netlib, системная библиотека) эти 17 из 42 ключей отклоняются на 2.03–14.82 %
-         * при `cond₁ ≈ 2·10¹⁰`, `ω ≤ 3·10⁻¹⁶`, то есть в пределах [F1_LU_PATH_DEVIATION_BOUND]
-         * (максимум |Δ| = 1.34e-5 при границе 3.8e-5). Для них вместо 2 % проверяется
-         * эта граница; остальные 25 ключей F1 — прежним допуском.
+         * The F1 keys for which the discrepancy with the publication above the tolerance is KNOWN and
+         * explained: the published values are reproducible only by the same
+         * LU decomposition path (multik/OpenBLAS) they were shot with. Since numerical-core 1.0.0
+         * (netlib, a system library) these 17 of the 42 keys deviate by 2.03–14.82 %
+         * at `cond₁ ≈ 2·10¹⁰`, `ω ≤ 3·10⁻¹⁶`, that is, within [F1_LU_PATH_DEVIATION_BOUND]
+         * (the maximum |Δ| = 1.34e-5 against the bound 3.8e-5). For them this bound is checked
+         * instead of the 2 %; the other 25 F1 keys keep the former tolerance.
          *
-         * Список ЯВНЫЙ намеренно: если ключ из него снова сойдётся с публикацией — он
-         * пройдёт и по 2 %, ничего не сломав; если разойдётся ключ НЕ из списка — тест
-         * упадёт, как и должен. Измерение — `characterization.F1ConditioningTest`,
-         * обоснование — `docs/baseline-changes.md` (запись от 2026-09-09).
+         * The list is EXPLICIT on purpose: if a key from it converges with the publication again, it
+         * will also pass the 2 % without breaking anything; if a key NOT in the list diverges, the test
+         * will fail, as it should. The measurement is `characterization.F1ConditioningTest`,
+         * the justification is `docs/baseline-changes.md` (the entry of 2026-09-09).
          *
-         * Дополнение (2026-09-10, minimal-splines 1.0.0): базис в локальных координатах
-         * возмущает коэффициенты F1-систем на `cond·10⁻¹²·‖u‖`, и ещё 6 ключей вышли за
-         * допуск на 2.29–8.69 % (максимум |Δ| = 5.8e-6 при границе 3.8e-5; на 1.0.0 измерено
-         * `ω ≤ 4.6e-16`, граница с `ω = 3.0e-16` сохранена как более строгая). Итого 23 ключа.
+         * Addition (2026-09-10, minimal-splines 1.0.0): the basis in local coordinates
+         * perturbs the coefficients of the F1 systems by `cond·10⁻¹²·‖u‖`, and another 6 keys went beyond
+         * the tolerance by 2.29–8.69 % (the maximum |Δ| = 5.8e-6 against the bound 3.8e-5; on 1.0.0
+         * `ω ≤ 4.6e-16` was measured, the bound with `ω = 3.0e-16` is kept as the stricter one). 23 keys in total.
          */
         val KNOWN_LU_PATH_DEVIATIONS = setOf(
-            // numerical-core 1.0.0 (2026-09-09): 17 ключей.
+            // numerical-core 1.0.0 (2026-09-09): 17 keys.
             "F.F1.B.xi1.n16.sloan.Eh", "F.F1.B.xi1.n32.base.Eh", "F.F1.B.xi1.n32.sloan.Eh",
             "F.F1.B.xi2.n32.sloan.Eh", "F.F1.H.theta.n32.sloan.Eh", "F.F1.H.xi1.n16.base.Eh",
             "F.F1.H.xi1.n16.sloan.Eh", "F.F1.H.xi1.n32.base.Eh", "F.F1.H.xi1.n32.sloan.Eh",
             "F.F1.H.xi2.n32.base.Eh", "F.F1.H.xi2.n32.sloan.Eh", "F.F1.T.xi1.n32.base.Eh",
             "F.F1.T.xi1.n32.sloan.Eh", "F.F1.T.xi2.n16.base.Eh", "F.F1.T.xi2.n16.sloan.Eh",
             "F.F1.T.xi2.n32.base.Eh", "F.F1.T.xi2.n32.sloan.Eh",
-            // minimal-splines 1.0.0 (2026-09-10): 6 ключей, 2.29–8.69 %.
+            // minimal-splines 1.0.0 (2026-09-10): 6 keys, 2.29–8.69 %.
             "F.F1.B.xi2.n8.sloan.Eh", "F.F1.B.xi2.n16.sloan.Eh", "F.F1.B.xi2.n32.base.Eh",
             "F.F1.H.theta.n8.sloan.Eh", "F.F1.H.xi1.n8.sloan.Eh", "F.F1.T.xi1.n16.sloan.Eh",
         )
 
         /**
-         * Машинный уровень `E_h` для ключей [KNOWN_CONDITIONING_ARTIFACTS]: `1e-14`, то есть
-         * порядка `10·ε·‖u‖∞` (`ε = 2.2e-16`, `‖u‖∞ ≤ e`). Фактические значения на
-         * minimal-splines 1.0.0 — `8.9e-16…5.1e-15` (запас в два раза на различие
-         * реализаций BLAS и архитектур CPU; `EhCharacterizationTest` держит те же ключи с
-         * полом `6e-13`, так что сдвиг внутри запаса здесь не был бы регрессией).
+         * The machine level of `E_h` for the keys [KNOWN_CONDITIONING_ARTIFACTS]: `1e-14`, that is,
+         * of order `10·ε·‖u‖∞` (`ε = 2.2e-16`, `‖u‖∞ ≤ e`). The actual values on
+         * minimal-splines 1.0.0 are `8.9e-16…5.1e-15` (a twofold margin for a difference of
+         * BLAS implementations and CPU architectures; `EhCharacterizationTest` keeps the same keys with
+         * a floor of `6e-13`, so a shift within the margin would not be a regression here).
          */
         const val CONDITIONING_ARTIFACT_MACHINE_LEVEL = 1e-14
 
         /**
-         * Ключи, опубликованные значения которых — артефакт обусловленности реализации
-         * базиса minimal-splines 0.1.0, а не погрешность метода.
+         * The keys whose published values are an artifact of the conditioning of the
+         * minimal-splines 0.1.0 basis implementation, and not an error of the method.
          *
-         * Задачи F2exp и V2exp с базисом H и V2win с базисом T имеют точное решение в
-         * `span φ` порождающей системы; метод на нём точен по построению. Опубликованные
-         * значения (`7.2·10⁻¹²`, `1.7·10⁻¹¹`, `1.1·10⁻¹⁰` для `F2exp.H.theta` при
-         * `n = 16/32/64` и аналогичные для остальных 14 ключей, всего `1.1e-12…1.4e-10`)
-         * получены реализацией базиса в глобальных координатах порождающей системы и
-         * отражают погрешность обращения матриц аппроксимационного соотношения
-         * (`cond ~ 10³…10⁴`, рост `~n²`), а не погрешность метода. В текущей реализации
-         * (локальные координаты интервала, `cond ≈ 21`) `E_h` на этих ключах не превышает
-         * `6·10⁻¹⁵`. Для них вместо сравнения с публикацией проверяется
+         * The problems F2exp and V2exp with the basis H and V2win with the basis T have the exact solution in
+         * `span φ` of the generating system; the method is exact on it by construction. The published
+         * values (`7.2·10⁻¹²`, `1.7·10⁻¹¹`, `1.1·10⁻¹⁰` for `F2exp.H.theta` at
+         * `n = 16/32/64` and similar ones for the other 14 keys, `1.1e-12…1.4e-10` in total)
+         * were obtained by the basis implementation in the global coordinates of the generating system and
+         * reflect the error of inverting the matrices of the approximation relation
+         * (`cond ~ 10³…10⁴`, growth `~n²`), and not the error of the method. In the current implementation
+         * (local coordinates of the interval, `cond ≈ 21`) `E_h` on these keys does not exceed
+         * `6·10⁻¹⁵`. For them, instead of a comparison with the publication, the check is against
          * `E_h ≤ CONDITIONING_ARTIFACT_MACHINE_LEVEL`.
          *
-         * Список ЯВНЫЙ: остальные ключи тех же таблиц с опубликованным значением ниже
-         * [NOISE_FLOOR] исключаются из сверки как шум по общему правилу, а ключи с
-         * решением вне `span φ` (базисы B и T для exp-задач, H для V2win) сверяются
-         * с публикацией допуском 2 %. Обоснование — `docs/baseline-changes.md`
-         * (запись от 2026-09-10) и minimal-splines `docs/ACCURACY.md`.
+         * The list is EXPLICIT: the other keys of the same tables with a published value below
+         * [NOISE_FLOOR] are excluded from the cross-check as noise by the general rule, and the keys with
+         * a solution outside `span φ` (the bases B and T for the exp problems, H for V2win) are cross-checked
+         * against the publication with the 2 % tolerance. The justification is `docs/baseline-changes.md`
+         * (the entry of 2026-09-10) and minimal-splines `docs/ACCURACY.md`.
          */
         val KNOWN_CONDITIONING_ARTIFACTS = setOf(
             "F.F2exp.H.theta.n16.base.Eh", "F.F2exp.H.theta.n32.base.Eh", "F.F2exp.H.theta.n64.base.Eh",
@@ -235,24 +235,24 @@ class PublishedValuesTest {
         )
 
         /**
-         * ТОЧНЫЙ СПИСОК ключей, на которых ИЗМЕРЕН разброс бэкендов и потому
-         * допустим [LU_PATH_DEPENDENT_TOLERANCE].
+         * THE EXACT LIST of keys on which the spread of the backends is MEASURED and therefore
+         * [LU_PATH_DEPENDENT_TOLERANCE] is admissible.
          *
-         * ПРОТИВ МОЛЧАЛИВОГО ПЕРЕНОСА ПОСЛАБЛЕНИЯ. Признак применения
-         * широкого допуска берётся из ДАННЫХ (поле файла-источника), и это
-         * правильно — но ровно поэтому изменение этого поля у ЛЮБОЙ СТРОКИ перенесло
-         * бы послабление на величину, для которой разброс НЕ ИЗМЕРЯЛСЯ.
+         * AGAINST A SILENT TRANSFER OF THE RELAXATION. The criterion for applying
+         * the wide tolerance is taken from the DATA (the source file field), and this is
+         * right — but exactly for that reason a change of this field on ANY ROW would transfer
+         * the relaxation to a value for which the spread was NOT MEASURED.
          *
-         * Сравнивается именно МНОЖЕСТВО КЛЮЧЕЙ, а НЕ их КОЛИЧЕСТВО: проверка
-         * числа пропустила бы ПОДМЕНУ — если одной строке сменить источник на
-         * `table-f1.tex`, а другой — убрать, количество осталось бы равным шести,
-         * а послабление тихо уехало бы на неизмеренный ключ. См.
+         * It is exactly the SET OF KEYS that is compared, and NOT their NUMBER: a check of the
+         * number would miss a SUBSTITUTION — if one row had its source changed to
+         * `table-f1.tex` and another one removed, the number would stay equal to six,
+         * while the relaxation would quietly move to an unmeasured key. See
          * [luPathDependentToleranceCoversExactlyTheDeclaredKeys].
          *
-         * Список — НЕ дубликат критерия отбора и НЕ заменяет его: в самой сверке
-         * ([toleranceFor]) по-прежнему работает признак из данных. Это СПИСОК
-         * ИЗМЕРЕННОГО: ровно те шесть ключей, для которых этап 8.6 измерил
-         * разброс между `multik` и `reference` (отчёт `MEASURE-8.6-f1-tolerance.md`).
+         * The list is NOT a duplicate of the selection criterion and does NOT replace it: in the cross-check itself
+         * ([toleranceFor]) the criterion from the data still works. This is a LIST
+         * OF WHAT WAS MEASURED: exactly the six keys for which stage 8.6 measured the
+         * spread between `multik` and `reference` (report `MEASURE-8.6-f1-tolerance.md`).
          */
         val LU_PATH_DEPENDENT_KEYS = setOf(
             "F.F1.H.theta.n8.base.Eh",
@@ -264,81 +264,81 @@ class PublishedValuesTest {
         )
 
         /**
-         * Порог машинного шума для значений `E_h`.
+         * The machine noise threshold for the `E_h` values.
          *
-         * Значения ниже него не сверяются: там погрешность метода уже исчерпана и
-         * результат определяется порядком суммирования, а не алгоритмом. Что это
-         * именно шум, видно из самих таблиц статьи — для F2exp, базис B, схема
-         * Кулкарни при n=32 таблица `table-t2-fredholm.tex` даёт 7.327e-15, а
-         * `table-t3-fredholm.tex` для той же величины — 7.994e-15 (расхождение 9 %),
-         * хотя обе получены из одного набора запусков. Требовать 2 % там, где сама
-         * публикация расходится с собой на 9 %, бессмысленно.
+         * Values below it are not cross-checked: there the error of the method is already exhausted and
+         * the result is determined by the summation order rather than by the algorithm. That this is
+         * exactly noise is visible from the tables of the article themselves — for F2exp, basis B, the
+         * Kulkarni scheme at n=32 the table `table-t2-fredholm.tex` gives 7.327e-15, while
+         * `table-t3-fredholm.tex` gives 7.994e-15 for the same quantity (a discrepancy of 9 %),
+         * although both were obtained from one set of runs. Requiring 2 % where the
+         * publication itself disagrees with itself by 9 % is pointless.
          *
-         * ПОЧЕМУ 1e-12, А НЕ 1e-13 (было до этого измерения).
+         * WHY 1e-12 AND NOT 1e-13 (as it was before this measurement).
          *
-         * Порог 1e-13 был ЗАНИЖЕН: он оставлял в сверке величины уровня нескольких
-         * единиц × 1e-13, которые шумом уже являются. ИЗМЕРЕНО на CI (ubuntu x86_64,
-         * тот же код и тот же бэкенд multik, отличие только в архитектуре CPU):
+         * The threshold 1e-13 was TOO LOW: it kept in the cross-check quantities at the level of a few
+         * units × 1e-13, which are already noise. MEASURED on CI (ubuntu x86_64,
+         * the same code and the same multik backend, the only difference being the CPU architecture):
          *
          *     V.V2win.T.theta.n16.base.Eh
-         *       опубликовано = 2.273e-13
-         *       вычислено    = 1.825e-13   → расхождение 19.70 % при допуске 2 %
+         *       published = 2.273e-13
+         *       computed  = 1.825e-13   → a discrepancy of 19.70 % against a tolerance of 2 %
          *
-         * Причина не в алгоритме: нативный BLAS на x86_64 берёт AVX-ядра вместо NEON,
-         * то есть другое блочное разбиение сумм. На уровне 1e-13 этого достаточно для
-         * десятков процентов разницы — ровно то самое, что этот порог и призван отсекать.
+         * The cause is not in the algorithm: the native BLAS on x86_64 takes AVX kernels instead of NEON,
+         * that is, a different block partition of the sums. At the level of 1e-13 this is enough for
+         * tens of per cent of difference — exactly what this threshold is meant to cut off.
          *
-         * Замечание о природе возмущения (важно при будущих разборах): прогон на
-         * `-Dnumerics.backend=reference` ЭТОГО НЕ ЛОВИТ — там ключ проходит. Замена
-         * бэкенда НЕ является универсально более грубым возмущением, чем смена
-         * архитектуры: `reference` скалярен и последователен, а NEON и AVX отличаются
-         * друг от друга не меньше, чем каждый из них — от скалярного пути.
+         * A note on the nature of the perturbation (important for future investigations): a run on
+         * `-Dnumerics.backend=reference` DOES NOT CATCH THIS — there the key passes. Replacing
+         * the backend is NOT a universally coarser perturbation than a change of
+         * architecture: `reference` is scalar and sequential, while NEON and AVX differ
+         * from each other no less than each of them does from the scalar path.
          *
-         * ЦЕНА ИЗМЕНЕНИЯ (ИЗМЕРЕНО, а не посчитано по эталону): сверяется 638 величин
-         * вместо 655, то есть выбывает 17.
+         * THE PRICE OF THE CHANGE (MEASURED, not computed from the baseline): 638 quantities are cross-checked
+         * instead of 655, that is, 17 drop out.
          *
-         * Почему 17, а не 10, хотя в зоне 1e-13..1e-12 ровно 10 ключей `Eh`:
-         * исключение `Eh` КАСКАДОМ убирает и зависящие от неё проверки порядка
-         * [checkOrders], где нужны ОБЕ погрешности пары `E_m` и `E_2m`. Фактический
-         * замер по группам: F2/F2exp 260 -> 250 (шум 22 -> 32), V2/V2exp/V2win 341 -> 334
-         * (шум 7 -> 14); F1 42 и V1 12 не затронуты. Итого 10 `Eh` + 7 `p_h`.
+         * Why 17 and not 10, although there are exactly 10 `Eh` keys in the zone 1e-13..1e-12:
+         * excluding an `Eh` removes by CASCADE the order checks depending on it too,
+         * [checkOrders], where BOTH errors of the pair `E_m` and `E_2m` are needed. The actual
+         * measurement by groups: F2/F2exp 260 -> 250 (noise 22 -> 32), V2/V2exp/V2win 341 -> 334
+         * (noise 7 -> 14); F1 42 and V1 12 are not affected. In total 10 `Eh` + 7 `p_h`.
          *
-         * Все выбывшие `Eh` — это задачи, где решение лежит в span порождающей
-         * системы либо схема вышла на машинную точность. Защита не теряется:
-         * точность на span-задачах проверяется отдельно и АБСОЛЮТНЫМ критерием —
-         * `AnalyticSolutionTest.SPAN_EXACTNESS_TOLERANCE` и `ConvergenceOrderTest`
-         * (64 span-проверки), а не сравнением шума с шумом.
+         * All the `Eh` that dropped out are problems where the solution lies in the span of the generating
+         * system or the scheme reached machine accuracy. The protection is not lost:
+         * the accuracy on the span problems is checked separately and by an ABSOLUTE criterion —
+         * `AnalyticSolutionTest.SPAN_EXACTNESS_TOLERANCE` and `ConvergenceOrderTest`
+         * (64 span checks) — and not by comparing noise with noise.
          *
-         * ГРАНИЦА ВЫБРАНА ПО РАЗРЫВУ В ДАННЫХ, а не подогнана под упавший ключ:
-         * самое большое отсекаемое значение — 7.567e-13, ближайшее сохраняемое —
-         * 1.115e-12. Подгонка под один ключ (например 3e-13) оставила бы в сверке
-         * соседние величины того же порядка и просто отложила бы следующее падение
-         * до смены образа раннера.
+         * THE BOUND IS CHOSEN BY A GAP IN THE DATA and is not fitted to the failing key:
+         * the largest cut-off value is 7.567e-13, the nearest kept one is
+         * 1.115e-12. Fitting to one key (3e-13, say) would leave in the cross-check
+         * neighbouring quantities of the same order and would merely postpone the next failure
+         * until the runner image changes.
          */
         const val NOISE_FLOOR = 1e-12
 
-        /** Порядок квадратуры, единый для всех расчётов (как в демонстрациях и эталоне). */
+        /** The quadrature order, the same for all computations (as in the demos and the baseline). */
         const val QUADRATURE_ORDER = 8
 
         /**
-         * Нижние границы числа фактически выполняемых сверок по каждому тесту.
+         * Lower bounds on the number of cross-checks actually performed by each test.
          *
-         * Смысл — ЗАЩИТА ОТ ТИХОГО ВЫРОЖДЕНИЯ. Сверка устроена по принципу
-         * «есть ключ в эталоне — сверяем», поэтому опечатка в формировании ключа
-         * сама по себе НЕ вызвала бы падения: тест просто перестал бы сравнивать
-         * хоть что-либо и остался бы ложно-зелёным. Порог замыкает эту дыру.
+         * The meaning is PROTECTION AGAINST SILENT DEGENERATION. The cross-check works on the principle
+         * "there is a key in the baseline — we compare", so a typo in forming a key
+         * would NOT by itself cause a failure: the test would simply stop comparing
+         * anything at all and would stay falsely green. The threshold closes this hole.
          *
-         * Значения взяты из фактического прогона и сверены с числом ключей в
-         * `published-values.tsv` (сверено + исключено как шум = все ключи группы).
-         * Цифры ниже — ИЗМЕРЕННЫЕ при [NOISE_FLOOR] = 1e-12:
-         *  - F2/F2exp: 282 ключа (164 `Eh` + 118 `ph`), фактически сверено 250, шум 32;
-         *  - F1: 66 ключей (42 `Eh` + 24 `ph`), фактически сверено 42, шум 0;
-         *  - V2/V2exp/V2win: 348 ключей (204 `Eh` + 144 `ph`), сверено 334, шум 14;
-         *  - V1: 12 ключей (12 `Eh`), фактически сверено 12, шум 0.
+         * The values are taken from an actual run and reconciled with the number of keys in
+         * `published-values.tsv` (cross-checked + excluded as noise = all the keys of the group).
+         * The figures below are MEASURED at [NOISE_FLOOR] = 1e-12:
+         *  - F2/F2exp: 282 keys (164 `Eh` + 118 `ph`), actually cross-checked 250, noise 32;
+         *  - F1: 66 keys (42 `Eh` + 24 `ph`), actually cross-checked 42, noise 0;
+         *  - V2/V2exp/V2win: 348 keys (204 `Eh` + 144 `ph`), cross-checked 334, noise 14;
+         *  - V1: 12 keys (12 `Eh`), actually cross-checked 12, noise 0.
          *
-         * Пороги взяты с небольшим запасом вниз от факта: число величин, попавших
-         * под [NOISE_FLOOR], может немного плавать между JDK/бэкендами и архитектурами,
-         * но обвал на порядок и тем более до нуля будет пойман.
+         * The thresholds are taken with a small margin below the fact: the number of quantities falling
+         * under [NOISE_FLOOR] may drift a little between JDKs/backends and architectures,
+         * but a collapse by an order of magnitude, let alone to zero, will be caught.
          */
         const val MIN_CHECKS_FREDHOLM_SECOND = 240
         const val MIN_CHECKS_FREDHOLM_FIRST = 40
@@ -346,7 +346,7 @@ class PublishedValuesTest {
         const val MIN_CHECKS_VOLTERRA_FIRST = 12
     }
 
-    /** Разобранная строка эталона. */
+    /** A parsed row of the baseline. */
     private data class PublishedValue(
         val key: String,
         val value: Double,
@@ -356,7 +356,7 @@ class PublishedValuesTest {
 
     private val published: Map<String, PublishedValue> by lazy {
         val resource = javaClass.getResourceAsStream("/verification/published-values.tsv")
-            ?: fail("Не найден файл эталона /verification/published-values.tsv")
+            ?: fail("The baseline file /verification/published-values.tsv is not found")
         resource.bufferedReader().useLines { lines ->
             lines.mapNotNull { line ->
                 val trimmed = line.trim()
@@ -369,7 +369,7 @@ class PublishedValuesTest {
         }
     }
 
-    /** Накопитель результатов одного теста: расхождения и число фактически сверенных величин. */
+    /** An accumulator of the results of one test: the discrepancies and the number of quantities actually cross-checked. */
     private class Verification {
         val mismatches = mutableListOf<String>()
         var checked = 0
@@ -386,45 +386,45 @@ class PublishedValuesTest {
         "xi2" -> DeBoorFixFunctionals(basis, 2)
         "mu" -> AveragingFunctionals(basis)
         "lambda" -> ThreePointFunctionals(basis)
-        else -> error("Неизвестное семейство функционалов: '$name'")
+        else -> error("Unknown functional family: '$name'")
     }
 
     private fun system(name: String): GeneratingSystem = when (name) {
         "B" -> GeneratingSystem.B
         "H" -> GeneratingSystem.H
         "T" -> GeneratingSystem.T
-        else -> error("Неизвестная порождающая система: '$name'")
+        else -> error("Unknown generating system: '$name'")
     }
 
     /**
-     * Сверяет одну величину с публикацией.
+     * Cross-checks one quantity against the publication.
      *
-     * Ключ, отсутствующий в эталоне, — не молчаливый пропуск, а отдельно
-     * фиксируемое событие: оно означает рассогласование теста и ресурсного файла.
+     * A key absent from the baseline is not a silent skip but a separately
+     * recorded event: it means an inconsistency between the test and the resource file.
      */
     private fun check(verification: Verification, key: String, actual: Double, isError: Boolean) {
         val expected = published[key] ?: run {
             verification.missing += key
             return
         }
-        // Значения на уровне машинного шума исключены из сверки (см. NOISE_FLOOR).
+        // Values at the level of machine noise are excluded from the cross-check (see NOISE_FLOOR).
         if (isError && expected.value < NOISE_FLOOR) {
             verification.skippedAsNoise++
             return
         }
         verification.checked++
-        // Опубликованное значение — артефакт обусловленности базиса 0.1.0; проверяется
-        // машинный уровень, а не совпадение (см. KNOWN_CONDITIONING_ARTIFACTS).
+        // The published value is an artifact of the conditioning of the 0.1.0 basis; the machine
+        // level is checked rather than a match (see KNOWN_CONDITIONING_ARTIFACTS).
         if (key in KNOWN_CONDITIONING_ARTIFACTS) {
             if (actual <= CONDITIONING_ARTIFACT_MACHINE_LEVEL) {
                 verification.knownArtifacts++
             } else {
                 verification.mismatches += buildString {
                     append(key)
-                    append(": опубликовано=").append(expected.value)
-                    append(" (артефакт обусловленности базиса 0.1.0), вычислено=").append(actual)
-                    append(", ожидался машинный уровень <= ").append(CONDITIONING_ARTIFACT_MACHINE_LEVEL)
-                    append(" [источник: ").append(expected.sourceFile)
+                    append(": published=").append(expected.value)
+                    append(" (an artifact of the conditioning of the 0.1.0 basis), computed=").append(actual)
+                    append(", the machine level <= ").append(CONDITIONING_ARTIFACT_MACHINE_LEVEL).append(" was expected")
+                    append(" [source: ").append(expected.sourceFile)
                     append(", ").append(expected.location).append("]")
                 }
             }
@@ -433,7 +433,7 @@ class PublishedValuesTest {
         val relative = abs(actual - expected.value) / abs(expected.value)
         val tolerance = toleranceFor(expected)
         if (relative > tolerance) {
-            // Известное расхождение путей LU в пределах cond·ω (см. KNOWN_LU_PATH_DEVIATIONS).
+            // A known discrepancy of the LU paths within cond·ω (see KNOWN_LU_PATH_DEVIATIONS).
             if (key in KNOWN_LU_PATH_DEVIATIONS &&
                 abs(actual - expected.value) <= F1_LU_PATH_DEVIATION_BOUND
             ) {
@@ -442,23 +442,23 @@ class PublishedValuesTest {
             }
             verification.mismatches += buildString {
                 append(key)
-                append(": опубликовано=").append(expected.value)
-                append(", вычислено=").append(actual)
-                append(", отн.расхождение=").append("%.2f%%".format(100.0 * relative))
-                append(" (допуск ").append("%.2f%%".format(100.0 * tolerance)).append(")")
-                append(" [источник: ").append(expected.sourceFile)
+                append(": published=").append(expected.value)
+                append(", computed=").append(actual)
+                append(", rel.discrepancy=").append("%.2f%%".format(100.0 * relative))
+                append(" (tolerance ").append("%.2f%%".format(100.0 * tolerance)).append(")")
+                append(" [source: ").append(expected.sourceFile)
                 append(", ").append(expected.location).append("]")
             }
         }
     }
 
     /**
-     * Допуск для конкретной сверяемой величины.
+     * The tolerance for a concrete quantity being cross-checked.
      *
-     * Решение принимается по ФАЙЛУ-ИСТОЧНИКУ из самого эталона, а не по имени
-     * ключа: условие послабления — свойство того, ОТКУДА взято число
-     * (какая таблица статьи на каком пути LU снята), а не того, какая величина
-     * сегодня расходится. Подробности — [LU_PATH_DEPENDENT_TOLERANCE].
+     * The decision is made by the SOURCE FILE from the baseline itself, and not by the name
+     * of the key: the condition for the relaxation is a property of WHERE the number came from
+     * (which table of the article was shot on which LU path), and not of which quantity
+     * diverges today. For the details see [LU_PATH_DEPENDENT_TOLERANCE].
      */
     private fun toleranceFor(expected: PublishedValue): Double =
         if (expected.sourceFile in LU_PATH_DEPENDENT_SOURCES) {
@@ -468,18 +468,18 @@ class PublishedValuesTest {
         }
 
     /**
-     * Нужно ли вообще вычислять `E_h` для данной конфигурации.
+     * Whether `E_h` needs to be computed at all for the given configuration.
      *
-     * В эталоне полный набор схем есть лишь для части комбинаций (в основном
-     * система B), для остальных — только `base`. Вычисленные `E_h` для ключей
-     * вне эталона всё равно отбрасывались, а стоили дорого: `errorEh` берёт
-     * `100n + 1` точек, и для итерационных схем Вольтерры каждая точка — сама
-     * квадратура с повторным вычислением решения.
+     * The baseline has the full set of schemes only for part of the combinations (mainly
+     * the system B), for the rest only `base`. The computed `E_h` for keys
+     * outside the baseline were discarded anyway, but cost a lot: `errorEh` takes
+     * `100n + 1` points, and for the iterative Volterra schemes every point is itself
+     * a quadrature with a repeated computation of the solution.
      *
-     * Учитывается не только ключ `Eh`, но и КОСВЕННОЕ участие в проверке
-     * порядков [checkOrders]: `p_h` для сетки `m` строится по `E_m` и `E_{2m}`,
-     * поэтому `E_h` на сетке `n` нужна также при наличии ключа `ph` для `n`
-     * или для `n/2`. Поэтому набор фактически выполняемых сверок не меняется.
+     * Not only the `Eh` key is taken into account, but also the INDIRECT participation in the check
+     * of the orders [checkOrders]: `p_h` for the grid `m` is built from `E_m` and `E_{2m}`,
+     * so `E_h` on the grid `n` is also needed when a `ph` key exists for `n`
+     * or for `n/2`. Therefore the set of cross-checks actually performed does not change.
      */
     private fun ehParticipatesInVerification(prefix: String, schemeName: String, n: Int): Boolean =
         published.containsKey("$prefix.n$n.$schemeName.Eh") ||
@@ -489,41 +489,41 @@ class PublishedValuesTest {
     private fun report(verification: Verification, title: String, minimumChecks: Int) {
         assertTrue(
             verification.missing.isEmpty(),
-            "$title: ключи отсутствуют в эталоне published-values.tsv " +
-                "(${verification.missing.size} шт.):\n" + verification.missing.joinToString("\n").take(2000),
+            "$title: the keys are absent from the baseline published-values.tsv " +
+                "(${verification.missing.size} of them):\n" + verification.missing.joinToString("\n").take(2000),
         )
         println(
-            "$title: сверено ${verification.checked}, исключено как шум ${verification.skippedAsNoise}, " +
-                "известных расхождений путей LU ${verification.knownDeviations}, " +
-                "артефактов обусловленности базиса 0.1.0 ${verification.knownArtifacts}",
+            "$title: cross-checked ${verification.checked}, excluded as noise ${verification.skippedAsNoise}, " +
+                "known LU path discrepancies ${verification.knownDeviations}, " +
+                "artifacts of the conditioning of the 0.1.0 basis ${verification.knownArtifacts}",
         )
-        // Защита от вырождения: тест не должен молча деградировать до пустышки,
-        // если ключи теста и эталона разойдутся. Границы взяты из фактического прогона.
+        // Protection against degeneration: the test must not silently degrade into a dummy
+        // if the keys of the test and of the baseline diverge. The bounds are taken from an actual run.
         assertTrue(
             verification.checked >= minimumChecks,
-            "$title: сверено величин ${verification.checked}, ожидалось не менее " +
-                "$minimumChecks — проверьте согласованность ключей теста и эталона",
+            "$title: ${verification.checked} quantities cross-checked, at least " +
+                "$minimumChecks were expected — check the consistency of the keys of the test and of the baseline",
         )
         assertTrue(
             verification.mismatches.isEmpty(),
-            "$title: расхождение с опубликованными значениями свыше допуска " +
-                "${100.0 * RELATIVE_TOLERANCE}% (для таблиц " +
+            "$title: a discrepancy with the published values above the tolerance " +
+                "${100.0 * RELATIVE_TOLERANCE}% (for the tables " +
                 "${LU_PATH_DEPENDENT_SOURCES.joinToString()} — " +
-                "${100.0 * LU_PATH_DEPENDENT_TOLERANCE}%, см. KDoc) " +
-                "(${verification.mismatches.size} из " +
-                "${verification.checked} сверенных):\n" +
+                "${100.0 * LU_PATH_DEPENDENT_TOLERANCE}%, see the KDoc) " +
+                "(${verification.mismatches.size} of " +
+                "${verification.checked} cross-checked):\n" +
                 verification.mismatches.joinToString("\n").take(6000),
         )
     }
 
-    /** Эмпирический порядок `p_h = log2(E_h / E_{h/2})`. */
+    /** The empirical order `p_h = log2(E_h / E_{h/2})`. */
     private fun order(coarse: Double, fine: Double): Double = ln(coarse / fine) / ln(2.0)
 
     // ------------------------------------------------------------------------
-    // Уравнение Фредгольма
+    // The Fredholm equation
     // ------------------------------------------------------------------------
 
-    /** Задачи Фредгольма II рода: все схемы, базисы и семейства, встречающиеся в таблицах. */
+    /** The Fredholm second-kind problems: all the schemes, bases and families occurring in the tables. */
     @Test
     fun fredholmSecondKindMatchesPublishedValues() {
         val verification = Verification()
@@ -535,7 +535,7 @@ class PublishedValuesTest {
             for (systemName in listOf("B", "H", "T")) {
                 for (familyName in listOf("theta", "xi0", "xi1", "xi2", "mu", "lambda")) {
                     val prefix = "F.${problem.name}.$systemName.$familyName"
-                    // Погрешности по сеткам: нужны и сами E_h, и порядки между соседними.
+                    // The errors over the grids: both the E_h themselves and the orders between neighbours are needed.
                     val errors = LinkedHashMap<String, MutableMap<Int, Double>>()
                     for (n in listOf(8, 16, 32, 64)) {
                         val grid = Grid.uniform(n)
@@ -559,15 +559,15 @@ class PublishedValuesTest {
                             "kulkarni" to solver.kulkarni(),
                             "iterKulkarni" to solver.iteratedKulkarni(),
                         )
-                        // Схемы Nyström не поддерживают семейства с производной.
+                        // The Nyström schemes do not support families with a derivative.
                         if (!funcs.usesDerivative) {
                             schemes["nystrom"] = solver.nystrom()
                             schemes["iterNystrom"] = solver.iteratedNystrom()
                         }
                         for ((schemeName, solution) in schemes) {
-                            // Сами схемы выше построены всегда (построение решения — тоже
-                            // проверка: оно обязано не бросать и не расходиться); отбрасывается
-                            // только дорогое вычисление E_h, которое нигде не используется.
+                            // The schemes above are always built (building a solution is a check
+                            // too: it must not throw and must not diverge); only the expensive
+                            // computation of E_h, which is used nowhere, is discarded.
                             if (!ehParticipatesInVerification(prefix, schemeName, n)) continue
                             val eh = errorEh(exact, solution.eval, grid)
                             errors.getOrPut(schemeName) { linkedMapOf() }[n] = eh
@@ -579,36 +579,36 @@ class PublishedValuesTest {
                 }
             }
         }
-        report(verification, "Фредгольм II рода", MIN_CHECKS_FREDHOLM_SECOND)
+        report(verification, "Fredholm of the second kind", MIN_CHECKS_FREDHOLM_SECOND)
     }
 
     /**
-     * Задача Фредгольма I рода F1: базовая схема и итерация Слоана.
+     * The Fredholm first-kind problem F1: the base scheme and the Sloan iteration.
      *
-     * ТЕГ `machine` — ЕДИНСТВЕННЫЙ МЕТОД ЭТОГО КЛАССА, НЕ ПЕРЕНОСИМЫЙ МЕЖДУ МАШИНАМИ.
+     * THE `machine` TAG — THE ONLY METHOD OF THIS CLASS NOT PORTABLE BETWEEN MACHINES.
      *
-     * ИЗМЕРЕНО (`slowTest --tests verification.PublishedValuesTest`
-     * `-Dnumerics.backend=reference`, то есть при ПОЛНОЙ замене реализации LU —
-     * возмущении ГОРАЗДО более грубом, чем смена архитектуры CPU):
+     * MEASURED (`slowTest --tests verification.PublishedValuesTest`
+     * `-Dnumerics.backend=reference`, that is, at a COMPLETE replacement of the LU implementation —
+     * a perturbation MUCH coarser than a change of the CPU architecture):
      *
-     * | группа | сверено | результат |
+     * | group | cross-checked | result |
      * |---|---|---|
-     * | Фредгольм II рода | 260 | всё в допуске |
-     * | Вольтерра II рода | 341 | всё в допуске |
-     * | Вольтерра I рода | 12 | всё в допуске |
-     * | **Фредгольм I рода (этот тест)** | 42 | **11 расхождений, до 11.49 %** |
+     * | Fredholm of the second kind | 260 | all within the tolerance |
+     * | Volterra of the second kind | 341 | all within the tolerance |
+     * | Volterra of the first kind | 12 | all within the tolerance |
+     * | **Fredholm of the first kind (this test)** | 42 | **11 discrepancies, up to 11.49 %** |
      *
-     * То есть 644 из 655 опубликованных значений переживают смену реализации
-     * линейной алгебры, а сыплется только F1 — уравнение ПЕРВОГО рода с
-     * регуляризацией и `cond(I - M) ~ 1e10`, где сдвиг младших битов усиливается
-     * на много порядков.
+     * That is, 644 of the 655 published values survive a change of the linear algebra
+     * implementation, and only F1 falls apart — an equation of the FIRST kind with
+     * regularization and `cond(I - M) ~ 1e10`, where a shift of the low bits is amplified
+     * by many orders of magnitude.
      *
-     * ПОЧЕМУ ЭТО НЕ ЛЕЧИТСЯ ВТОРЫМ ЭТАЛОНОМ, в отличие от характеризационных
-     * гейтов: сверка идёт с числами ИЗ СТАТЬИ, а их нельзя «переснять» под
-     * платформу. Единственная альтернатива — ослабление допуска до ~12 %, а это
-     * запрещено правилами проекта и сделало бы сверку бессмысленной.
+     * WHY THIS IS NOT CURED BY A SECOND BASELINE, unlike the characterization
+     * gates: the cross-check is against numbers FROM THE ARTICLE, and they cannot be "re-shot" for a
+     * platform. The only alternative is loosening the tolerance to ~12 %, and that is
+     * forbidden by the rules of the project and would make the cross-check meaningless.
      *
-     * Остальные методы класса тега `machine` НЕ несут и гоняются в CI везде.
+     * The other methods of the class do NOT carry the `machine` tag and are run in CI everywhere.
      */
     @Test
     @Tag("machine")
@@ -638,14 +638,14 @@ class PublishedValuesTest {
                 }
             }
         }
-        report(verification, "Фредгольм I рода (F1)", MIN_CHECKS_FREDHOLM_FIRST)
+        report(verification, "Fredholm of the first kind (F1)", MIN_CHECKS_FREDHOLM_FIRST)
     }
 
     // ------------------------------------------------------------------------
-    // Уравнение Вольтерры
+    // The Volterra equation
     // ------------------------------------------------------------------------
 
-    /** Задачи Вольтерры II рода: все схемы, базисы и семейства из таблиц. */
+    /** The Volterra second-kind problems: all the schemes, bases and families from the tables. */
     @Test
     fun volterraSecondKindMatchesPublishedValues() {
         val verification = Verification()
@@ -681,15 +681,15 @@ class PublishedValuesTest {
                             "kulkarni" to solver.kulkarni(),
                             "iterKulkarni" to solver.iteratedKulkarni(),
                         )
-                        // Nyström для Вольтерры существенно дороже (веса зависят от t),
-                        // поэтому в статье он приведён только до n = 32.
+                        // Nyström for Volterra is substantially more expensive (the weights depend on t),
+                        // so the article gives it only up to n = 32.
                         if (!funcs.usesDerivative && n <= 32) {
                             schemes["nystrom"] = solver.nystrom()
                             schemes["iterNystrom"] = solver.iteratedNystrom()
                         }
                         for ((schemeName, solution) in schemes) {
-                            // См. комментарий в [fredholmSecondKindMatchesPublishedValues]: решение
-                            // строится всегда, E_h — только при участии в сверке.
+                            // See the comment in [fredholmSecondKindMatchesPublishedValues]: the solution
+                            // is always built, E_h only when it takes part in the cross-check.
                             if (!ehParticipatesInVerification(prefix, schemeName, n)) continue
                             val eh = errorEh(exact, solution.eval, grid)
                             errors.getOrPut(schemeName) { linkedMapOf() }[n] = eh
@@ -701,10 +701,10 @@ class PublishedValuesTest {
                 }
             }
         }
-        report(verification, "Вольтерра II рода", MIN_CHECKS_VOLTERRA_SECOND)
+        report(verification, "Volterra of the second kind", MIN_CHECKS_VOLTERRA_SECOND)
     }
 
-    /** Задача Вольтерры I рода V1: база, Слоан, Кулкарни. */
+    /** The Volterra first-kind problem V1: base, Sloan, Kulkarni. */
     @Test
     fun volterraFirstKindMatchesPublishedValues() {
         val verification = Verification()
@@ -729,17 +729,17 @@ class PublishedValuesTest {
                 }
             }
         }
-        report(verification, "Вольтерра I рода (V1)", MIN_CHECKS_VOLTERRA_FIRST)
+        report(verification, "Volterra of the first kind (V1)", MIN_CHECKS_VOLTERRA_FIRST)
     }
 
     /**
-     * Сверяет эмпирические порядки `p_h`, вычисленные по соседним сеткам.
+     * Cross-checks the empirical orders `p_h` computed from neighbouring grids.
      *
-     * Порядок сверяется только тогда, когда ОБЕ участвующие погрешности лежат выше
-     * порога шума: `log2` от отношения двух шумовых величин смысла не имеет.
-     * Допуск для порядка — абсолютный, а не относительный: сам порядок в статье
-     * приведён с двумя знаками после запятой, и относительное сравнение при
-     * значениях около нуля (вырожденно-точные случаи) вело бы себя неустойчиво.
+     * The order is cross-checked only when BOTH participating errors lie above
+     * the noise threshold: the `log2` of a ratio of two noise quantities makes no sense.
+     * The tolerance for the order is absolute rather than relative: the order itself is given in the article
+     * with two digits after the decimal point, and a relative comparison at
+     * values near zero (degenerately exact cases) would behave unstably.
      */
     private fun checkOrders(
         verification: Verification,
@@ -758,16 +758,16 @@ class PublishedValuesTest {
                 }
                 verification.checked++
                 val actual = order(coarse, fine)
-                // Абсолютный допуск: 2 % от опубликованного порядка, но не менее 0.05
-                // (точность записи самого порядка в таблице — два знака).
+                // An absolute tolerance: 2 % of the published order, but not less than 0.05
+                // (the precision of writing the order itself in the table is two digits).
                 val tolerance = maxOf(RELATIVE_TOLERANCE * abs(expected.value), 0.05)
                 if (abs(actual - expected.value) > tolerance) {
                     verification.mismatches += buildString {
                         append(key)
-                        append(": опубликовано p_h=").append(expected.value)
-                        append(", вычислено p_h=").append("%.4f".format(actual))
+                        append(": published p_h=").append(expected.value)
+                        append(", computed p_h=").append("%.4f".format(actual))
                         append(" (E_$n=").append(coarse).append(", E_${2 * n}=").append(fine).append(")")
-                        append(" [источник: ").append(expected.sourceFile)
+                        append(" [source: ").append(expected.sourceFile)
                         append(", ").append(expected.location).append("]")
                     }
                 }
@@ -776,16 +776,16 @@ class PublishedValuesTest {
     }
 
     /**
-     * Целостность ресурсного файла: ключи разбираются, значения положительны.
+     * The integrity of the resource file: the keys parse, the values are positive.
      *
-     * Проверка направлена на сам эталон, а не на решатели: опечатка при переносе
-     * числа из LaTeX (например, потерянный знак минус в показателе) иначе
-     * проявилась бы как «расхождение реализации с публикацией».
+     * The check targets the baseline itself and not the solvers: a typo in transcribing
+     * a number from LaTeX (a lost minus sign in the exponent, say) would otherwise
+     * show up as "a discrepancy of the implementation with the publication".
      */
     @Test
     @Tag("fast")
     fun publishedValuesResourceIsWellFormed() {
-        assertTrue(published.isNotEmpty(), "Ресурсный файл эталона пуст")
+        assertTrue(published.isNotEmpty(), "The baseline resource file is empty")
         val problems = mutableListOf<String>()
         val validEquations = setOf("F", "V")
         val validSystems = setOf("B", "H", "T")
@@ -795,64 +795,64 @@ class PublishedValuesTest {
         for ((key, entry) in published) {
             val parts = key.split('.')
             if (parts.size != 7) {
-                problems += "$key: ожидается 7 сегментов ключа, получено ${parts.size}"
+                problems += "$key: 7 key segments are expected, got ${parts.size}"
                 continue
             }
             val (equation, _, systemName, familyName) = parts
             val gridPart = parts[4]
             val schemeName = parts[5]
             val metric = parts[6]
-            if (equation !in validEquations) problems += "$key: неизвестное уравнение '$equation'"
-            if (systemName !in validSystems) problems += "$key: неизвестный базис '$systemName'"
-            if (familyName !in validFamilies) problems += "$key: неизвестное семейство '$familyName'"
-            if (schemeName !in validSchemes) problems += "$key: неизвестная схема '$schemeName'"
-            if (metric !in validMetrics) problems += "$key: неизвестная метрика '$metric'"
+            if (equation !in validEquations) problems += "$key: unknown equation '$equation'"
+            if (systemName !in validSystems) problems += "$key: unknown basis '$systemName'"
+            if (familyName !in validFamilies) problems += "$key: unknown family '$familyName'"
+            if (schemeName !in validSchemes) problems += "$key: unknown scheme '$schemeName'"
+            if (metric !in validMetrics) problems += "$key: unknown metric '$metric'"
             if (!gridPart.startsWith("n") || gridPart.drop(1).toIntOrNull() == null) {
-                problems += "$key: некорректный сегмент сетки '$gridPart'"
+                problems += "$key: an invalid grid segment '$gridPart'"
             }
             if (metric == "Eh" && entry.value <= 0.0) {
-                problems += "$key: погрешность обязана быть положительной, получено ${entry.value}"
+                problems += "$key: the error must be positive, got ${entry.value}"
             }
-            // Погрешность выше единицы означала бы потерю знака минус в показателе.
+            // An error above one would mean a lost minus sign in the exponent.
             if (metric == "Eh" && entry.value > 1.0) {
-                problems += "$key: подозрительно большая погрешность ${entry.value} (проверьте перенос)"
+                problems += "$key: a suspiciously large error ${entry.value} (check the transcription)"
             }
-            if (entry.sourceFile.isBlank()) problems += "$key: не указан файл-источник"
-            if (entry.location.isBlank()) problems += "$key: не указано расположение в файле"
+            if (entry.sourceFile.isBlank()) problems += "$key: the source file is not specified"
+            if (entry.location.isBlank()) problems += "$key: the location in the file is not specified"
         }
         assertTrue(
             problems.isEmpty(),
-            "Ресурсный файл published-values.tsv некорректен (${problems.size} шт.):\n" +
+            "The resource file published-values.tsv is invalid (${problems.size} problems):\n" +
                 problems.joinToString("\n").take(4000),
         )
     }
 
     /**
-     * ОГРАНИЧИТЕЛЬ ПОСЛАБЛЕНИЯ: широкий допуск обязан применяться к ТЕМ ЖЕ
-     * ШЕСТИ КЛЮЧАМ, для которых разброс бэкендов был ИЗМЕРЕН.
+     * A LIMITER OF THE RELAXATION: the wide tolerance must apply to THE SAME
+     * SIX KEYS for which the spread of the backends was MEASURED.
      *
-     * Зачем это нужно. Признак послабления берётся из ДАННЫХ (поле
-     * файла-источника), и это правильно — но ровно поэтому изменение этого поля
-     * МОЛЧА перенесло бы послабление на величины, для которых оно не измерялось.
+     * Why this is needed. The criterion for the relaxation is taken from the DATA (the source
+     * file field), and this is right — but exactly for that reason a change of this field
+     * would SILENTLY transfer the relaxation to quantities for which it was not measured.
      *
-     * Сравнивается МНОЖЕСТВО КЛЮЧЕЙ, а НЕ их количество. Проверка числа
-     * пропустила бы ПОДМЕНУ ПРИ НЕИЗМЕННОМ КОЛИЧЕСТВЕ: достаточно у одной
-     * строки сменить источник на `table-f1.tex`, а у другой — на любой иной,
-     * и послабление тихо уедет на неизмеренную величину при count = 6.
+     * The SET OF KEYS is compared, and NOT their number. A check of the number
+     * would miss a SUBSTITUTION AT AN UNCHANGED COUNT: it is enough to change the source of one
+     * row to `table-f1.tex` and of another to any other one,
+     * and the relaxation will quietly move to an unmeasured quantity at count = 6.
      *
-     * Проверяется и то, что имена из [LU_PATH_DEPENDENT_SOURCES] вообще встречаются
-     * в эталоне: опечатка в имени таблицы иначе проявилась бы как «расхождение
-     * реализации с публикацией», а не как ошибка конфигурации.
+     * It is also checked that the names from [LU_PATH_DEPENDENT_SOURCES] occur in the baseline
+     * at all: a typo in the name of a table would otherwise show up as "a discrepancy
+     * of the implementation with the publication" and not as a configuration error.
      *
-     * ТЕГ `fast` НА МЕТОДЕ — НЕ оптимизация, а требование к частоте прогона.
-     * Ограничитель бессмыслен, если исполняется реже, чем меняется эталон: тихое
-     * расширение послабления надо ловить в том же коммите, где оно сделано.
-     * Класс помечен `slow` из-за СВЕРКИ (все четыре численных метода, ~190 с), а эта
-     * проверка численных вычислений НЕ делает вовсе — только разбирает ресурс
-     * (единицы миллисекунд), так что в бюджет fast-набора укладывается с запасом.
-     * JUnit 5 складывает теги класса и метода, поэтому метод попадает И в `fastTest`
-     * (`includeTags("fast")`), И в `slowTest` (`includeTags("slow")`) — двойное исполнение
-     * здесь сознательно и стоит миллисекунды.
+     * THE `fast` TAG ON THE METHOD is NOT an optimization but a requirement on the run frequency.
+     * A limiter is pointless if it is executed less often than the baseline changes: a quiet
+     * widening of the relaxation must be caught in the same commit where it is made.
+     * The class is marked `slow` because of the CROSS-CHECK (all four numerical methods, ~190 s), while this
+     * check does no numerical computation at all — it only parses the resource
+     * (a few milliseconds), so it fits into the budget of the fast suite with a margin.
+     * JUnit 5 adds up the tags of the class and of the method, so the method gets BOTH into `fastTest`
+     * (`includeTags("fast")`) AND into `slowTest` (`includeTags("slow")`) — the double execution
+     * here is deliberate and costs milliseconds.
      */
     @Test
     @Tag("fast")
@@ -860,34 +860,34 @@ class PublishedValuesTest {
         for (source in LU_PATH_DEPENDENT_SOURCES) {
             assertTrue(
                 published.values.any { it.sourceFile == source },
-                "Файл-источник '$source' объявлен в LU_PATH_DEPENDENT_SOURCES, но в эталоне " +
-                    "published-values.tsv не встречается — широкий допуск ни к чему не применяется",
+                "The source file '$source' is declared in LU_PATH_DEPENDENT_SOURCES, but does not occur " +
+                    "in the baseline published-values.tsv — the wide tolerance applies to nothing",
             )
         }
-        // Фактическое множество — то, к чему [toleranceFor] применит широкий допуск.
+        // The actual set is what [toleranceFor] will apply the wide tolerance to.
         val widened = published.values.filter { toleranceFor(it) == LU_PATH_DEPENDENT_TOLERANCE }
         val actualKeys = widened.map { it.key }.toSet()
         val unexpected = actualKeys - LU_PATH_DEPENDENT_KEYS
         val missing = LU_PATH_DEPENDENT_KEYS - actualKeys
         assertTrue(
             unexpected.isEmpty() && missing.isEmpty(),
-            "Широкий допуск ${100.0 * LU_PATH_DEPENDENT_TOLERANCE}% применяется НЕ К ТЕМ ключам, " +
-                "для которых разброс бэкендов измерен.\n" +
-                "ЛИШНИЕ (послаблены, но не измерены), ${unexpected.size} шт.:\n" +
+            "The wide tolerance ${100.0 * LU_PATH_DEPENDENT_TOLERANCE}% applies to keys OTHER THAN those " +
+                "for which the spread of the backends was measured.\n" +
+                "EXTRA (relaxed but not measured), ${unexpected.size}:\n" +
                 unexpected.sorted().joinToString("\n") { key ->
                     val e = published[key]
-                    "  $key (источник: ${e?.sourceFile}, ${e?.location})"
+                    "  $key (source: ${e?.sourceFile}, ${e?.location})"
                 } +
-                "\nПРОПАВШИЕ (измерены, но больше не послаблены), ${missing.size} шт.:\n" +
+                "\nMISSING (measured but no longer relaxed), ${missing.size}:\n" +
                 missing.sorted().joinToString("\n") { key ->
                     val e = published[key]
-                    "  $key (источник в эталоне: ${e?.sourceFile ?: "КЛЮЧ ОТСУТСТВУЕТ"})"
+                    "  $key (source in the baseline: ${e?.sourceFile ?: "THE KEY IS ABSENT"})"
                 } +
-                "\nЕсли состав таблицы действительно изменился, ИЗМЕРЬТЕ разброс между " +
-                "бэкендами для новых ключей и обновите ОБОСНОВАНИЕ допуска, а не только список.",
+                "\nIf the composition of the table has really changed, MEASURE the spread between " +
+                "the backends for the new keys and update the JUSTIFICATION of the tolerance, not only the list.",
         )
     }
 
-    /** Деструктуризация первых четырёх сегментов ключа. */
+    /** Destructuring of the first four segments of the key. */
     private operator fun <T> List<T>.component4(): T = this[3]
 }
