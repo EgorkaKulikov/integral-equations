@@ -10,9 +10,9 @@ import solvers.core.reportConvergence
 
 /**
  * КОМБИНИРОВАННЫЙ метод Nyström для нелинейного уравнения Урысона второго рода
- * `u = f + lambda L u`, где `(L u)(t) = \int_a^b K(t,s,u(s)) ds`.
+ * `u = f + cL L u`, где `(L u)(t) = \int_a^b K(t,s,u(s)) ds`.
  *
- * Приближение `u^N_h` определяется уравнением `u = f + lambda L_n u` с оператором
+ * Приближение `u^N_h` определяется уравнением `u = f + cL L_n u` с оператором
  *
  *     L_n = P_theta L + (I - P_theta) L^N_h,
  *
@@ -20,12 +20,12 @@ import solvers.core.reportConvergence
  * квадратура `(L^N_h u)(t) = sum_j theta_j(K(t, ., u(.))) W_j`, `W_j = \int omega_j`.
  * Это нелинейный аналог конструкции `FredholmSecondKindSolver.combinedNystrom`
  * (линейный случай) и комбинированного оператора статьи new-01 (`eq:nystrom-comb`);
- * простой Nyström (`u = f + lambda L^N_h u`) реализован отдельно в
+ * простой Nyström (`u = f + cL L^N_h u`) реализован отдельно в
  * [UrysonSecondKindSolver.nystrom] и сохранён без изменений.
  *
  * ## Конечномерные неизвестные
  *
- * Правая часть `G(u)(t) = f(t) + lambda [ (L^N_h u)(t) + (P_theta(L u - L^N_h u))(t) ]`
+ * Правая часть `G(u)(t) = f(t) + cL [ (L^N_h u)(t) + (P_theta(L u - L^N_h u))(t) ]`
  * зависит от `u` ТОЛЬКО через два конечных набора значений:
  *  * `y_r = u(eta_r)` в опорных точках функционалов (через квадратуру `L^N_h`);
  *  * `z_k = u(g_k)` в узлах составной квадратуры Гаусса–Лежандра (через точный оператор
@@ -38,7 +38,7 @@ import solvers.core.reportConvergence
  * ## Метод решения
  *
  * Простая итерация `u <- G(u)` (как в линейном `FredholmSecondKindSolver.combinedNystrom`)
- * сходится лишь при `||lambda L_n|| < 1`; на задаче A (`q = 4` на диапазоне решения)
+ * сходится лишь при `||cL L_n|| < 1`; на задаче A (`q = 4` на диапазоне решения)
  * и задаче B (кубическая нелинейность) она расходится. Поэтому система решается
  * методом Ньютона с АНАЛИТИЧЕСКИМ якобианом, собранным из `dK/du`:
  *
@@ -55,14 +55,14 @@ import solvers.core.reportConvergence
  *
  * ## Итерированный вариант
  *
- * `\hat u^N_h = f + lambda L u^N_h` — однократное применение точного оператора к
+ * `\hat u^N_h = f + cL L u^N_h` — однократное применение точного оператора к
  * найденному приближению (аналог итерации Слоана), новой системы не требует.
  */
 internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver) {
     private val basis = solver.basis
     private val funcs = solver.funcs
     private val op = solver.op
-    private val lambda = solver.lambda
+    private val cL = solver.cL
     private val rhs = solver.rhs
     private val n = solver.n
     private val dim = n + 2
@@ -155,10 +155,10 @@ internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver)
         val quadAtPts = DoubleArray(p) { r -> quadratureAt(pts[r], y) }
         val diffCoeffs = projectFromSupport(DoubleArray(p) { exactAtPts[it] - quadAtPts[it] })
         val gAtPts = DoubleArray(p) { r ->
-            rhs(pts[r]) + lambda * (quadAtPts[r] + splineDot(diffCoeffs, omegaAtPts[r]))
+            rhs(pts[r]) + cL * (quadAtPts[r] + splineDot(diffCoeffs, omegaAtPts[r]))
         }
         val gAtG = DoubleArray(ng) { k ->
-            rhs(gNode[k]) + lambda * (quadratureAt(gNode[k], y) + splineDot(diffCoeffs, omegaAtG[k]))
+            rhs(gNode[k]) + cL * (quadratureAt(gNode[k], y) + splineDot(diffCoeffs, omegaAtG[k]))
         }
         return State(gAtPts, gAtG, diffCoeffs, y.copyOf())
     }
@@ -169,8 +169,8 @@ internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver)
      * Производные `G(t)` по `y_r` и `z_k`:
      *  * `dQ(t)/dy_r = b_r dK/du(t, eta_r, y_r)`  (квадратура);
      *  * `dE(t)/dz_k = gW_k dK/du(t, g_k, z_k)`   (точный оператор);
-     *  * `dG(t)/dy_r = lambda [ dQ(t)/dy_r - sum_j omega_j(t) theta_j(dQ(.)/dy_r) ]`;
-     *  * `dG(t)/dz_k = lambda [ sum_j omega_j(t) theta_j(dE(.)/dz_k) ]`.
+     *  * `dG(t)/dy_r = cL [ dQ(t)/dy_r - sum_j omega_j(t) theta_j(dQ(.)/dy_r) ]`;
+     *  * `dG(t)/dz_k = cL [ sum_j omega_j(t) theta_j(dE(.)/dz_k) ]`.
      */
     private fun jacobian(y: DoubleArray, z: DoubleArray): DenseMatrix {
         val total = p + ng
@@ -202,11 +202,11 @@ internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver)
                 val dq = bAgg[col] * op.kernel.dkdu(tRow, pts[col], y[col])
                 var proj = 0.0
                 for (j in 0 until dim) proj += omegaRow[j] * cQ[j][col]
-                -lambda * (dq - proj)
+                -cL * (dq - proj)
             } else {
                 var proj = 0.0
                 for (j in 0 until dim) proj += omegaRow[j] * cE[j][col - p]
-                -lambda * proj
+                -cL * proj
             }
             if (row == col) value + 1.0 else value
         }
@@ -258,7 +258,7 @@ internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver)
 
     /** `u^N_h(t) = G(u)(t)` — восстановление решения в произвольной точке. */
     private fun evalFrom(state: State): (Double) -> Double = { t ->
-        rhs(t) + lambda * (quadratureAt(t, state.yAll) + basis.evalSpline(state.diffCoeffs, t))
+        rhs(t) + cL * (quadratureAt(t, state.yAll) + basis.evalSpline(state.diffCoeffs, t))
     }
 
     fun combined(): SolutionFunc {
@@ -276,7 +276,7 @@ internal class CombinedNystromSolver(private val solver: UrysonSecondKindSolver)
         // Точный оператор на найденном u^N_h: его значения в узлах квадратуры — это G(g).
         val uNodes = state.gAtG
         return SolutionFunc(
-            eval = { t -> rhs(t) + lambda * op.applyNodes(t, uNodes) },
+            eval = { t -> rhs(t) + cL * op.applyNodes(t, uNodes) },
             converged = run.converged,
             iterations = run.performedSteps,
             residual = run.residual,

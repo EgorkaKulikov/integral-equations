@@ -52,7 +52,7 @@ class UrysonCoverageTest {
     fun firstKindSolutionFields() {
         val solution = FirstKindSolution(doubleArrayOf(1.0, 2.0), { t -> t * t }, 1e-3, 1e-4, 0.5)
         assertTrue(solution.coeffs.size == 2)
-        assertTrue(solution.alpha == 1e-3 && solution.resid == 1e-4 && solution.omega == 0.5)
+        assertTrue(solution.alpha == 1e-3 && solution.residual == 1e-4 && solution.omega == 0.5)
         assertTrue(abs(solution.eval(3.0) - 9.0) < 1e-12)
     }
 
@@ -212,7 +212,7 @@ class UrysonCoverageTest {
         assertTrue(finite(solver.residual(coefficients, thetaExact)))
 
         val solution = solver.solveMorozov(thetaExact, 0.0)
-        assertTrue(solution.alpha > 0 && finite(solution.resid) && finite(solution.eval(0.5)))
+        assertTrue(solution.alpha > 0 && finite(solution.residual) && finite(solution.eval(0.5)))
     }
 
     /**
@@ -229,7 +229,7 @@ class UrysonCoverageTest {
         val solver = firstKindSolver(basis, funcs, space, op)
         val thetaFDelta = noisyThetaCoefficients(UrysonProblem.D, solver, op, grid, quad, 1e-2, 7L)
         val solution = solver.solveMorozov(thetaFDelta, 1e-2)
-        assertTrue(solution.alpha > 0 && finite(solution.resid) && finite(solution.omega))
+        assertTrue(solution.alpha > 0 && finite(solution.residual) && finite(solution.omega))
         assertTrue(finite(solution.eval(0.3)))
     }
 

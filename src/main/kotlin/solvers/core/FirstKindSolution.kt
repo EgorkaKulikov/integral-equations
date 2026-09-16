@@ -6,13 +6,13 @@ package solvers.core
  * @param coeffs коэффициенты найденного сплайна.
  * @param eval вычислитель приближённого решения.
  * @param alpha выбранный параметр регуляризации.
- * @param resid дискретная невязка при этом параметре.
+ * @param residual дискретная невязка при этом параметре.
  * @param omega значение стабилизатора `c^T R_h c`.
  */
 public class FirstKindSolution(
     public val coeffs: DoubleArray,
     public val eval: (Double) -> Double,
     public val alpha: Double,
-    public val resid: Double,
+    public val residual: Double,
     public val omega: Double,
 )

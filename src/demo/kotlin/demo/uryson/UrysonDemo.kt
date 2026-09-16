@@ -171,7 +171,7 @@ object Tables {
                 errors[3].add(errorEh(exact, solver.iteratedKulkarni().eval, grid))
                 errors[4].add(errorEh(exact, solver.nystrom().eval, grid))
                 errors[5].add(errorEh(exact, solver.combinedNystrom().eval, grid))
-                errors[6].add(errorEh(exact, solver.iteratedNystrom().eval, grid))
+                errors[6].add(errorEh(exact, solver.iteratedCombinedNystrom().eval, grid))
             }
             val observedOrders = names.indices.map { orders(errors[it]) }
             println("   n | " + names.joinToString(" | ") { "$it: Eh ph" })
@@ -217,10 +217,10 @@ object Tables {
             val error = errorEh({ t -> UrysonProblem.C.exact(t) }, solution.eval, grid)
             println(
                 "  %s | %3d | %s | %s | %s | %s".format(
-                    Fmt.e(delta), n, Fmt.e(solution.alpha), Fmt.e(error), Fmt.e(solution.resid), Fmt.e(solution.omega),
+                    Fmt.e(delta), n, Fmt.e(solution.alpha), Fmt.e(error), Fmt.e(solution.residual), Fmt.e(solution.omega),
                 ),
             )
-            rows.add("    ${texE(delta)} & $n & ${texE(solution.alpha)} & ${texE(error)} & ${texE(solution.resid)} & ${"%.3f".format(solution.omega)} \\\\")
+            rows.add("    ${texE(delta)} & $n & ${texE(solution.alpha)} & ${texE(error)} & ${texE(solution.residual)} & ${"%.3f".format(solution.omega)} \\\\")
         }
         println("   LaTeX (S-столбцы: delta, n, alpha, Eh, res, Omega):")
         rows.forEach { println(it) }
@@ -241,10 +241,10 @@ object Tables {
             val errorH = errorEh(exact, solutionH.eval, grid)
             println(
                 "  %3d | %s | %s | %s | %s | %s".format(
-                    n, Fmt.e(solutionB.alpha), Fmt.e(errorB), Fmt.e(solutionB.resid), Fmt.e(errorH), Fmt.e(solutionH.resid),
+                    n, Fmt.e(solutionB.alpha), Fmt.e(errorB), Fmt.e(solutionB.residual), Fmt.e(errorH), Fmt.e(solutionH.residual),
                 ),
             )
-            rows.add("    $n & ${texE(solutionB.alpha)} & ${texE(errorB)} & ${texE(solutionB.resid)} & ${texE(solutionH.alpha)} & ${texE(errorH)} & ${texE(solutionH.resid)} \\\\")
+            rows.add("    $n & ${texE(solutionB.alpha)} & ${texE(errorB)} & ${texE(solutionB.residual)} & ${texE(solutionH.alpha)} & ${texE(errorH)} & ${texE(solutionH.residual)} \\\\")
         }
         println("   LaTeX (S-столбцы: n, alpha(B), Eh(B), res(B), alpha(H), Eh(H), res(H)):")
         rows.forEach { println(it) }

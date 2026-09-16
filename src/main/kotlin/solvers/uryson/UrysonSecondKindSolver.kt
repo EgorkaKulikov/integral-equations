@@ -15,7 +15,7 @@ import solvers.core.NewtonResult
 
 /**
  * Решатели нелинейного уравнения Урысона ВТОРОГО рода
- * `x(t) - lambda \int_a^b K(t,s,x(s)) ds = f(t)`.
+ * `x(t) - cL \int_a^b K(t,s,x(s)) ds = f(t)`.
  *
  * Реализованы схемы: базовая коллокация, итерация Слоана, модификация Кулкарни и её
  * итерированный вариант, простой сплайн-метод Nyström, а также комбинированный метод
@@ -23,14 +23,14 @@ import solvers.core.NewtonResult
  * Источники перечислены в `docs/REFERENCES.md`.
  *
  * Решатель не знает о модельных задачах: правая часть передаётся функцией [rhs],
- * а множитель — параметром [lambda]. Готовые фабрики для модельных задач находятся
+ * а множитель — параметром [cL]. Готовые фабрики для модельных задач находятся
  * в пакете `problems.uryson`.
  *
  * @param basis базис минимальных сплайнов.
  * @param funcs семейство проекционных функционалов `theta_j`.
  * @param space сплайн-пространство (нужны веса Nyström `W_j`).
  * @param op оператор Урысона.
- * @param lambda множитель перед интегральным оператором.
+ * @param cL множитель перед интегральным оператором.
  * @param rhs правая часть `f(t)`.
  * @param tol критерий останова по норме невязки и норме шага.
  * @param maxIter предел числа итераций Ньютона в БАЗОВОЙ схеме.
@@ -47,7 +47,7 @@ public class UrysonSecondKindSolver(
     public val funcs: ProjFunctionals,
     public val space: SplineSpace,
     public val op: UrysohnOperator,
-    public val lambda: Double,
+    public val cL: Double,
     public val rhs: (Double) -> Double,
     public val tol: Double = DEFAULT_TOLERANCE,
     public val maxIter: Int = DEFAULT_MAX_ITERATIONS,
@@ -110,11 +110,11 @@ public class UrysonSecondKindSolver(
     private val collocation = CollocationCore(basis, funcs, op, ctx)
 
     /**
-     * Базовая схема: `c = theta(f) + lambda Xi(c)`.
+     * Базовая схема: `c = theta(f) + cL Xi(c)`.
      *
-     * Решается методом Ньютона для `F(c) = c - theta(f) - lambda Xi(c) = 0` с
-     * аналитическим якобианом `J = I - lambda B(c)`. Ньютон выбран вместо простой
-     * итерации, поскольку сходится и при отсутствии сжатия (например, при `lambda = 1`
+     * Решается методом Ньютона для `F(c) = c - theta(f) - cL Xi(c) = 0` с
+     * аналитическим якобианом `J = I - cL B(c)`. Ньютон выбран вместо простой
+     * итерации, поскольку сходится и при отсутствии сжатия (например, при `cL = 1`
      * и кубическом ядре).
      *
      * @return коэффициенты сплайна вместе со сведениями о сходимости Ньютона.
@@ -129,7 +129,7 @@ public class UrysonSecondKindSolver(
             tolerance = newtonTol,
             residualAt = { current ->
                 val xi = collocation.xiVector(current)
-                DoubleArray(n + 2) { current[it] - thetaF[it] - lambda * xi[it] }
+                DoubleArray(n + 2) { current[it] - thetaF[it] - cL * xi[it] }
             },
             stepAt = analyticNewtonStep,
         )
@@ -166,7 +166,7 @@ public class UrysonSecondKindSolver(
         }
 
     /**
-     * Шаг Ньютона с АНАЛИТИЧЕСКИМ якобианом `I - lambda B(c)`, ОБЩИЙ для базовой
+     * Шаг Ньютона с АНАЛИТИЧЕСКИМ якобианом `I - cL B(c)`, ОБЩИЙ для базовой
      * схемы и схемы Кулкарни.
      *
      * Совпадение ЗДЕСЬ НЕ СЛУЧАЙНОЕ и потому вынесено в одно место: у Кулкарни
@@ -180,11 +180,11 @@ public class UrysonSecondKindSolver(
     private val analyticNewtonStep: (DoubleArray, DoubleArray) -> DoubleArray =
         { current, residual -> newtonStep(current, DoubleArray(n + 2) { -residual[it] }) }
 
-    /** Шаг Ньютона с якобианом `J = I - lambda B(c)` (строки собираются независимо). */
+    /** Шаг Ньютона с якобианом `J = I - cL B(c)` (строки собираются независимо). */
     private fun newtonStep(c: DoubleArray, negativeResidual: DoubleArray): DoubleArray {
         val b = collocation.bMatrix(c)
         val jacobian = ParallelAssembly.assembleDense(n + 2, n + 2, ctx.parallel) { r, col ->
-            val value = -lambda * b[r, col]
+            val value = -cL * b[r, col]
             if (r == col) value + 1.0 else value
         }
         return LinearAlgebra.solve(jacobian, negativeResidual, ctx.backend)
@@ -195,7 +195,7 @@ public class UrysonSecondKindSolver(
      *
      * Возвращает тройку:
      *  - `yhNodes` — значения `y_h` в узлах квадратуры [UrysohnOperator.gNode];
-     *  - `gAtSupport` — функция `g(t) = f(t) + lambda (U y_h)(t)` (вычисляется в любой
+     *  - `gAtSupport` — функция `g(t) = f(t) + cL (U y_h)(t)` (вычисляется в любой
      *    точке, в частности в опорных точках функционалов);
      *  - `gCoeffs` — коэффициенты проекции `P_theta g`.
      *
@@ -204,7 +204,7 @@ public class UrysonSecondKindSolver(
      */
     private fun projectedRhs(c: DoubleArray): Triple<DoubleArray, (Double) -> Double, DoubleArray> {
         val yhNodes = DoubleArray(op.gNode.size) { basis.evalSpline(c, op.gNode[it]) }
-        val gAtSupport = { t: Double -> rhs(t) + lambda * op.applyNodes(t, yhNodes) }
+        val gAtSupport = { t: Double -> rhs(t) + cL * op.applyNodes(t, yhNodes) }
         val gCoeffs = funcs.projectorCoeffs(gAtSupport)
         return Triple(yhNodes, gAtSupport, gCoeffs)
     }
@@ -221,12 +221,12 @@ public class UrysonSecondKindSolver(
         )
     }
 
-    /** Итерация Слоана: `\tilde x_h(t) = f(t) + lambda (U x_h)(t)`. */
+    /** Итерация Слоана: `\tilde x_h(t) = f(t) + cL (U x_h)(t)`. */
     public fun sloan(): SolutionFunc {
         val newton = solveBase()
         val c = newton.coeffs
         val splineSolution = { t: Double -> basis.evalSpline(c, t) }
-        val eval = { t: Double -> rhs(t) + lambda * op.apply(t) { s -> splineSolution(s) } }
+        val eval = { t: Double -> rhs(t) + cL * op.apply(t) { s -> splineSolution(s) } }
         return SolutionFunc(
             eval = eval,
             converged = newton.converged,
@@ -238,13 +238,13 @@ public class UrysonSecondKindSolver(
     /**
      * Модификация Кулкарни.
      *
-     * Система для `y_h = P_theta x_h^K`: `c = theta(f) + lambda Theta(U(arg(c)))`, где
-     * `arg = y_h + (I - P_theta)[f + lambda U(y_h)]`. Решается квази-Ньютоном, у которого
-     * в роли предобуславливателя выступает якобиан БАЗОВОЙ схемы `I - lambda B(c)`.
+     * Система для `y_h = P_theta x_h^K`: `c = theta(f) + cL Theta(U(arg(c)))`, где
+     * `arg = y_h + (I - P_theta)[f + cL U(y_h)]`. Решается квази-Ньютоном, у которого
+     * в роли предобуславливателя выступает якобиан БАЗОВОЙ схемы `I - cL B(c)`.
      * Такой выбор предписан источником и обеспечивает сходимость при отсутствии сжатия,
      * где простая итерация расходится.
      *
-     * Итоговое приближение восстанавливается как `x_h^K = y_h + (I - P_theta)[f + lambda U(y_h)]`.
+     * Итоговое приближение восстанавливается как `x_h^K = y_h + (I - P_theta)[f + cL U(y_h)]`.
      */
     public fun kulkarni(): SolutionFunc {
         val fNodes = DoubleArray(op.gNode.size) { rhs(op.gNode[it]) }
@@ -253,7 +253,7 @@ public class UrysonSecondKindSolver(
         fun gK(c: DoubleArray): DoubleArray {
             val (yhNodes, _, gCoeffs) = projectedRhs(c)
             val uyhNodes = DoubleArray(op.gNode.size) { op.applyNodes(op.gNode[it], yhNodes) }
-            val gNodes = DoubleArray(op.gNode.size) { fNodes[it] + lambda * uyhNodes[it] }
+            val gNodes = DoubleArray(op.gNode.size) { fNodes[it] + cL * uyhNodes[it] }
             // Остаток проектора в узлах квадратуры: arg = y_h + (I - P_theta) g.
             val argNodes = DoubleArray(op.gNode.size) {
                 yhNodes[it] + gNodes[it] - basis.evalSpline(gCoeffs, op.gNode[it])
@@ -262,7 +262,7 @@ public class UrysonSecondKindSolver(
                 val th = funcs.valueFunctional(k - 2)
                 var acc = 0.0
                 for (q in th.nodes.indices) acc += th.coeffs[q] * op.applyNodes(th.nodes[q], argNodes)
-                thetaF[k] + lambda * acc
+                thetaF[k] + cL * acc
             }
         }
 
@@ -299,7 +299,7 @@ public class UrysonSecondKindSolver(
     }
 
     /**
-     * Сплайн-метод Nyström: `x_h^N(t) = f(t) + lambda sum_j theta_j(g_t) W_j`,
+     * Сплайн-метод Nyström: `x_h^N(t) = f(t) + cL sum_j theta_j(g_t) W_j`,
      * где `g_t(s) = K(t, s, x_h^N(s))`.
      *
      * Неизвестными являются значения решения в опорных точках функционалов. Система
@@ -333,7 +333,7 @@ public class UrysonSecondKindSolver(
                 }
                 acc += gtVal * wInt[j + 2]
             }
-            return rhs(t) + lambda * acc
+            return rhs(t) + cL * acc
         }
 
         val p = pts.size
@@ -405,7 +405,7 @@ public class UrysonSecondKindSolver(
     }
 
     /**
-     * КОМБИНИРОВАННЫЙ метод Nyström: `u = f + lambda L_n u`,
+     * КОМБИНИРОВАННЫЙ метод Nyström: `u = f + cL L_n u`,
      * `L_n = P_theta L + (I - P_theta) L^N_h` — точный оператор на образе проектора,
      * квадратура на его дополнении. Именно к этому оператору (а не к простому [nystrom])
      * относятся оценки суперсходимости для полиномиальных квазиинтерполянтов
@@ -417,20 +417,20 @@ public class UrysonSecondKindSolver(
     public fun combinedNystrom(): SolutionFunc = CombinedNystromSolver(this).combined()
 
     /**
-     * Итерированный комбинированный Nyström: `\hat u^N_h = f + lambda L u^N_h`, где `u^N_h` —
+     * Итерированный комбинированный Nyström: `\hat u^N_h = f + cL L u^N_h`, где `u^N_h` —
      * решение [combinedNystrom]; однократное применение точного оператора без новой системы.
      */
-    public fun iteratedNystrom(): SolutionFunc = CombinedNystromSolver(this).iterated()
+    public fun iteratedCombinedNystrom(): SolutionFunc = CombinedNystromSolver(this).iterated()
 
     /**
-     * Итерированный метод Кулкарни: `\hat u^K_h = f + lambda L u^K_h`, где `u^K_h` — решение
+     * Итерированный метод Кулкарни: `\hat u^K_h = f + cL L u^K_h`, где `u^K_h` — решение
      * [kulkarni]; аналог итерации Слоана, применённой к приближению Кулкарни.
      */
     public fun iteratedKulkarni(): SolutionFunc {
         val k = kulkarni()
         val uNodes = DoubleArray(op.gNode.size) { k.eval(op.gNode[it]) }
         return SolutionFunc(
-            eval = { t -> rhs(t) + lambda * op.applyNodes(t, uNodes) },
+            eval = { t -> rhs(t) + cL * op.applyNodes(t, uNodes) },
             converged = k.converged,
             iterations = k.iterations,
             residual = k.residual,
