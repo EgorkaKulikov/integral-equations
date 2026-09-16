@@ -127,7 +127,7 @@ fun secondKindSolver(
     funcs = funcs,
     space = space,
     op = op,
-    lambda = problem.lambda,
+    cL = problem.lambda,
     rhs = { t -> problem.rhsExact(t, op) },
     ctx = ctx,
 )

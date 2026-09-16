@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  *
  *  1. `iterations` — число ФАКТИЧЕСКИ выполненных шагов Ньютона, а не число проверок
  *     критерия. Раньше счётчик увеличивался ДО проверки невязки, поэтому при
- *     мгновенной сходимости наружу уходила единица при нуле шагов (замер: `lambda = 0`
+ *     мгновенной сходимости наружу уходила единица при нуле шагов (замер: `cL = 0`
  *     давал `iterations = 1` при неизменном векторе коэффициентов).
  *  2. `residual` относится к ВОЗВРАЩАЕМОЙ точке. Раньше при выходе по критерию шага
  *     возвращалась невязка в точке ДО шага, то есть систематически ЗАВЫШЕННАЯ.
@@ -75,7 +75,7 @@ class UrysonNewtonReportingTest {
             funcs = funcs,
             space = space,
             op = op,
-            lambda = lambdaOverride ?: problem.lambda,
+            cL = lambdaOverride ?: problem.lambda,
             rhs = { t -> problem.rhsExact(t, op) },
             tol = tol,
         )
@@ -88,7 +88,7 @@ class UrysonNewtonReportingTest {
     }
 
     /**
-     * НЕЗАВИСИМЫЙ пересчёт невязки базовой схемы `F(c) = c - theta(f) - lambda Xi(c)`
+     * НЕЗАВИСИМЫЙ пересчёт невязки базовой схемы `F(c) = c - theta(f) - cL Xi(c)`
      * в заданной точке — эталон для проверки поля `residual`.
      */
     private fun baseResidualAt(solver: UrysonSecondKindSolver, coeffs: DoubleArray): Double {
@@ -96,7 +96,7 @@ class UrysonNewtonReportingTest {
         val thetaF = thetaOf(solver)
         val xi = core.xiVector(coeffs)
         return LinearAlgebra.normInf(
-            DoubleArray(coeffs.size) { coeffs[it] - thetaF[it] - solver.lambda * xi[it] },
+            DoubleArray(coeffs.size) { coeffs[it] - thetaF[it] - solver.cL * xi[it] },
         )
     }
 
@@ -139,13 +139,13 @@ class UrysonNewtonReportingTest {
             tolerance = maxOf(tol, newtonToleranceFloor),
             residualAt = { current ->
                 val xi = core.xiVector(current)
-                DoubleArray(n + 2) { current[it] - thetaF[it] - solver.lambda * xi[it] }
+                DoubleArray(n + 2) { current[it] - thetaF[it] - solver.cL * xi[it] }
             },
             stepAt = { current, f ->
                 stepCalls++
                 val b = core.bMatrix(current)
                 val jacobian = DenseMatrix.build(n + 2, n + 2) { r, col ->
-                    val value = -solver.lambda * b[r, col]
+                    val value = -solver.cL * b[r, col]
                     if (r == col) value + 1.0 else value
                 }
                 val delta = LinearAlgebra.solve(jacobian, DoubleArray(n + 2) { -f[it] })
@@ -157,7 +157,7 @@ class UrysonNewtonReportingTest {
     }
 
     /**
-     * МГНОВЕННАЯ СХОДИМОСТЬ: при `lambda = 0` уравнение превращается в `x = f`, а
+     * МГНОВЕННАЯ СХОДИМОСТЬ: при `cL = 0` уравнение превращается в `x = f`, а
      * начальное приближение базовой схемы `c_0 = theta(f)` УЖЕ является решением.
      * Значит, ни одного шага Ньютона не требуется, и честный счётчик обязан дать 0.
      *
@@ -174,7 +174,7 @@ class UrysonNewtonReportingTest {
         val expectedCoeffs = thetaOf(solver)
 
         val newton = solver.solveBase()
-        assertTrue(newton.converged, "При lambda = 0 базовая схема обязана сойтись")
+        assertTrue(newton.converged, "При cL = 0 базовая схема обязана сойтись")
         assertEquals(
             0,
             newton.iterations,
@@ -189,12 +189,12 @@ class UrysonNewtonReportingTest {
             )
         }
 
-        // Схема Кулкарни при lambda = 0 приходит к тому же: G_K(c) = theta(f).
+        // Схема Кулкарни при cL = 0 приходит к тому же: G_K(c) = theta(f).
         val kulkarni = solver.kulkarni()
         assertEquals(
             0,
             kulkarni.iterations,
-            "Кулкарни при lambda = 0 шагов не делает, получено ${kulkarni.iterations}",
+            "Кулкарни при cL = 0 шагов не делает, получено ${kulkarni.iterations}",
         )
         assertEquals(0.0, kulkarni.residual)
 
@@ -221,7 +221,7 @@ class UrysonNewtonReportingTest {
      * он молча выродился бы в проверку тождества.
      *
      * Допуски подобраны замером: на `tol = 1e-2` и `tol = 1e-10` базовая схема для
-     * задачи B выходит именно по норме шага (кубическая нелинейность при `lambda = 1`).
+     * задачи B выходит именно по норме шага (кубическая нелинейность при `cL = 1`).
      */
     @Test
     fun reportedResidualIsMeasuredAtReturnedPoint() {

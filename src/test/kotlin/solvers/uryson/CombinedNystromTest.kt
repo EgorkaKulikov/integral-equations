@@ -89,7 +89,7 @@ class CombinedNystromTest {
             val solver = secondKindSolver(UrysonProblem.B, basis, funcs, space, op)
             val exact = { t: Double -> UrysonProblem.B.exact(t) }
             val eComb = errorEh(exact, solver.combinedNystrom().eval, grid)
-            val eIter = errorEh(exact, solver.iteratedNystrom().eval, grid)
+            val eIter = errorEh(exact, solver.iteratedCombinedNystrom().eval, grid)
             assertTrue(eComb < 1e-9, "n=$n: E_h(комб. Nyström) = $eComb")
             assertTrue(eIter < 1e-9, "n=$n: E_h(итер. Nyström) = $eIter")
         }
