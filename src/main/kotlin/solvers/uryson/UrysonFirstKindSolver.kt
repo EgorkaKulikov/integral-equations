@@ -24,13 +24,15 @@ import solvers.core.FirstKindSolution
  * @param tau коэффициент запаса в принципе Морозова; теория требует лишь `tau > 1`.
  * @param gnTol критерий останова Гаусса–Ньютона по норме шага.
  * @param gnMaxIter предел числа итераций Гаусса–Ньютона при фиксированном `alpha`.
- * @param throwOnDivergence поведение при недостижении сходимости Гаусса–Ньютона.
- *        ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ — `false`, в отличие от остальных решателей.
- *        Причина: [solveFixedAlpha] вызывается внутри гомотопии [solveMorozov]
- *        десятки раз с тёплым стартом, и недостижение шагового критерия на
- *        ОТДЕЛЬНОМ `alpha` — штатная часть пути по параметру регуляризации
- *        (некорректная задача, промежуточные `alpha` заведомо плохо обусловлены),
- *        а не ошибка: итоговое решение выбирается по принципу невязки Морозова.
+ * @param throwOnDivergence поведение при недостижении сходимости Гаусса–Ньютона:
+ *        `true` (по умолчанию — как у всех остальных решателей) — исключение,
+ *        `false` — возврат последнего приближения. Политика относится к ПУБЛИЧНОМУ
+ *        вызову [solveFixedAlpha]. Гомотопия [solveMorozov] от неё отказывается
+ *        ЯВНО, передавая `false` на своём вызове: она проходит путь по убывающему
+ *        `alpha` десятками шагов с тёплым стартом, и недостижение шагового критерия
+ *        на ОТДЕЛЬНОМ `alpha` — штатная часть этого пути (некорректная задача,
+ *        промежуточные `alpha` заведомо плохо обусловлены), а не ошибка: итоговое
+ *        `alpha` выбирается по принципу невязки Морозова уже из пройденных.
  *        Предупреждение в лог пишется в любом случае.
  */
 public class UrysonFirstKindSolver(
@@ -41,7 +43,7 @@ public class UrysonFirstKindSolver(
     public val tau: Double = DEFAULT_TAU,
     public val gnTol: Double = DEFAULT_GN_TOLERANCE,
     public val gnMaxIter: Int = DEFAULT_GN_MAX_ITERATIONS,
-    public val throwOnDivergence: Boolean = false,
+    public val throwOnDivergence: Boolean = true,
     public val ctx: NumericsContext = NumericsContext.default(),
 ) {
     init {
@@ -110,11 +112,29 @@ public class UrysonFirstKindSolver(
      * Шаг определяется системой
      * `(B^T W_h B + alpha R_h) delta = -B^T W_h (Xi - theta(f^delta)) - alpha R_h c`.
      *
+     * Политика реакции на недостижение сходимости берётся из [throwOnDivergence];
+     * гомотопия [solveMorozov] вызывает внутреннюю перегрузку и отказывается от неё явно.
+     *
      * @param thetaFDelta вектор `theta_j(f^delta)` зашумлённых данных.
      * @param alpha параметр регуляризации, строго положительный.
      * @param c0 начальное приближение коэффициентов.
      */
-    public fun solveFixedAlpha(thetaFDelta: DoubleArray, alpha: Double, c0: DoubleArray): DoubleArray {
+    public fun solveFixedAlpha(thetaFDelta: DoubleArray, alpha: Double, c0: DoubleArray): DoubleArray =
+        solveFixedAlpha(thetaFDelta, alpha, c0, throwOnDivergence)
+
+    /**
+     * Реализация шага по фиксированному `alpha` с ЯВНОЙ политикой расходимости.
+     *
+     * Отдельная перегрузка нужна ровно затем, чтобы [solveMorozov] мог пройти путь по
+     * параметру регуляризации с `throwOnDivergence = false`, не меняя политику,
+     * заказанную вызывающим для публичного [solveFixedAlpha].
+     */
+    private fun solveFixedAlpha(
+        thetaFDelta: DoubleArray,
+        alpha: Double,
+        c0: DoubleArray,
+        throwOnDivergence: Boolean,
+    ): DoubleArray {
         require(alpha > 0.0) { "Параметр регуляризации alpha должен быть положительным, получено alpha=$alpha" }
         val c = c0.copyOf()
         var lastStep = Double.NaN
@@ -203,7 +223,9 @@ public class UrysonFirstKindSolver(
             } else {
                 c
             }
-            c = solveFixedAlpha(thetaFDelta, alpha, start)
+            // Расходимость на ОТДЕЛЬНОМ alpha — штатная часть пути, а не ошибка:
+            // политика решателя здесь отключается явно (см. KDoc [throwOnDivergence]).
+            c = solveFixedAlpha(thetaFDelta, alpha, start, throwOnDivergence = false)
             val res = residual(c, thetaFDelta)
             if (delta == 0.0) {
                 // Шума нет: критерий Морозова вырождается, идём до наименьшего alpha.
