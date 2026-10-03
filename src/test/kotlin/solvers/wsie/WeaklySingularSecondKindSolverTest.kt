@@ -2,6 +2,7 @@ package solvers.wsie
 
 import numerics.AlgebraicSingularQuadrature
 import org.junit.jupiter.api.Tag
+import problems.wsie.WeaklySingularProblem
 import solvers.core.SolutionFunc
 import splines.GeneratingSystem
 import splines.Grid
@@ -9,12 +10,9 @@ import splines.MinimalSplineBasis
 import splines.functionals.DeBoorFixFunctionals
 import splines.functionals.ProjFunctionals
 import splines.functionals.ThreePointFunctionals
-import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -48,27 +46,16 @@ class WeaklySingularSecondKindSolverTest {
         return e
     }
 
-    // ---- Problem F-a: u − 0.2 ∫_0^1 |t − s|^(−1/2) u(s) ds = f, u = 1 + √t + √(1 − t) ----
+    // ---- Problem F-a: u − 0.2 ∫_0^1 |t − s|^(−1/2) u(s) ds = f, u = 1 + √t + √(1 − t) ([WeaklySingularProblem.F_A]) ----
 
-    private fun uFa(t: Double): Double = 1.0 + sqrt(max(t, 0.0)) + sqrt(max(1.0 - t, 0.0))
-
-    /** ∫_0^1 |t − s|^(−1/2) √s ds = π t/2 + √(1 − t) + t ln((1 + √(1 − t))/√t). */
-    private fun moSqrt(t: Double): Double {
-        val c = sqrt(max(1.0 - t, 0.0))
-        return PI * t / 2 + c + if (t > 0.0) t * ln((1.0 + c) / sqrt(t)) else 0.0
-    }
-
-    private fun luFa(t: Double): Double =
-        2.0 * (sqrt(max(t, 0.0)) + sqrt(max(1.0 - t, 0.0))) + moSqrt(t) + moSqrt(1.0 - t)
-
-    private fun fFa(t: Double): Double = uFa(t) - 0.2 * luFa(t)
+    private val fa = WeaklySingularProblem.F_A
 
     @Test
     fun `F-a closed-form image agrees with the refined Fredholm operator`() {
         val op = WeaklySingularFredholmOperator(KernelWS(0.5), Grid.uniform(8), AlgebraicSingularQuadrature(0.5), 40)
         var worst = 0.0
         for (t in doubleArrayOf(0.0, 1e-6, 0.1, 0.25, 0.5, 0.7, 0.999, 1.0)) {
-            worst = max(worst, abs(op.apply(t) { s -> uFa(s) } - luFa(t)))
+            worst = max(worst, abs(op.apply(t, fa.exact) - (fa.exact(t) - fa.rhs(t)) / fa.cL))
         }
         println("C3 F-a closed form vs operator (refinement 40): max diff = %.2e".format(worst))
         assertTrue(worst <= 1e-12, "F-a closed form differs from the operator by $worst")
@@ -77,7 +64,6 @@ class WeaklySingularSecondKindSolverTest {
     // ---- Problem V-b: u − ∫_0^t (t − s)^(−1/2) u(s) ds = f, u = cos t ----
 
     private val vFine = WeaklySingularVolterraOperator(KernelWS(0.5), Grid.uniform(64), AlgebraicSingularQuadrature(0.5))
-    private fun fVb(t: Double): Double = cos(t) - vFine.apply(t) { s -> cos(s) }
 
     @Test
     fun `V-b right-hand side is partition independent`() {
@@ -131,7 +117,7 @@ class WeaklySingularSecondKindSolverTest {
         "F-a",
         listOf("uniform" to { n: Int -> Grid.uniform(n) }, "symPow3" to { n: Int -> Grid.symmetricPower(n, r = 3.0) }),
         { g -> WeaklySingularFredholmOperator(KernelWS(0.5), g, AlgebraicSingularQuadrature(0.5), 10) },
-        0.2, ::fFa, ::uFa,
+        fa.cL, fa.rhs, fa.exact,
     )
 
     @Test
@@ -139,7 +125,7 @@ class WeaklySingularSecondKindSolverTest {
         "V-b",
         listOf("uniform" to { n: Int -> Grid.uniform(n) }, "pow2" to { n: Int -> Grid.power(n, r = 2.0) }),
         { g -> WeaklySingularVolterraOperator(KernelWS(0.5), g, AlgebraicSingularQuadrature(0.5)) },
-        1.0, ::fVb, ::cos,
+        WeaklySingularProblem.V_B.cL, WeaklySingularProblem.V_B.rhs, WeaklySingularProblem.V_B.exact,
     )
 
     @Test
@@ -148,11 +134,11 @@ class WeaklySingularSecondKindSolverTest {
         val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
         val op = WeaklySingularFredholmOperator(KernelWS(0.5), grid, AlgebraicSingularQuadrature(0.5))
         assertFailsWith<IllegalArgumentException> {
-            WeaklySingularSecondKindSolver(basis, DeBoorFixFunctionals(basis), op, 0.2, ::fFa)
+            WeaklySingularSecondKindSolver(basis, DeBoorFixFunctionals(basis), op, 0.2, fa.rhs)
         }
         val other = WeaklySingularFredholmOperator(KernelWS(0.5), Grid.uniform(8), AlgebraicSingularQuadrature(0.5))
         assertFailsWith<IllegalArgumentException> {
-            WeaklySingularSecondKindSolver(basis, ProjFunctionals(basis), other, 0.2, ::fFa)
+            WeaklySingularSecondKindSolver(basis, ProjFunctionals(basis), other, 0.2, fa.rhs)
         }
     }
 
@@ -163,8 +149,8 @@ class WeaklySingularSecondKindSolverTest {
             val grid = Grid.uniform(n)
             val basis = MinimalSplineBasis(GeneratingSystem.B, grid)
             val op = WeaklySingularFredholmOperator(KernelWS(0.5), grid, AlgebraicSingularQuadrature(0.5), 10)
-            val solver = WeaklySingularSecondKindSolver(basis, ThreePointFunctionals(basis), op, 0.2, ::fFa)
-            e[k] = errorEh(grid, ::uFa, solver.base())
+            val solver = WeaklySingularSecondKindSolver(basis, ThreePointFunctionals(basis), op, 0.2, fa.rhs)
+            e[k] = errorEh(grid, fa.exact, solver.base())
         }
         println("C3 E_h F-a uniform    lambda-base n=8 %.3e  n=16 %.3e  n=32 %.3e".format(e[0], e[1], e[2]))
         assertTrue(e[2] < e[0], "three-point base: E_h does not decrease: ${e.toList()}")
