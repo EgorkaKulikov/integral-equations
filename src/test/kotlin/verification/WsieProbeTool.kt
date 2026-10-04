@@ -36,7 +36,9 @@ import splines.functionals.ThreePointFunctionals
  * The matrix problem × scheme × functional family χ × space × grid × n is filtered by the system
  * properties `wsie.problems`, `wsie.schemes`, `wsie.families`, `wsie.spaces`, `wsie.grids`, `wsie.n`
  * (comma lists), `wsie.quad` (nodes per subinterval of [AlgebraicSingularQuadrature], 12 by default),
- * `wsie.refine` (endpoint refinement for the space G and for Fredholm problems, 20 by default) and
+ * `wsie.refine` (endpoint refinement for the space G and for Fredholm problems, 20 by default),
+ * `wsie.refineOther` (endpoint refinement for the remaining rows, i.e. Volterra problems in the space B,
+ * 0 by default) and
  * `wsie.cond` (`false` switches off the condition estimate of the base matrix).
  *
  * Every row is computed independently (grid, basis, operator, functionals and solver are rebuilt), an exception
@@ -171,6 +173,7 @@ class WsieProbeTool {
         val ns = listProp("wsie.n", "8,16,32,64").map { it.toInt() }
         val quad = System.getProperty("wsie.quad")?.toInt() ?: 12
         val refineSingular = System.getProperty("wsie.refine")?.toInt() ?: 20
+        val refineOther = System.getProperty("wsie.refineOther")?.toInt() ?: 0
         val withCond = System.getProperty("wsie.cond")?.toBoolean() ?: true
 
         val rows = ArrayList<Row>()
@@ -178,7 +181,7 @@ class WsieProbeTool {
             val p = problemsById[pid] ?: error("unknown problem $pid; known: ${problemsById.keys}")
             for (space in spaces) {
                 if (space == "G" && p.type == WeaklySingularType.FREDHOLM) continue
-                val refine = if (space == "G" || p.type == WeaklySingularType.FREDHOLM) refineSingular else 0
+                val refine = if (space == "G" || p.type == WeaklySingularType.FREDHOLM) refineSingular else refineOther
                 for (gLabel in grids) {
                     val r = gradingOf(gLabel)
                     for (n in ns) {
@@ -243,7 +246,7 @@ class WsieProbeTool {
         val backend = ctx.describe()
         val header = "# wsieProbe numerical-core=$ncVersion minimal-splines=$msVersion $backend " +
             "numerics.backend=${System.getProperty("numerics.backend")} quad=$quad " +
-            "refine(G-space,Fredholm)=$refineSingular refine(other)=0 condInf=Conditioning.conditionEstimate(baseMatrix)"
+            "refine(G-space,Fredholm)=$refineSingular refine(other)=$refineOther condInf=Conditioning.conditionEstimate(baseMatrix)"
         val columns = listOf(
             "problem", "scheme", "family", "space", "grid", "r", "n", "quad", "refine", "Eh", "orderEh",
             "condInf", "Lambda", "ms", "msEval", "converged", "iterations", "status",
@@ -288,7 +291,7 @@ class WsieProbeTool {
             append("spaces=").append(spaces.joinToString(",")).append('\n')
             append("grids=").append(grids.joinToString(",")).append('\n')
             append("n=").append(ns.joinToString(",")).append('\n')
-            append("quad=").append(quad).append(" refine=").append(refineSingular).append(" cond=").append(withCond).append('\n')
+            append("quad=").append(quad).append(" refine=").append(refineSingular).append(" refineOther=").append(refineOther).append(" cond=").append(withCond).append('\n')
             append("java=").append(System.getProperty("java.version")).append('\n')
             append("rows=").append(rows.size).append(" failed=").append(rows.count { it.status != "OK" }).append('\n')
             append("elapsed_s=").append(String.format(Locale.ROOT, "%.1f", elapsed)).append('\n')

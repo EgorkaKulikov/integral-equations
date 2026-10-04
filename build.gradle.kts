@@ -871,7 +871,7 @@ tasks.register<Test>("sec4Tables") {
 // `slowTest`, `scipyVerify` or Kover. Each axis is filtered by a comma list, e.g.
 //   ./gradlew wsieProbe -Dwsie.problems=V-a -Dwsie.schemes=base,kulkarni -Dwsie.n=8,16
 // Properties: wsie.problems, wsie.schemes, wsie.families, wsie.spaces, wsie.grids, wsie.n, wsie.quad,
-// wsie.refine, wsie.cond (see verification.WsieProbeTool).
+// wsie.refine, wsie.refineOther, wsie.cond (see verification.WsieProbeTool).
 tasks.register<Test>("wsieProbe") {
     group = "verification"
     description = "Probe of the weakly singular second-kind schemes into build/wsie-probe/ (-Dwsie.problems=..., -Dwsie.n=...)"
@@ -888,7 +888,7 @@ tasks.register<Test>("wsieProbe") {
     systemProperty("wsie.meta.minimalSplinesVersion", minimalSplinesVersion)
     listOf(
         "wsie.problems", "wsie.schemes", "wsie.families", "wsie.spaces", "wsie.grids",
-        "wsie.n", "wsie.quad", "wsie.refine", "wsie.cond",
+        "wsie.n", "wsie.quad", "wsie.refine", "wsie.refineOther", "wsie.cond",
     ).forEach { key -> providers.systemProperty(key).orNull?.let { systemProperty(key, it) } }
 }
 
