@@ -13,6 +13,7 @@ import numerics.NumericsContext
 import problems.wsie.WeaklySingularProblem
 import problems.wsie.WeaklySingularType
 import solvers.core.SolutionFunc
+import solvers.wsie.ProductIntegrationOperator
 import solvers.wsie.WeaklySingularFredholmOperator
 import solvers.wsie.WeaklySingularOperator
 import solvers.wsie.WeaklySingularSecondKindSolver
@@ -41,6 +42,16 @@ import splines.functionals.ThreePointFunctionals
  * 0 by default) and
  * `wsie.cond` (`false` switches off the condition estimate of the base matrix).
  *
+ * Schemes: `base`, `kulkarni`, `iteratedKulkarni`, `sloan` (methods of [WeaklySingularSecondKindSolver]),
+ * `kulkarni2grid` (two-grid Kulkarni: coarse grid with n cells, nested fine grid with n·p cells of the same type and
+ * grading, p = `wsie.p`, 2 by default; the fine solver is built exactly as the coarse one) and `kulkarniDiscrete`
+ * (discrete Kulkarni with [ProductIntegrationOperator] on the grid Y_m of the same type and grading with
+ * m = n·`wsie.mp` cells, `wsie.mp` = 2 by default, and `wsie.q` nodes per cell, 8 by default).
+ * Columns `p`, `mp`, `q` are 0 for the schemes that do not use them; `costMs` equals `ms` (construction + solve).
+ * For `kulkarni2grid` the row also carries `EhKulkFine` and `msKulkFine`: E_h and construction + solve time of the
+ * classical Kulkarni scheme on the fine grid (solver built afresh, error on the control set of the fine grid, as in
+ * a `kulkarni` row with n·p cells); NaN for the other schemes.
+ *
  * Every row is computed independently (grid, basis, operator, functionals and solver are rebuilt), an exception
  * turns the row into `FAILED:<message>` and the loop continues. The observed orders
  * `log2(E_n / E_{2n})` are numerical observations, not proven rates.
@@ -68,6 +79,11 @@ class WsieProbeTool {
         var converged: Boolean = false,
         var iterations: Int = 0,
         var status: String = "OK",
+        var pRef: Int = 0,
+        var mp: Int = 0,
+        var q: Int = 0,
+        var ehKulkFine: Double = Double.NaN,
+        var msKulkFine: Double = Double.NaN,
     )
 
     private val ctx = NumericsContext.default()
@@ -115,6 +131,20 @@ class WsieProbeTool {
             "lambda" -> ThreePointFunctionals(basis, ctx = ctx)
             else -> error("unknown family $family")
         }
+
+    /** Grid, family and solver of one level; the coarse and the fine level are built by the same code. */
+    private class Level(val grid: Grid, val funcs: FunctionalFamily, val solver: WeaklySingularSecondKindSolver)
+
+    private fun levelOf(
+        p: WeaklySingularProblem, sys: GeneratingSystem, family: String, gLabel: String, r: Double, n: Int,
+        quad: Int, refine: Int,
+    ): Level {
+        val grid = gridOf(gLabel, r, n, p)
+        val basis = MinimalSplineBasis(sys, grid, ctx)
+        val op = operatorOf(p, grid, quad, refine)
+        val funcs = familyOf(family, basis, p)
+        return Level(grid, funcs, WeaklySingularSecondKindSolver(basis, funcs, op, p.cL, p.rhs, ctx))
+    }
 
     private fun runScheme(scheme: String, s: WeaklySingularSecondKindSolver): SolutionFunc = when (scheme) {
         "base" -> s.base()
@@ -175,6 +205,9 @@ class WsieProbeTool {
         val refineSingular = System.getProperty("wsie.refine")?.toInt() ?: 20
         val refineOther = System.getProperty("wsie.refineOther")?.toInt() ?: 0
         val withCond = System.getProperty("wsie.cond")?.toBoolean() ?: true
+        val pRef = System.getProperty("wsie.p")?.toInt() ?: 2
+        val mpRef = System.getProperty("wsie.mp")?.toInt() ?: 2
+        val qNodes = System.getProperty("wsie.q")?.toInt() ?: 8
 
         val rows = ArrayList<Row>()
         for (pid in problems) {
@@ -193,12 +226,26 @@ class WsieProbeTool {
                                 val row = Row(pid, scheme, family, space, gLabel, r, n, quad, refine)
                                 try {
                                     val tc = System.nanoTime()
-                                    val grid = gridOf(gLabel, r, n, p)
-                                    val basis = MinimalSplineBasis(systemOf(space, p), grid, ctx)
-                                    val op = operatorOf(p, grid, quad, refine)
-                                    val funcs = familyOf(family, basis, p)
-                                    val solver = WeaklySingularSecondKindSolver(basis, funcs, op, p.cL, p.rhs, ctx)
-                                    val sol = runScheme(scheme, solver)
+                                    val sys = systemOf(space, p)
+                                    val coarse = levelOf(p, sys, family, gLabel, r, n, quad, refine)
+                                    val grid = coarse.grid
+                                    val funcs = coarse.funcs
+                                    val solver = coarse.solver
+                                    val sol = when (scheme) {
+                                        "kulkarni2grid" -> {
+                                            row.pRef = pRef
+                                            val fine = levelOf(p, sys, family, gLabel, r, n * pRef, quad, refine)
+                                            solver.twoGridKulkarni(fine.solver, pRef)
+                                        }
+                                        "kulkarniDiscrete" -> {
+                                            row.mp = mpRef
+                                            row.q = qNodes
+                                            val ym = gridOf(gLabel, r, n * mpRef, p)
+                                            val volterra = p.type == WeaklySingularType.VOLTERRA
+                                            solver.discreteKulkarni(ProductIntegrationOperator(p.kernel, ym, qNodes, volterra))
+                                        }
+                                        else -> runScheme(scheme, solver)
+                                    }
                                     row.ms = (System.nanoTime() - tc) / 1e6
                                     row.converged = sol.converged
                                     row.iterations = sol.iterations
@@ -206,6 +253,18 @@ class WsieProbeTool {
                                     val te = System.nanoTime()
                                     row.eh = maxError(controlSet(grid, p), p.exact, sol.eval)
                                     row.msEval = (System.nanoTime() - te) / 1e6
+                                    if (scheme == "kulkarni2grid") {
+                                        // Reference for the two-grid scheme: classical Kulkarni on the fine grid, timed like any row.
+                                        try {
+                                            val tf = System.nanoTime()
+                                            val fineK = levelOf(p, sys, family, gLabel, r, n * pRef, quad, refine)
+                                            val solK = fineK.solver.kulkarni()
+                                            row.msKulkFine = (System.nanoTime() - tf) / 1e6
+                                            row.ehKulkFine = maxError(controlSet(fineK.grid, p), p.exact, solK.eval)
+                                        } catch (e: Exception) {
+                                            System.err.println("wsieProbe EhKulkFine failed: ${e.javaClass.simpleName}: ${e.message}")
+                                        }
+                                    }
                                     if (withCond && cond.isNaN()) {
                                         cond = Conditioning.conditionEstimate(solver.baseMatrix(), ctx).valueOrNull()
                                             ?: Double.NaN
@@ -217,7 +276,8 @@ class WsieProbeTool {
                                 configRows.add(row)
                                 System.err.println(
                                     "wsieProbe ${row.problem} ${row.scheme} ${row.family} ${row.space} ${row.grid} " +
-                                        "n=${row.n} Eh=${row.eh} ms=${row.ms} ${row.status}",
+                                        "n=${row.n} Eh=${row.eh} ms=${row.ms} ${row.status}" +
+                                        (if (row.scheme == "kulkarni2grid") " EhKulkFine=${row.ehKulkFine} msKulkFine=${row.msKulkFine}" else ""),
                                 )
                             }
                             configRows.forEach { it.condInf = cond }
@@ -246,16 +306,19 @@ class WsieProbeTool {
         val backend = ctx.describe()
         val header = "# wsieProbe numerical-core=$ncVersion minimal-splines=$msVersion $backend " +
             "numerics.backend=${System.getProperty("numerics.backend")} quad=$quad " +
-            "refine(G-space,Fredholm)=$refineSingular refine(other)=$refineOther condInf=Conditioning.conditionEstimate(baseMatrix)"
+            "refine(G-space,Fredholm)=$refineSingular refine(other)=$refineOther condInf=Conditioning.conditionEstimate(baseMatrix) " +
+            "wsie.p=$pRef wsie.mp=$mpRef wsie.q=$qNodes"
         val columns = listOf(
             "problem", "scheme", "family", "space", "grid", "r", "n", "quad", "refine", "Eh", "orderEh",
             "condInf", "Lambda", "ms", "msEval", "converged", "iterations", "status",
+            "p", "mp", "q", "costMs", "EhKulkFine", "msKulkFine",
         )
         fun f(x: Double): String = String.format(Locale.ROOT, "%.17g", x)
         fun cells(row: Row): List<String> = listOf(
             row.problem, row.scheme, row.family, row.space, row.grid, f(row.r), row.n.toString(), row.quad.toString(),
             row.refine.toString(), f(row.eh), f(row.orderEh), f(row.condInf), f(row.lambda), f(row.ms), f(row.msEval),
             row.converged.toString(), row.iterations.toString(), row.status,
+            row.pRef.toString(), row.mp.toString(), row.q.toString(), f(row.ms), f(row.ehKulkFine), f(row.msKulkFine),
         )
 
         val dir = File(System.getProperty("user.dir")).resolve("build/wsie-probe")
@@ -278,7 +341,9 @@ class WsieProbeTool {
                     "\"orderEh\": ${jsonNum(row.orderEh)}, \"condInf\": ${jsonNum(row.condInf)}, " +
                     "\"Lambda\": ${jsonNum(row.lambda)}, \"ms\": ${jsonNum(row.ms)}, " +
                     "\"msEval\": ${jsonNum(row.msEval)}, \"converged\": ${row.converged}, " +
-                    "\"iterations\": ${row.iterations}, \"status\": ${jsonString(row.status)}}"
+                    "\"iterations\": ${row.iterations}, \"status\": ${jsonString(row.status)}, " +
+                    "\"p\": ${row.pRef}, \"mp\": ${row.mp}, \"q\": ${row.q}, \"costMs\": ${jsonNum(row.ms)}, " +
+                    "\"EhKulkFine\": ${jsonNum(row.ehKulkFine)}, \"msKulkFine\": ${jsonNum(row.msKulkFine)}}"
             })
             append("\n ]\n}\n")
         })
@@ -292,6 +357,7 @@ class WsieProbeTool {
             append("grids=").append(grids.joinToString(",")).append('\n')
             append("n=").append(ns.joinToString(",")).append('\n')
             append("quad=").append(quad).append(" refine=").append(refineSingular).append(" refineOther=").append(refineOther).append(" cond=").append(withCond).append('\n')
+            append("p=").append(pRef).append(" mp=").append(mpRef).append(" q=").append(qNodes).append('\n')
             append("java=").append(System.getProperty("java.version")).append('\n')
             append("rows=").append(rows.size).append(" failed=").append(rows.count { it.status != "OK" }).append('\n')
             append("elapsed_s=").append(String.format(Locale.ROOT, "%.1f", elapsed)).append('\n')
