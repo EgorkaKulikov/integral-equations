@@ -10,6 +10,7 @@ import solvers.core.SecondKindSolverCore
 import solvers.core.SolutionFunc
 import splines.MinimalSplineBasis
 import splines.functionals.FunctionalFamily
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
 /**
@@ -22,6 +23,8 @@ import kotlin.math.abs
  *
  * The two-grid scheme [twoGridKulkarni] (M-DS) is defined here rather than in the core: it couples this solver
  * with a second one on a nested fine grid and uses only value images `𝓛ω_i` of both levels.
+ * The discrete scheme [discreteKulkarni] (M-DK) replaces 𝓛 by the product-integration operator
+ * [ProductIntegrationOperator] on a fine grid; it also lives here because it needs node values, not closures.
  *
  * WHY ANY VALUE-ONLY FAMILY IS ACCEPTED. The schemes need nothing from chi beyond `chi_j(g)` and, for
  * Kulkarni, the projector property; both are properties of the family, not of the kernel. Families that use
@@ -182,6 +185,85 @@ public class WeaklySingularSecondKindSolver(
         require(fine.op::class == op::class && fine.op.kernel.alpha == op.kernel.alpha) {
             "twoGridKulkarni: both levels must use the same kind of operator with the same exponent alpha"
         }
+    }
+
+    /**
+     * Discrete Kulkarni scheme (M-DK, spec K3): the classical [kulkarni] with 𝓛 replaced by the product-integration
+     * operator `𝓛_m` = [lm] on a fine grid Y_m ⊇ X (the proof draft T3′ §0 for the Volterra extension k̃).
+     * The equation `u = f + (P𝓛_m + 𝓛_m P − P𝓛_m P)u` with `c = chi(u)` reduces, for a projector family, to
+     *   (E − M_m − M2_m + M_m²) c = (E − M_m) g + d_m,
+     * (M_m)_{j,i} = chi_j(cL·𝓛_m ω_i), (M2_m)_{j,i} = chi_j(cL·𝓛_m(cL·𝓛_m ω_i)), d_m = chi(cL·𝓛_m f), g = chi(f),
+     * and the solution is recovered as u = y + (I − P)(f + cL·𝓛_m y), y = Σ c_i ω_i, i.e.
+     *   u = f + Σ_j (c − g − M_m c)_j ω_j + cL·𝓛_m y.
+     *
+     * WHY THIS ASSEMBLY. `𝓛_m v` depends on `v` only through the node values `v(s_p)`, so `𝓛_m ω_i` at the nodes is
+     * the matrix product `A_ss Ω` (`A_ss` = [ProductIntegrationOperator.kernelRow] at the nodes, contracted row by row
+     * and never stored) and M2_m needs no nested quadrature. The rows at the evaluation points of chi are computed
+     * once and shared by all columns.
+     *
+     * Checked here: the family is a projector; every breakpoint of X coincides with a breakpoint of Y_m within
+     * [splines.Grid.breakpointInclusionEps] (so ω_i are smooth on the cells of Y_m); the ends coincide; the kind of
+     * the operator (Volterra/Fredholm) and alpha agree with [op]. NOT checked: equality of the kernel factors k.
+     *
+     * Status (AGENTS.md §8): adaptation of the discrete modified projection method [Kulkarni 2003] (product
+     * integration in the sense of GKV 2023) to minimal-spline projector families; no order is proven here.
+     */
+    public fun discreteKulkarni(lm: ProductIntegrationOperator): SolutionFunc {
+        requireDiscretePair(lm)
+        val nc = dim
+        val s = lm.nodes()
+        val nN = s.size
+        val omegaAt = Array(nc) { i -> DoubleArray(nN) { p -> basis.omega(i - 2, s[p]) } }
+        // cL·(A_ss Ω), assembled by node rows: entry [b][i] = cL·(𝓛_m ω_i)(s_b).
+        val byNode = ParallelAssembly.assembleRows(nN, nc, ctx.parallel) { b ->
+            val row = lm.kernelRow(s[b])
+            DoubleArray(nc) { i -> cL * dot(row, omegaAt[i]) }
+        }
+        val lOmegaAt = Array(nc) { i -> DoubleArray(nN) { b -> byNode[b][i] } }
+        val fs = DoubleArray(nN) { fEff(s[it]) }
+        val rows = ConcurrentHashMap<Double, DoubleArray>()
+        val lmOf = { values: DoubleArray -> { t: Double -> cL * dot(rows.computeIfAbsent(t) { lm.kernelRow(it) }, values) } }
+        val m = chiColumns(funcs, nc) { i -> lmOf(omegaAt[i]) }
+        val m2 = chiColumns(funcs, nc) { i -> lmOf(lOmegaAt[i]) }
+        val lf = lmOf(fs)
+        val d = DoubleArray(nc) { j -> funcs.chi(j - 2).apply(lf, UNSUPPORTED_DERIVATIVE) }
+        val g = vectorG()
+        val mm = LinearAlgebra.matMat(m, m, ctx.backend)
+        val a = DenseMatrix.zeros(nc, nc)
+        for (row in 0 until nc) {
+            for (col in 0 until nc) a[row, col] = -m[row, col] - m2[row, col] + mm[row, col]
+            a[row, row] += 1.0
+        }
+        val mg = LinearAlgebra.matVec(m, g, ctx.backend)
+        val c = LinearAlgebra.solve(a, DoubleArray(nc) { g[it] - mg[it] + d[it] }, ctx.backend)
+        val mc = LinearAlgebra.matVec(m, c, ctx.backend)
+        val e = DoubleArray(nc) { c[it] - g[it] - mc[it] }
+        val ys = DoubleArray(nN) { p -> basis.evalSpline(c, s[p]) }
+        return SolutionFunc(eval = { t -> fEff(t) + basis.evalSpline(e, t) + cL * dot(lm.kernelRow(t), ys) })
+    }
+
+    private fun requireDiscretePair(lm: ProductIntegrationOperator) {
+        require(funcs.isProjector) { "discreteKulkarni: the family '${funcs.name}' is not a projector" }
+        require(lm.kernel.alpha == op.kernel.alpha) {
+            "discreteKulkarni: exponent ${lm.kernel.alpha} of L_m differs from ${op.kernel.alpha}"
+        }
+        require(lm.volterra == (op is WeaklySingularVolterraOperator)) {
+            "discreteKulkarni: L_m and the operator of the solver must both be Volterra or both Fredholm"
+        }
+        val eps = grid.breakpointInclusionEps
+        val fine = lm.fineGrid.breakpoints
+        require(abs(fine.first() - grid.a) <= eps && abs(fine.last() - grid.b) <= eps) {
+            "discreteKulkarni: the fine grid must span [${grid.a}, ${grid.b}]"
+        }
+        for (x in grid.breakpoints) require(fine.any { abs(it - x) <= eps }) {
+            "discreteKulkarni: breakpoint $x of the coarse grid is not a breakpoint of the fine grid"
+        }
+    }
+
+    private fun dot(a: DoubleArray, b: DoubleArray): Double {
+        var acc = 0.0
+        for (k in a.indices) acc += a[k] * b[k]
+        return acc
     }
 
     /**
