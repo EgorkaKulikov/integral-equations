@@ -169,4 +169,22 @@ class WeaklySingularDiscreteKulkarniTest {
     @Test
     @Tag("slow")
     fun `V-b discrete Kulkarni versus classical Kulkarni on power grid r=3`() = compare("V-b", volterra, vb)
+
+    // ---- (4) V-d (k = 1 + t s): with the natural extension k̃ = k, M-DK stays at the level of M-K ----
+
+    @Test
+    @Tag("fast")
+    fun `V-d discrete Kulkarni with the natural kernel extension matches classical Kulkarni`() {
+        val prob = WeaklySingularProblem.V_D
+        val n = 16
+        val q = 8
+        val grid = Grid.power(n, r = 3.0)
+        val makeOp = { g: Grid -> WeaklySingularVolterraOperator(prob.kernel, g, AlgebraicSingularQuadrature(prob.alpha, 12), 20) }
+        val s = solver(grid, makeOp, prob.cL, prob.rhs)
+        val eK = errorEh(grid, prob.exact, s.kulkarni())
+        val lm = ProductIntegrationOperator(prob.kernel, Grid.power(2 * n, r = 3.0), q, volterra = true)
+        val eD = errorEh(grid, prob.exact, s.discreteKulkarni(lm))
+        println("CDK V-d pow3 n=$n q=$q m=${2 * n} natural: E_h discrete %.3e  kulkarni %.3e  ratio %.4f".format(eD, eK, eD / eK))
+        assertTrue(eD / eK <= 1.1, "V-d n=$n q=$q: E_h(M-DK)/E_h(M-K) = ${eD / eK}")
+    }
 }
