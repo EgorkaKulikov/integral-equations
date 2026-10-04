@@ -195,7 +195,7 @@ class WsieProbeTool {
     @Test
     fun probe() {
         val t0 = System.nanoTime()
-        val problems = listProp("wsie.problems", "V-a,V-b,V-c,F-a")
+        val problems = listProp("wsie.problems", "V-a,V-b,V-c,V-d,F-a,F-b")
         val schemes = listProp("wsie.schemes", "base,kulkarni,iteratedKulkarni")
         val families = listProp("wsie.families", "theta,theta-tau,lambda")
         val spaces = listProp("wsie.spaces", "B,G")

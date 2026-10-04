@@ -65,9 +65,10 @@ class WeaklySingularProblemsTest {
     }
 
     @Test
-    fun `catalogue lists four problems with distinct names`() {
+    fun `catalogue lists six problems with distinct names`() {
         val names = WeaklySingularProblem.ALL.map { it.name }
-        assertEquals(listOf("V-a", "V-b", "V-c", "F-a"), names)
+        assertEquals(listOf("V-a", "V-b", "V-c", "V-d", "F-a", "F-b"), names)
         assertEquals(WeaklySingularType.FREDHOLM, WeaklySingularProblem.F_A.type)
+        assertEquals(WeaklySingularType.FREDHOLM, WeaklySingularProblem.F_B.type)
     }
 }
