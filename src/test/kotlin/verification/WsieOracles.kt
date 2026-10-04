@@ -416,4 +416,197 @@ internal object WsieOracles {
         )
         return values to derivs
     }
+
+    // ==================== validation items 6 and 9 (round V2) ====================
+
+    /**
+     * Values (B_{k-2}, B_{k-1}, B_k) of [quadraticBSplines] in binary64 at `at` in the cell [y_k, y_{k+1}] (same
+     * recursion, same knot layout y[i + 2] = y_i); used for the bulk assembly of the reference scheme (item 9).
+     */
+    fun quadraticBSplinesD(y: DoubleArray, k: Int, at: Double): DoubleArray {
+        val ym = y[k + 1]; val yk = y[k + 2]; val yk1 = y[k + 3]; val yk2 = y[k + 4]
+        val b1Right = (at - yk) / (yk1 - yk)
+        val b1Left = (yk1 - at) / (yk1 - yk)
+        val dLeft = yk1 - ym
+        val dRight = yk2 - yk
+        return doubleArrayOf(
+            (yk1 - at) / dLeft * b1Left,
+            (at - ym) / dLeft * b1Left + (yk2 - at) / dRight * b1Right,
+            (at - yk) / dRight * b1Right,
+        )
+    }
+
+    /** Gaussian elimination with partial pivoting in binary64 (own LU, item 9): solves a x = rhs; inputs are copied. */
+    fun solveDense(a: Array<DoubleArray>, rhs: DoubleArray): DoubleArray {
+        val m = rhs.size
+        val lu = Array(m) { a[it].copyOf() }
+        val x = rhs.copyOf()
+        for (c in 0 until m) {
+            var p = c
+            for (r in c + 1 until m) if (Math.abs(lu[r][c]) > Math.abs(lu[p][c])) p = r
+            check(lu[p][c] != 0.0) { "solveDense: singular matrix at column $c" }
+            if (p != c) { val t = lu[p]; lu[p] = lu[c]; lu[c] = t; val tx = x[p]; x[p] = x[c]; x[c] = tx }
+            for (r in c + 1 until m) {
+                val f = lu[r][c] / lu[c][c]
+                if (f != 0.0) { for (q in c until m) lu[r][q] -= f * lu[c][q]; x[r] -= f * x[c] }
+            }
+        }
+        for (r in m - 1 downTo 0) {
+            var s = x[r]
+            for (q in r + 1 until m) s -= lu[r][q] * x[q]
+            x[r] = s / lu[r][r]
+        }
+        return x
+    }
+
+    /** Gaussian elimination with partial pivoting in BigDecimal (item 6): solves a x = rhs; inputs are copied. */
+    fun solveBig(a: Array<Array<BigDecimal>>, rhs: Array<BigDecimal>, mc: MathContext): Array<BigDecimal> {
+        val m = rhs.size
+        val lu = Array(m) { a[it].copyOf() }
+        val x = rhs.copyOf()
+        for (c in 0 until m) {
+            var p = c
+            for (r in c + 1 until m) if (lu[r][c].abs() > lu[p][c].abs()) p = r
+            check(lu[p][c].signum() != 0) { "solveBig: singular matrix at column $c" }
+            if (p != c) { val t = lu[p]; lu[p] = lu[c]; lu[c] = t; val tx = x[p]; x[p] = x[c]; x[c] = tx }
+            for (r in c + 1 until m) {
+                val f = lu[r][c].divide(lu[c][c], mc)
+                if (f.signum() != 0) {
+                    for (q in c until m) lu[r][q] = lu[r][q].subtract(f.multiply(lu[c][q], mc), mc)
+                    x[r] = x[r].subtract(f.multiply(x[c], mc), mc)
+                }
+            }
+        }
+        for (r in m - 1 downTo 0) {
+            var s = x[r]
+            for (q in r + 1 until m) s = s.subtract(lu[r][q].multiply(x[q], mc), mc)
+            x[r] = s.divide(lu[r][r], mc)
+        }
+        return x
+    }
+
+    /**
+     * Tanh-sinh rule on [-1, 1] with step [h], |kh| <= 4 (weights below 1e-36 beyond): x_k = tanh(u_k),
+     * u_k = (pi/2) sinh(kh), w_k = h (pi/2) cosh(kh)/cosh^2(u_k). The distance to the nearer end,
+     * 1 - |x_k| = 2/(1 + e^(2|u_k|)), is kept separately, so nodes next to an end carry no cancellation.
+     */
+    class TanhSinh(h: Double) {
+        private val w: DoubleArray
+        private val gap: DoubleArray
+        private val neg: BooleanArray
+
+        init {
+            val kMax = Math.ceil(4.0 / h).toInt()
+            val m = 2 * kMax + 1
+            w = DoubleArray(m); gap = DoubleArray(m); neg = BooleanArray(m)
+            for (i in 0 until m) {
+                val t = (i - kMax) * h
+                val u = 0.5 * Math.PI * Math.sinh(t)
+                val ch = Math.cosh(u)
+                w[i] = h * 0.5 * Math.PI * Math.cosh(t) / (ch * ch)
+                gap[i] = 2.0 / (1.0 + Math.exp(2.0 * Math.abs(u)))
+                neg[i] = t < 0
+            }
+        }
+
+        /** Calls [action] with (node s, s - lo, hi - s, weight) of the rule mapped to [lo, hi]. */
+        fun forEach(lo: Double, hi: Double, action: (Double, Double, Double, Double) -> Unit) {
+            val half = 0.5 * (hi - lo)
+            val len = hi - lo
+            for (i in w.indices) {
+                val d = half * gap[i]
+                if (neg[i]) action(lo + d, d, len - d, half * w[i]) else action(hi - d, len - d, d, half * w[i])
+            }
+        }
+    }
+
+    /** Gauss-Legendre nodes on [-1, 1] by Newton on P_m, ascending (the probe control set uses m = 8). */
+    fun gaussLegendreNodes(m: Int): DoubleArray = DoubleArray(m) { i ->
+        var x = Math.cos(Math.PI * (i + 0.75) / (m + 0.5))
+        repeat(60) {
+            var p0 = 1.0
+            var p1 = x
+            for (k in 2..m) { val p2 = ((2 * k - 1) * x * p1 - (k - 1) * p0) / k; p0 = p1; p1 = p2 }
+            x -= p1 / (m * (x * p1 - p0) / (x * x - 1.0))
+        }
+        x
+    }.sortedArray()
+
+    /**
+     * Item 6 oracle: quadratic B-splines in g(t) on the knots g(x_i) with triple end knots (own Cox-de Boor,
+     * [quadraticBSplines]), g(t) = t^beta (beta = null: g = id, the space B), and the weights of theta_j from the
+     * local biorthogonality system sum_p w_p omega_i(points_p) = delta_ij, i in indices, solved by [solveBig].
+     */
+    class ThetaOracle(private val x: DoubleArray, private val beta: BigDecimal?, private val mc: MathContext) {
+        private val n = x.size - 1
+        private val y: Array<BigDecimal> = Array(n + 5) { i -> g(bd(x[(i - 2).coerceIn(0, n)])) }
+
+        fun g(t: BigDecimal): BigDecimal = if (beta == null) t else WsieOracles.pow(t, beta, mc)
+
+        /** Cell k with x_k <= t (< x_{k+1} unless k = n - 1) and (omega_{k-2}, omega_{k-1}, omega_k)(t). */
+        fun omegas(t: BigDecimal): Pair<Int, Array<BigDecimal>> {
+            var k = 0
+            while (k < n - 1 && t >= bd(x[k + 1])) k++
+            return k to quadraticBSplines(y, k, g(t), mc).first
+        }
+
+        fun weights(j: Int, points: Array<BigDecimal>, indices: IntArray): Array<BigDecimal> {
+            val m = points.size
+            val cols = points.map { omegas(it) }
+            val a = Array(m) { r ->
+                Array(m) { c ->
+                    val (k, v) = cols[c]
+                    val i = indices[r]
+                    if (i < k - 2 || i > k) BigDecimal.ZERO else v[i - k + 2]
+                }
+            }
+            val rhs = Array(m) { if (indices[it] == j) BigDecimal.ONE else BigDecimal.ZERO }
+            return solveBig(a, rhs, mc)
+        }
+
+        /** Sampling point of [l, r]: the arithmetic midpoint, or (tau) g^{-1}((g(l) + g(r))/2) with g = t^beta. */
+        fun midpoint(l: Double, r: Double, tau: Boolean): BigDecimal {
+            val lb = bd(l); val rb = bd(r)
+            if (!tau || beta == null) return lb.add(rb).divide(BigDecimal(2), mc)
+            val half = g(lb).add(g(rb)).divide(BigDecimal(2), mc)
+            return WsieOracles.pow(half, BigDecimal.ONE.divide(beta, mc), mc)
+        }
+
+        /**
+         * theta_j as (points, weights): j = -2 and j = n - 1 are the values at x_0 and x_n; j = -1 and j = n - 2 use
+         * the 3 points (end knot, sampling point, next knot); interior j the 5 points x_j, three sampling points, x_{j+3}.
+         */
+        fun theta(j: Int, tau: Boolean): Pair<Array<BigDecimal>, Array<BigDecimal>> {
+            if (j == -2) return arrayOf(bd(x[0])) to arrayOf(BigDecimal.ONE)
+            if (j == n - 1) return arrayOf(bd(x[n])) to arrayOf(BigDecimal.ONE)
+            val (pts, idx) = when (j) {
+                -1 -> arrayOf(bd(x[0]), midpoint(x[0], x[1], tau), bd(x[1])) to intArrayOf(-2, -1, 0)
+                n - 2 -> arrayOf(bd(x[n - 1]), midpoint(x[n - 1], x[n], tau), bd(x[n])) to intArrayOf(n - 3, n - 2, n - 1)
+                else -> arrayOf(
+                    bd(x[j]), midpoint(x[j], x[j + 1], tau), midpoint(x[j + 1], x[j + 2], tau),
+                    midpoint(x[j + 2], x[j + 3], tau), bd(x[j + 3]),
+                ) to IntArray(5) { j - 2 + it }
+            }
+            return pts to weights(j, pts, idx)
+        }
+
+        /** max over ALL i = -2..n-1 of |sum_p w_p omega_i(points_p) - delta_ij| (not only the local indices). */
+        fun biorthogonalityDefect(j: Int, points: Array<BigDecimal>, w: Array<BigDecimal>): Double {
+            val acc = Array(n + 2) { BigDecimal.ZERO }
+            for (p in points.indices) {
+                val (k, v) = omegas(points[p])
+                for (q in 0..2) acc[k + q] = acc[k + q].add(w[p].multiply(v[q], mc), mc)
+            }
+            acc[j + 2] = acc[j + 2].subtract(BigDecimal.ONE, mc)
+            return acc.maxOf { it.abs().toDouble() }
+        }
+
+        /** s(t) = sum_i c_{i+2} omega_i(t) evaluated in BigDecimal at the exact binary64 value t. */
+        fun spline(c: DoubleArray, t: Double): Double {
+            val (k, v) = omegas(bd(t))
+            var s = BigDecimal.ZERO
+            for (q in 0..2) s = s.add(bd(c[k + q]).multiply(v[q], mc), mc)
+            return s.toDouble()
+        }
+    }
 }
