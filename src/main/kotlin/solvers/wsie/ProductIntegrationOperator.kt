@@ -13,8 +13,18 @@ import kotlin.math.min
  * every cell, `ℓ_p` is the Lagrange basis of the nodes of its cell, `κ_0 = |t − s|^(−alpha)` (Fredholm) or
  * `(t − s)^(−alpha)` on `s < t` and zero otherwise (Volterra). The factor `k̃(t, ·)v` is interpolated by `π_m`, the
  * singular factor is integrated exactly: `𝓛_m v = 𝓛(π_m[k̃(t, ·)v])` with `k ≡ 1` in the outer integral.
- * For the Volterra kernel `k̃(t, s) = k(max(t, s), s)`, the extension of the proof draft (T3′ §0): `k` is defined on
- * `s ≤ t` only, but the interpolation in the cell that contains `t` uses all its nodes.
+ * For the Volterra kernel `k` is needed on the triangle `s ≤ t` only, but the interpolation in the cell that contains
+ * `t` uses all its nodes, so `k̃` is an extension of `k` to the square; the proof draft (T3′ §0) admits any continuous
+ * `k̃` with `k̃ = k` on the triangle. It is chosen by [extension] (for Fredholm `k̃ = k` and [extension] is ignored):
+ *  - [KernelExtension.NATURAL] (default): `k̃(t, s) = k(t, s)`, the formula of `kernel.k` on the whole square;
+ *  - [KernelExtension.MAX]: `k̃(t, s) = k(max(t, s), s)`, for kernels given on the triangle only.
+ *
+ * WHY NATURAL IS THE DEFAULT. When `kernel.k` is smooth on the square, the natural `k̃(t, ·)` is smooth in `s`, while
+ * `k(max(t, s), s)` has a kink at `s = t` wherever `∂_t k(t, t) ≠ 0` (for `k = 1 + t s`: `1 + t s` on the left,
+ * `1 + s²` on the right). The kink lies inside the cell that contains `t`; the interpolation error there is of the
+ * order of the cell length times the jump of `∂_s k̃` and does not decrease with `q`. Numerical observation (C8,
+ * V-d, theta, B, power:3, n = 32, m = 64, q = 8): E_h of M-DK is 8.74e-3 with MAX and 3.517e-4 with NATURAL, the
+ * classical M-K gives 3.517e-4. When `k` does not depend on `t` (in particular `k ≡ 1`) the two extensions coincide.
  *
  * The nodes do not depend on `t`, so `𝓛_m v` depends on `v` only through `v(s_p)`; this is the difference from
  * [WeaklySingularVolterraOperator] / [WeaklySingularFredholmOperator], which split the cell at `t`.
@@ -32,13 +42,24 @@ import kotlin.math.min
  * @param fineGrid the grid Y_m; its distinct breakpoints are the cell ends
  * @param nodesPerCell `q ≥ 1`
  * @param volterra `true` for `∫_a^t`, `false` for `∫_a^b`
+ * @param extension the extension `k̃` of `k` beyond `s ≤ t` (Volterra only), [KernelExtension.NATURAL] by default
  */
 public class ProductIntegrationOperator(
     public val kernel: KernelWS,
     public val fineGrid: Grid,
     public val nodesPerCell: Int,
     public val volterra: Boolean,
+    public val extension: KernelExtension = KernelExtension.NATURAL,
 ) {
+    /** Extension `k̃` of the smooth factor `k` from the triangle `s ≤ t` to the square (Volterra only). */
+    public enum class KernelExtension {
+        /** `k̃(t, s) = k(t, s)`: `kernel.k` is defined by its formula on the whole square. */
+        NATURAL,
+
+        /** `k̃(t, s) = k(max(t, s), s)`: for kernels given on `s ≤ t` only; kink at `s = t` where `∂_t k(t, t) ≠ 0`. */
+        MAX,
+    }
+
     init {
         require(nodesPerCell >= 1) { "nodesPerCell must be at least 1, got $nodesPerCell" }
     }
@@ -83,8 +104,9 @@ public class ProductIntegrationOperator(
         return w
     }
 
-    /** `k̃(t, s)`: `k(max(t, s), s)` for Volterra, `k(t, s)` for Fredholm. */
-    public fun kTilde(t: Double, s: Double): Double = if (volterra) kernel.k(max(t, s), s) else kernel.k(t, s)
+    /** `k̃(t, s)`: `k(max(t, s), s)` for Volterra with [KernelExtension.MAX], `k(t, s)` otherwise. */
+    public fun kTilde(t: Double, s: Double): Double =
+        if (volterra && extension == KernelExtension.MAX) kernel.k(max(t, s), s) else kernel.k(t, s)
 
     /** Row `W_p(t)·k̃(t, s_p)`; `(𝓛_m v)(t)` is its scalar product with `v(s_p)`. */
     public fun kernelRow(t: Double): DoubleArray {

@@ -189,7 +189,9 @@ public class WeaklySingularSecondKindSolver(
 
     /**
      * Discrete Kulkarni scheme (M-DK, spec K3): the classical [kulkarni] with 𝓛 replaced by the product-integration
-     * operator `𝓛_m` = [lm] on a fine grid Y_m ⊇ X (the proof draft T3′ §0 for the Volterra extension k̃).
+     * operator `𝓛_m` = [lm] on a fine grid Y_m ⊇ X (the proof draft T3′ §0). The Volterra extension k̃ is the one
+     * carried by [lm] ([ProductIntegrationOperator.extension], natural `k̃ = k` by default), so the signature has
+     * no separate parameter for it.
      * The equation `u = f + (P𝓛_m + 𝓛_m P − P𝓛_m P)u` with `c = chi(u)` reduces, for a projector family, to
      *   (E − M_m − M2_m + M_m²) c = (E − M_m) g + d_m,
      * (M_m)_{j,i} = chi_j(cL·𝓛_m ω_i), (M2_m)_{j,i} = chi_j(cL·𝓛_m(cL·𝓛_m ω_i)), d_m = chi(cL·𝓛_m f), g = chi(f),
