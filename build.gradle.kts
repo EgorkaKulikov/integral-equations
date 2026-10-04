@@ -262,6 +262,7 @@ val generatorTestClasses = listOf(
     "characterization.ExtraBaselineSnapshotTool",
     "verification.VerificationArtifactDumpTool",
     "verification.Sec4VerificationTool",
+    "verification.WsieProbeTool",
 )
 
 /**
@@ -863,6 +864,34 @@ tasks.register<Test>("sec4Tables") {
     providers.systemProperty("sec4.quad").orNull?.let { systemProperty("sec4.quad", it) }
 }
 
+// Probe of the weakly singular second-kind equations (problems V-a, V-b, V-c, F-a) into build/wsie-probe/:
+// the matrix problem x scheme x functional family x space x grid x n, with the error Eh, the observed order,
+// the condition estimate of the base matrix, the constant of the family and the wall time per row.
+// A GENERATOR OF NUMBERS rather than a check (no PASS/FAIL criteria): it is not part of `test`, `fastTest`,
+// `slowTest`, `scipyVerify` or Kover. Each axis is filtered by a comma list, e.g.
+//   ./gradlew wsieProbe -Dwsie.problems=V-a -Dwsie.schemes=base,kulkarni -Dwsie.n=8,16
+// Properties: wsie.problems, wsie.schemes, wsie.families, wsie.spaces, wsie.grids, wsie.n, wsie.quad,
+// wsie.refine, wsie.refineOther, wsie.cond (see verification.WsieProbeTool).
+tasks.register<Test>("wsieProbe") {
+    group = "verification"
+    description = "Probe of the weakly singular second-kind schemes into build/wsie-probe/ (-Dwsie.problems=..., -Dwsie.n=...)"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("verification.WsieProbeTool") }
+    outputs.upToDateWhen { false }
+    maxHeapSize = "2g"
+    testLogging { showStandardStreams = true }
+    // The numbers are compared between runs, so the backend is pinned, as it is for the snapshots.
+    systemProperty("numerics.backend", numericsBackend)
+    systemProperty("wsie.meta.numericalCoreVersion", numericalCoreVersion)
+    systemProperty("wsie.meta.minimalSplinesVersion", minimalSplinesVersion)
+    listOf(
+        "wsie.problems", "wsie.schemes", "wsie.families", "wsie.spaces", "wsie.grids",
+        "wsie.n", "wsie.quad", "wsie.refine", "wsie.refineOther", "wsie.cond",
+    ).forEach { key -> providers.systemProperty(key).orNull?.let { systemProperty(key, it) } }
+}
+
 tasks.register<Test>("dumpVerificationArtifacts") {
     group = "verification"
     description = "Export the internal artifacts into build/verification/ for the cross-check against SciPy"
@@ -937,6 +966,7 @@ kover {
                 "captureExtraBaseline",
                 "dumpVerificationArtifacts",
                 "sec4Tables",
+                "wsieProbe",
             )
         }
         sources {

@@ -62,6 +62,35 @@ For the Volterra equation there are no counterparts of the superconvergence theo
 known literature: a variable upper limit leads to weights that depend on the collocation point
 and to a truncation of the last cell, which requires a separate analysis.
 
+### Weakly singular kernels (`solvers.wsie`)
+
+The kernel `|t − s|^(−alpha) k(t, s)`, `0 < alpha < 1`, with a smooth factor `k`, enters through the
+operators of `solvers.wsie`. The schemes are those of `SecondKindSolverCore` and are not modified:
+`WeaklySingularSecondKindSolver` supplies only the images `L omega_i`, `L(L omega_i)` and `L g`.
+
+| Element | Implementation | Source | Status |
+|---|---|---|---|
+| Product integration of `∫ |t − s|^(−alpha) k(t, s) u(s) ds`: on the cell that contains `t` the singular factor is absorbed into the Gauss–Jacobi weights, and only `k(t, s) u(s)` is evaluated at the nodes | `WeaklySingularVolterraOperator`, `WeaklySingularFredholmOperator` → `numerics.AlgebraicSingularQuadrature` (numerical-core) | [Golub, Welsch 1969] | Confirmed in numerical-core: the correspondence of the quadrature formulas is recorded in numerical-core [`docs/SOURCES.md`](https://github.com/EgorkaKulikov/numerical-core/blob/main/docs/SOURCES.md). The operators of this repository only choose the partition (the grid breakpoints and the point `t`) |
+| Geometric refinement toward the ends (`endpointRefinement = m`: the points `a + (x_1 − a)·2^(−i)`, `i = 1..m`, mirrored at `b` for the Fredholm operator) | `WeaklySingularVolterraOperator`, `WeaklySingularFredholmOperator` | to be supplied | An implementation detail; its effect on a density `(s − a)^beta` is a numerical observation (`WeaklySingularOperatorsTest.endpointRefinementResolvesSquareRootDensity`), not a proven bound |
+| Plain collocation and Sloan iteration with a weakly singular operator | `WeaklySingularSecondKindSolver` → `SecondKindSolverCore.base`, `sloan` | [Dagnino, Remogna, Sablonnière 2014], [Sloan 1976] | **Adaptation**: the application to weakly singular kernels with minimal-spline functionals has no proven order in this repository; the convergence orders are numerical observations |
+| Modified projection (Kulkarni) for projector families `(I - M - M2 + M^2)c = (I - M)g + d`, iterated Kulkarni | `WeaklySingularSecondKindSolver` → `SecondKindSolverCore.kulkarni`, `iteratedKulkarni` | [Kulkarni 2003] | **Adaptation**, as in the previous row. For quasi-interpolant families the plain iteration `kulkarniQuasi` is used, with the status given in the table at the beginning of this section |
+
+The families with derivatives (`xi`, `xi<0>`) are rejected by `WeaklySingularSecondKindSolver`: they
+would require `(L u)'` and `(L u)''`, which are unbounded near the diagonal and at the ends for the
+kernels `|t − s|^(−alpha)`.
+
+Verification: the tests `verification.Wsie*` compare the quadrature moments, the special functions,
+the reparametrized basis, the weights of `theta` and the base scheme with oracles in `java.math`
+arithmetic (`verification.WsieOracles` imports nothing from `src/main`; the inputs shared with the code
+under test are listed in the KDoc of each test).
+
+The expected orders for the weakly singular problems are not entered into `ConvergenceOrderTest`
+(AGENTS.md §8). The entry is deferred: the schemes are the existing schemes of `SecondKindSolverCore`,
+and for weakly singular kernels with minimal-spline functionals no justified expected order is
+available yet. The orders are measured by the probe driver (`./gradlew wsieProbe`,
+`verification.WsieProbeTool`); `WeaklySingularSecondKindSolverTest` asserts only the decrease of
+`E_h` from `n = 8` to `n = 32`.
+
 ## 4. Equations of the first kind
 
 | Element | Implementation | Source | Status |
@@ -394,3 +423,7 @@ are derived from the theory independently of the implementation.
 
 24. **[Zeidler 1986]** Zeidler E. *Nonlinear Functional Analysis and its Applications I:
     Fixed-Point Theorems.* — Springer, New York, 1986.
+
+25. **[Golub, Welsch 1969]** Golub G. H., Welsch J. H. Calculation of Gauss quadrature
+    rules // Mathematics of Computation. — 1969. — Vol. 23, No. 106. — P. 221–230.
+    DOI: 10.1090/S0025-5718-69-99647-1.
