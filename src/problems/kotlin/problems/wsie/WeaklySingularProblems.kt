@@ -51,6 +51,9 @@ class WeaklySingularProblem(
     companion object {
         private val ONE: (Double, Double) -> Double = { _, _ -> 1.0 }
 
+        /** Smooth factor `k(t, s) = 1 + t s` of [V_D] and [F_B]. */
+        private val LINEAR_TS: (Double, Double) -> Double = { t, s -> 1.0 + t * s }
+
         /**
          * Abel equation with `alpha = 1/2` and unit right-hand side. By the Laplace transform,
          * `U(p) = p^(−1) / (1 − Γ(1/2) p^(−1/2))`, hence `u(t) = Σ_k (π t)^(k/2) / Γ(k/2 + 1) = E_{1/2}(√(π t))`.
@@ -113,8 +116,52 @@ class WeaklySingularProblem(
             description = "u − 0.2 ∫_0^1 |t − s|^(−1/2) u(s) ds = f, u = 1 + √t + √(1 − t)",
         )
 
-        /** All weakly singular model problems, in the order V-a, V-b, V-c, F-a. */
-        val ALL = listOf(V_A, V_B, V_C, F_A)
+        /**
+         * Volterra equation with `alpha = 1/2`, the non-constant smooth factor `k(t, s) = 1 + t s` and the solution
+         * `u = 1 + √t` with a square-root singularity at `t = 0`. Expanding `(1 + t s)(1 + √s) = 1 + s^(1/2) + t s +
+         * t s^(3/2)` and integrating term by term with `∫_0^t (t − s)^(−1/2) s^β ds = t^(β+1/2) B(1/2, β + 1)`,
+         *
+         *     (𝓥u)(t) = t^(1/2) B(1/2, 1) + t B(1/2, 3/2) + t^(5/2) B(1/2, 2) + t^3 B(1/2, 5/2)
+         *             = 2√t + (π/2) t + (4/3) t^(5/2) + (3π/8) t^3,
+         *
+         * and `f = u − 𝓥u` ([vdImage]).
+         */
+        val V_D = WeaklySingularProblem(
+            name = "V-d",
+            alpha = 0.5,
+            k = LINEAR_TS,
+            cL = 1.0,
+            rhs = { t -> vdExact(t) - vdImage(t) },
+            exact = ::vdExact,
+            type = WeaklySingularType.VOLTERRA,
+            description = "u − ∫_0^t (t − s)^(−1/2) (1 + t s) u(s) ds = f, u = 1 + √t",
+        )
+
+        /**
+         * Fredholm equation with `alpha = 1/2`, `λ = 0.2`, the non-constant smooth factor `k(t, s) = 1 + t s` and the
+         * solution `u = 1 + √t + √(1 − t)` of [F_A]. With `J_β(t) = ∫_0^1 |t − s|^(−1/2) s^β ds`,
+         *
+         *     (𝓛u)(t) = ∫_0^1 |t − s|^(−1/2) u(s) ds + t ∫_0^1 |t − s|^(−1/2) s u(s) ds
+         *             = [faImage](t) + t (J_1(t) + J_{3/2}(t) + J_{1/2}(1 − t) − J_{3/2}(1 − t)),
+         *
+         * where `s u(s) = s + s^(3/2) + s √(1 − s)`, and the last two terms come from `s √(1 − s) = √(1 − s) −
+         * (1 − s)^(3/2)` and the substitution `s → 1 − s`. `J_{1/2}`, `J_1`, `J_{3/2}` are [fredholmSqrtImage],
+         * [fredholmLinearImage], [fredholmThreeHalvesImage]. The maximum over `t` of `∫_0^1 |t − s|^(−1/2) (1 + t s) ds
+         * = 2(√t + √(1 − t)) + t J_1(t)` is ≈ 4.10, so `‖λ𝓛‖ ≈ 0.82 < 1` in `C[0, 1]`.
+         */
+        val F_B = WeaklySingularProblem(
+            name = "F-b",
+            alpha = 0.5,
+            k = LINEAR_TS,
+            cL = 0.2,
+            rhs = { t -> faExact(t) - 0.2 * fbImage(t) },
+            exact = ::faExact,
+            type = WeaklySingularType.FREDHOLM,
+            description = "u − 0.2 ∫_0^1 |t − s|^(−1/2) (1 + t s) u(s) ds = f, u = 1 + √t + √(1 − t)",
+        )
+
+        /** All weakly singular model problems, in the order V-a, V-b, V-c, V-d, F-a, F-b. */
+        val ALL = listOf(V_A, V_B, V_C, V_D, F_A, F_B)
 
         /**
          * Erfc form of the solution of [V_A]: `E_{1/2}(z) = e^(z²) erfc(−z)` with `z = √(π t)`. Kept as an
@@ -166,5 +213,43 @@ class WeaklySingularProblem(
 
         private fun faImage(t: Double): Double =
             2.0 * (sqrt(max(t, 0.0)) + sqrt(max(1.0 - t, 0.0))) + fredholmSqrtImage(t) + fredholmSqrtImage(1.0 - t)
+
+        private fun vdExact(t: Double): Double = 1.0 + sqrt(max(t, 0.0))
+
+        /** `∫_0^t (t − s)^(−1/2) (1 + t s)(1 + √s) ds` in the Beta form of [V_D]; 0 for `t ≤ 0`. */
+        private fun vdImage(t: Double): Double {
+            if (t <= 0.0) return 0.0
+            val r = sqrt(t)
+            return r * SpecialFunctions.beta(0.5, 1.0) + t * SpecialFunctions.beta(0.5, 1.5) +
+                t * t * r * SpecialFunctions.beta(0.5, 2.0) + t * t * t * SpecialFunctions.beta(0.5, 2.5)
+        }
+
+        /**
+         * `J_1(t) = ∫_0^1 |t − s|^(−1/2) s ds = 2t(√t + √(1 − t)) + (2/3)((1 − t)^(3/2) − t^(3/2))`, from
+         * `s = t + (s − t)`.
+         */
+        private fun fredholmLinearImage(t: Double): Double {
+            val a = sqrt(max(t, 0.0))
+            val c = sqrt(max(1.0 - t, 0.0))
+            return 2.0 * t * (a + c) + 2.0 / 3.0 * (c * c * c - a * a * a)
+        }
+
+        /**
+         * `J_{3/2}(t) = ∫_0^1 |t − s|^(−1/2) s^(3/2) ds = t J_{1/2}(t) + ((2 − t)/4) √(1 − t)
+         * − (t²/4) ln((1 + √(1 − t))/√t) − π t²/8`, from `s^(3/2) = t √s + (s − t) √s`:
+         * `∫_t^1 √(s(s − t)) ds = ((2 − t)/4) √(1 − t) − (t²/4) ln((1 + √(1 − t))/√t)` and
+         * `∫_0^t √(s(t − s)) ds = t² B(3/2, 3/2) = π t²/8`. The logarithmic term tends to 0 as `t → 0`.
+         */
+        private fun fredholmThreeHalvesImage(t: Double): Double {
+            val c = sqrt(max(1.0 - t, 0.0))
+            val log = if (t > 0.0) t * t * ln((1.0 + c) / sqrt(t)) else 0.0
+            return t * fredholmSqrtImage(t) + (2.0 - t) / 4.0 * c - log / 4.0 - PI * t * t / 8.0
+        }
+
+        private fun fbImage(t: Double): Double =
+            faImage(t) + t * (
+                fredholmLinearImage(t) + fredholmThreeHalvesImage(t) +
+                    fredholmSqrtImage(1.0 - t) - fredholmThreeHalvesImage(1.0 - t)
+                )
     }
 }
