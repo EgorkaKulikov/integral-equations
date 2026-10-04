@@ -74,6 +74,7 @@ operators of `solvers.wsie`. The schemes are those of `SecondKindSolverCore` and
 | Geometric refinement toward the ends (`endpointRefinement = m`: the points `a + (x_1 − a)·2^(−i)`, `i = 1..m`, mirrored at `b` for the Fredholm operator) | `WeaklySingularVolterraOperator`, `WeaklySingularFredholmOperator` | to be supplied | An implementation detail; its effect on a density `(s − a)^beta` is a numerical observation (`WeaklySingularOperatorsTest.endpointRefinementResolvesSquareRootDensity`), not a proven bound |
 | Plain collocation and Sloan iteration with a weakly singular operator | `WeaklySingularSecondKindSolver` → `SecondKindSolverCore.base`, `sloan` | [Dagnino, Remogna, Sablonnière 2014], [Sloan 1976] | **Adaptation**: the application to weakly singular kernels with minimal-spline functionals has no proven order in this repository; the convergence orders are numerical observations |
 | Modified projection (Kulkarni) for projector families `(I - M - M2 + M^2)c = (I - M)g + d`, iterated Kulkarni | `WeaklySingularSecondKindSolver` → `SecondKindSolverCore.kulkarni`, `iteratedKulkarni` | [Kulkarni 2003] | **Adaptation**, as in the previous row. For quasi-interpolant families the plain iteration `kulkarniQuasi` is used, with the status given in the table at the beginning of this section |
+| Two-grid modification of the Kulkarni method (M-DS) `(I − M − M_nm M_mn + M²)c = (I − M)g_n + M_nm g_m`, coarse `X_n` and nested fine `X_m`, `m = n·p` | `WeaklySingularSecondKindSolver.twoGridKulkarni` | [Grammont, Kulkarni, Vasconcelos 2023] | **Adaptation**: GKV treat piecewise polynomials with an interpolatory projector; the transfer to minimal-spline projector families and the reduction to size `n + 2` have no proven order here. The nesting of the spline spaces and the identity `M_nm R = M` are checked numerically for the system `B` on power grids (`WeaklySingularTwoGridKulkarniTest`) |
 
 The families with derivatives (`xi`, `xi<0>`) are rejected by `WeaklySingularSecondKindSolver`: they
 would require `(L u)'` and `(L u)''`, which are unbounded near the diagonal and at the ends for the
@@ -427,3 +428,7 @@ are derived from the theory independently of the implementation.
 25. **[Golub, Welsch 1969]** Golub G. H., Welsch J. H. Calculation of Gauss quadrature
     rules // Mathematics of Computation. — 1969. — Vol. 23, No. 106. — P. 221–230.
     DOI: 10.1090/S0025-5718-69-99647-1.
+
+26. **[Grammont, Kulkarni, Vasconcelos 2023]** Grammont L., Kulkarni R. P., Vasconcelos P. B. Fast and
+    accurate solvers for weakly singular integral equations // Numerical Algorithms. — 2023. — Vol. 92. —
+    P. 2045–2070. DOI: 10.1007/s11075-022-01376-x.
