@@ -262,6 +262,8 @@ val generatorTestClasses = listOf(
     "characterization.ExtraBaselineSnapshotTool",
     "verification.VerificationArtifactDumpTool",
     "verification.Sec4VerificationTool",
+    "verification.PaperTablesTool",
+    "verification.PaperTablesAssembler",
     "verification.WsieProbeTool",
 )
 
@@ -853,7 +855,7 @@ tasks.register<Test>("captureExtraBaseline") {
 // doubling the nodes serves as a control of the stability of the quantities cited in the article.
 tasks.register<Test>("sec4Tables") {
     group = "verification"
-    description = "Generate the tables of §5--6 of the article into build/sec4/ (-Dsec4.quad=8|16)"
+    description = "Generate the tables of §5--6 of the article into build/sec4/ (-Dsec4.quad=8|16, -Dsec4.refine=100|1000)"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
@@ -862,6 +864,44 @@ tasks.register<Test>("sec4Tables") {
     // The numbers are compared between runs, so the backend is pinned, as it is for the snapshots.
     systemProperty("numerics.backend", numericsBackend)
     providers.systemProperty("sec4.quad").orNull?.let { systemProperty("sec4.quad", it) }
+    providers.systemProperty("sec4.refine").orNull?.let { systemProperty("sec4.refine", it) }
+}
+
+// Reproduction of ALL numerical objects of the article (tables, the figure and the numbers cited in
+// the text of §6) with one command:
+//   ./gradlew paperTables
+// `paperTablesRun` runs the drivers `Sec4VerificationTool` (the tables of §6 except tab:sol-freq)
+// and `PaperTablesTool` (tab:sol-freq with the solutions u1..u7, the regularization component of M4)
+// into build/sec4/; `paperTables` then assembles the article-shaped TSV files in build/paper-tables/.
+// Like `sec4Tables`, a GENERATOR OF NUMBERS rather than a check: it is not part of `test`, `fastTest`,
+// `slowTest`, `scipyVerify` or Kover. Properties: sec4.quad (8), sec4.refine (100, PaperTablesTool only),
+// paper.solset (all | published | new), paper.solfreq.n (64), paper.m4split.nsub (64,128,256).
+val paperTablesRun = tasks.register<Test>("paperTablesRun") {
+    group = "verification"
+    description = "Run the drivers of all article tables into build/sec4/ (part of `paperTables`)"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("verification.Sec4VerificationTool")
+        includeTestsMatching("verification.PaperTablesTool")
+    }
+    outputs.upToDateWhen { false }
+    maxHeapSize = "2g"
+    systemProperty("numerics.backend", numericsBackend)
+    listOf("sec4.quad", "sec4.refine", "paper.solset", "paper.solfreq.n", "paper.m4split.nsub")
+        .forEach { key -> providers.systemProperty(key).orNull?.let { systemProperty(key, it) } }
+}
+
+tasks.register<Test>("paperTables") {
+    group = "verification"
+    description = "Reproduce all tables and the figure of the article into build/paper-tables/ (about 10 min)"
+    dependsOn(paperTablesRun)
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("verification.PaperTablesAssembler") }
+    outputs.upToDateWhen { false }
 }
 
 // Probe of the weakly singular second-kind equations (problems V-a, V-b, V-c, F-a) into build/wsie-probe/:
@@ -966,6 +1006,8 @@ kover {
                 "captureExtraBaseline",
                 "dumpVerificationArtifacts",
                 "sec4Tables",
+                "paperTablesRun",
+                "paperTables",
                 "wsieProbe",
             )
         }

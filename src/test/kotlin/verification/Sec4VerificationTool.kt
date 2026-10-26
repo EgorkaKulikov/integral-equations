@@ -256,7 +256,7 @@ class Sec4VerificationTool {
                     "combinedNystrom" -> solver.combinedNystrom().eval
                     "iterCombinedNystrom" -> solver.iteratedCombinedNystrom().eval
                     else -> error("scheme $s")
-                }, g)
+                }, g, REFINE)
             }
         } else {
             val solver = FredholmFirstKindSolver(basis, funcs, op, rhs, rhsD, rhsDD, alpha = alpha)
@@ -267,7 +267,7 @@ class Sec4VerificationTool {
                     "kulkarni" -> solver.kulkarni().eval
                     "iterKulkarni" -> solver.iteratedKulkarni().eval
                     else -> error("scheme $s for F1")
-                }, g)
+                }, g, REFINE)
             }
         }
         return out
@@ -302,7 +302,7 @@ class Sec4VerificationTool {
                     "combinedNystrom" -> solver.combinedNystrom().eval
                     "iterCombinedNystrom" -> solver.iteratedCombinedNystrom().eval
                     else -> error("scheme $s")
-                }, g)
+                }, g, REFINE)
             }
         } else {
             val rhsD = memo { t: Double -> op.applyDeriv(t) { s -> p.exact(s) } }
@@ -314,7 +314,7 @@ class Sec4VerificationTool {
                     "kulkarni" -> solver.kulkarni().eval
                     "iterKulkarni" -> solver.iteratedKulkarni().eval
                     else -> error("scheme $s for V1")
-                }, g)
+                }, g, REFINE)
             }
         }
         return out
@@ -560,12 +560,18 @@ class Sec4VerificationTool {
         log.append("# Sec4VerificationTool — an independent verification of the §4 tables\n")
         log.append("# scope: ").append(tag).append('\n')
         log.append("# backend: ").append(System.getProperty("numerics.backend", "default")).append('\n')
-        log.append("# quad nodes/cell: ").append(QUAD).append('\n')
+        log.append("# quad nodes/cell: ").append(QUAD).append("; control grid: ").append(REFINE).append("n+1\n")
         log.append("# started: ").append(java.time.Instant.now()).append('\n')
     }
 
     /** The number of nodes of the composite Gauss--Legendre quadrature per cell (-Dsec4.quad=16). */
     private val QUAD: Int = (System.getProperty("sec4.quad") ?: "8").toInt()
+
+    /**
+     * The number of control intervals per grid interval in E_h (-Dsec4.refine=1000); the default 100
+     * is the control grid 100n+1 of the article and gives bit-for-bit the same numbers as before.
+     */
+    private val REFINE: Int = (System.getProperty("sec4.refine") ?: "100").toInt()
 
     private val four = listOf("base", "sloan", "kulkarni", "iterKulkarni")
     private val ny = listOf("nystrom", "iterNystrom")

@@ -72,6 +72,8 @@ class TagConventionTest {
             "characterization.ExtraBaselineSnapshotTool",
             "verification.VerificationArtifactDumpTool",
             "verification.Sec4VerificationTool",
+            "verification.PaperTablesTool",
+            "verification.PaperTablesAssembler",
             "verification.WsieProbeTool",
         )
 
