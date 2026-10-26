@@ -48,6 +48,39 @@ in `~/.gradle/gradle.properties`, or the variables `GITHUB_ACTOR` and `GITHUB_TO
 The `build` task includes gates bound to the machine on which the baselines were captured;
 in continuous integration they are disabled by the property `-PmachineDependentGates=false`.
 
+## Reproducing the paper
+
+All tables, the figure and the numbers quoted in the text of Section 6 of the paper by
+E. K. Kulikov and A. A. Makarov on collocation with quadratic minimal splines (model problems
+M1–M5: `tab:h1h2`, `tab:h3-m2`, `tab:sol-freq`, `fig:freq`, `tab:nonuni`, `tab:first-kind`,
+`tab:nystrom`, Remark `rem:m4-split`) are reproduced by one command:
+
+    ./gradlew paperTables
+
+Requirements: JDK 21 and read access to GitHub Packages for `numerical-core` and `minimal-splines`
+(see "Build and run": a token with the `read:packages` scope). The run takes about 10 minutes on
+an 8-core laptop (Apple M-series) and needs no network after the dependencies are resolved.
+
+Results:
+
+- `build/paper-tables/*.tsv` — the tables in the layout of the paper: one block per functional
+  family and space, rows by `n`, columns `E_h`, `p_h` (and `G` for the Nyström table) per scheme;
+  errors below `1e-12` and the orders computed from them are printed as `---`, as in the paper;
+  `fig-freq.tsv` holds the coordinates of the figure, `tab-sol-freq.tsv` the ratios `G` for the
+  solutions `u1`–`u7` (`u6`, `u7` are the two-harmonic and the chirp controls), `rem-m4-split.tsv`
+  the regularization component of Problem M4;
+- `build/sec4/*.txt|json` — all raw values with full precision, including the health checks.
+
+The drivers are `src/test/kotlin/verification/Sec4VerificationTool.kt` (all tables except
+`tab:sol-freq`), `PaperTablesTool.kt` (`tab:sol-freq`, `rem:m4-split`) and
+`PaperTablesAssembler.kt` (the article-shaped TSV files). Options, passed as `-D<key>=<value>`:
+`sec4.quad` (Gauss–Legendre nodes per cell, 8), `sec4.refine` (control intervals per grid
+interval in `E_h`, 100), `paper.solset` (`all` = `u1`–`u7`, `published` = `u1`–`u5`, `new` = `u6`, `u7`),
+`paper.solfreq.n` (64). The stability check of Section 6.2 is the same command with
+`-Dsec4.quad=16 -Dsec4.refine=1000`. Values at the level `1e-12` and below differ between
+processors and BLAS builds in the last digits; for Problem M4 (condition number about `1e10`)
+the spread reaches 15 % on the finest grids of the matched basis, as stated in the paper.
+
 ## Documentation
 
 The limits of attainable accuracy for equations of the first kind are described in
