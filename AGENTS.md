@@ -79,6 +79,7 @@ tests live in the same module and see `internal`.
 | `./gradlew scipyVerify` | external cross-check against SciPy/NumPy; requires Python and network access (creates `.venv-verify`) | ~1 min + installation |
 | `./gradlew captureBaseline` / `captureExtraBaseline` | capture `E_h` snapshots into `build/baseline/` — only by the protocol of section 6 | ~1 min |
 | `./gradlew sec4Tables` | tables of §5–6 of the article into `build/sec4/` (`-Dsec4.quad=8|16`) | minutes |
+| `./gradlew paperTables` | all tables, the figure and the quoted numbers of the paper into `build/paper-tables/` (README, "Reproducing the paper") | ~10 min |
 | `./gradlew runFredholm` / `runVolterra` / `runUryson` / `runBenchmark` | demonstrations and the benchmark | — |
 | `./gradlew verifyArtifactDependencies` | the libraries are on the classpath as jars only | seconds |
 
