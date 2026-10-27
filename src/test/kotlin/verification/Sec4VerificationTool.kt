@@ -621,7 +621,7 @@ class Sec4VerificationTool {
             listOf("B" to "theta", "B" to "xit1", "T30.0" to "xit1"), ny)
         voltTable("tab:h4c-m3", m3, "uniform", listOf(16, 32, 64, 128),
             listOf("B" to "theta", "B" to "xit1", "T30.0" to "xit1"), nyc)
-        voltTable("tab:nystrom-theta-c", m3, "uniform", listOf(16, 32, 64),
+        voltTable("tab:nystrom-theta-c", m3, "uniform", listOf(16, 32, 64, 128),
             listOf("B" to "theta", "T30.0" to "theta", "H" to "theta"), nyc)
         dump("m3")
     }
