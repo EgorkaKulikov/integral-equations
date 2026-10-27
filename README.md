@@ -27,6 +27,7 @@ About 10 minutes on an 8-core laptop.
 | Output | Contents |
 |---|---|
 | `build/paper-tables/*.tsv` | all tables and the figure, in the layout of the paper |
+| `build/paper-tables/m4-diagnostics.tsv` | Problem M4 at α = 10⁻¹⁰: cond∞ of the base matrix and the spread of E_h between equivalent implementations |
 | `build/sec4/*.txt`, `*.json` | raw values with full precision |
 
 The accuracy check of the paper is the same command with

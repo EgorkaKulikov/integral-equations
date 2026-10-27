@@ -8,7 +8,8 @@ import kotlin.test.Test
  *
  * Run by the task `paperTables` after `sec4Tables`; writes one TSV per numerical object of the
  * article into build/paper-tables/ in the layout of the article: a block per scheme family and
- * space, rows by n, columns E_h and p_h per refinement scheme (Nystrom tables: and the ratio G).
+ * space, rows by n, columns E_h and p_h per refinement scheme; m4-diagnostics.tsv holds the
+ * conditioning and the spread between equivalent implementations behind the remark on M4.
  * The printing rule of the article is applied: an error below 1e-12 is printed as `---`, and so is
  * an observed order computed from such an error; the last row of a block has no order.
  * The raw values with all digits stay in build/sec4/<tag>.txt and .json.
@@ -41,7 +42,7 @@ class PaperTablesAssembler {
 
     private class Block(
         val title: String, val tab: String, val sys: String, val fam: String,
-        val ns: List<Int>, val schemes: List<String>, val gRef: String? = null,
+        val ns: List<Int>, val schemes: List<String>,
     )
 
     private fun table(name: String, blocks: List<Block>) {
@@ -49,10 +50,7 @@ class PaperTablesAssembler {
         for (b in blocks) {
             sb.append("# ").append(b.title).append('\n')
             sb.append("n")
-            for (s in b.schemes) {
-                sb.append("\t$s:E_h\t$s:p_h")
-                if (b.gRef != null) sb.append("\t$s:G")
-            }
+            for (s in b.schemes) sb.append("\t$s:E_h\t$s:p_h")
             sb.append('\n')
             for ((k, n) in b.ns.withIndex()) {
                 sb.append(n)
@@ -61,12 +59,6 @@ class PaperTablesAssembler {
                     val eh = r[key(n, "eh")]
                     val next = if (k + 1 < b.ns.size) r[key(b.ns[k + 1], "eh")] else null
                     sb.append('\t').append(e(eh)).append('\t').append(ph(eh, next, r[key(n, "ph")]))
-                    if (b.gRef != null) {
-                        val ref = r["${b.tab}|${b.gRef}|$n|$s|eh"]
-                        val g = if (ref == null || eh == null || ref < THR || eh < THR) "---"
-                        else String.format("%.3f", ref / eh)
-                        sb.append('\t').append(g)
-                    }
                 }
                 sb.append('\n')
             }
@@ -115,18 +107,15 @@ class PaperTablesAssembler {
         table("tab-nystrom", listOf(
             Block("M1, theta(B)", "tab:h4c-m1", "B", "theta", listOf(4, 8, 16), ny),
             Block("M1, xi~1(B)", "tab:h4c-m1", "B", "xit1", listOf(4, 8, 16, 32), ny),
-            Block("M1, xi~1(H1)", "tab:h4c-m1", "H", "xit1", listOf(4, 8, 16, 32), ny),
             Block("M3, theta(B)", "tab:h4c-m3", "B", "theta", listOf(16, 32, 64, 128), ny),
-            Block("M3, theta(T30); G = theta(B)/theta(T30)", "tab:nystrom-theta-c", "T30.0", "theta",
-                listOf(16, 32, 64), ny, gRef = "B|theta"),
-            Block("M3, control theta(H1); G = theta(B)/theta(H1)", "tab:nystrom-theta-c", "H", "theta",
-                listOf(16, 32, 64), ny, gRef = "B|theta"),
+            Block("M3, theta(T30)", "tab:nystrom-theta-c", "T30.0", "theta", listOf(16, 32, 64, 128), ny),
             Block("M3, xi~1(B)", "tab:h4c-m3", "B", "xit1", listOf(16, 32, 64, 128), ny),
             Block("M3, xi~1(T30)", "tab:h4c-m3", "T30.0", "xit1", listOf(16, 32, 64, 128), ny),
         ))
         solFreq()
         freq()
         m4Split()
+        m4Diagnostics()
     }
 
     private fun solFreq() {
@@ -156,5 +145,29 @@ class PaperTablesAssembler {
                 .append(String.format("%.4e", r["rem:m4-split|$a|$ns|nodes"] ?: Double.NaN)).append('\n')
         }
         File(out, "rem-m4-split.tsv").writeText(sb.toString())
+    }
+
+    /**
+     * The remark on M4 (alpha = 1e-10): E_h of the base scheme and of the Sloan iteration computed by
+     * three algebraically equivalent implementations (Sec4VerificationTool.m4Diagnostics), their
+     * relative spread (max - min)/min and the condition number cond_inf of the matrix I - M.
+     */
+    private fun m4Diagnostics() {
+        val sb = StringBuilder("# rem on M4, alpha = 1e-10: lib = FredholmFirstKindSolver (f/alpha, the values of tab:m4); " +
+            "recip = by hand from M, g with f*(1/alpha); alt = the other dense LU backend (see build/sec4/m4diag.txt)\n")
+        val unreliable = r.keys.filter { it.startsWith("m4diag|") && it.endsWith("|cond_reliable") && r[it] != 1.0 }
+            .map { it.removePrefix("m4diag|").removeSuffix("|cond_reliable") }
+        sb.append("# cond_inf = cond_inf(I - M) estimated through an inversion; cells whose inversion residual exceeds " +
+            "the tolerance of Conditioning (isReliable = false, the value is an order of magnitude): " +
+            (if (unreliable.isEmpty()) "none" else unreliable.joinToString(", ")) + "\n")
+        sb.append("space\tn\tscheme\tE_h(lib)\tE_h(recip)\tE_h(alt)\trel_spread\tcond_inf\n")
+        fun f(v: Double?, fmt: String) = if (v == null) "NaN" else String.format(fmt, v)
+        for (sys in listOf("B", "T20.0")) for (n in listOf(16, 32, 64, 128)) for (s in listOf("base", "sloan")) {
+            val k = "m4diag|$sys|$n"
+            sb.append(sys.removeSuffix(".0")).append('\t').append(n).append('\t').append(s)
+            for (impl in listOf("lib", "recip", "alt")) sb.append('\t').append(f(r["$k|$s|$impl|eh"], "%.6e"))
+            sb.append('\t').append(f(r["$k|$s|spread"], "%.2e")).append('\t').append(f(r["$k|cond_inf"], "%.3e")).append('\n')
+        }
+        File(out, "m4-diagnostics.tsv").writeText(sb.toString())
     }
 }
