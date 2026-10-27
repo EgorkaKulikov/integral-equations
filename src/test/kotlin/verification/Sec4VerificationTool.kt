@@ -600,7 +600,7 @@ class Sec4VerificationTool {
         fredTable("tab:h4-m1", m1, "uniform", listOf(8, 16, 32, 64),
             listOf("B" to "theta", "B" to "xit1", "H" to "xit1"), ny)
         fredTable("tab:h4c-m1", m1, "uniform", listOf(4, 8, 16, 32),
-            listOf("B" to "theta", "B" to "xit1", "H" to "xit1"), nyc)
+            listOf("B" to "theta", "B" to "xit1", "H" to "xit1", "H" to "theta"), nyc)
         dump("m1")
     }
 
