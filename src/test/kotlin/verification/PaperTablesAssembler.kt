@@ -106,7 +106,9 @@ class PaperTablesAssembler {
         ))
         table("tab-nystrom", listOf(
             Block("M1, theta(B)", "tab:h4c-m1", "B", "theta", listOf(4, 8, 16), ny),
+            Block("M1, theta(H1)", "tab:h4c-m1", "H", "theta", listOf(4, 8, 16), ny),
             Block("M1, xi~1(B)", "tab:h4c-m1", "B", "xit1", listOf(4, 8, 16, 32), ny),
+            Block("M1, xi~1(H1)", "tab:h4c-m1", "H", "xit1", listOf(4, 8, 16, 32), ny),
             Block("M3, theta(B)", "tab:h4c-m3", "B", "theta", listOf(16, 32, 64, 128), ny),
             Block("M3, theta(T30)", "tab:nystrom-theta-c", "T30.0", "theta", listOf(16, 32, 64, 128), ny),
             Block("M3, xi~1(B)", "tab:h4c-m3", "B", "xit1", listOf(16, 32, 64, 128), ny),
