@@ -9,6 +9,10 @@ import kotlin.math.sin
 import kotlin.math.sinh
 import kotlin.test.Test
 import numerics.GaussLegendre
+import numerics.DenseMatrix
+import numerics.LinearAlgebra
+import numerics.NumericsContext
+import numerics.backend.Backends
 import splines.GeneratingSystem
 import splines.Grid
 import splines.MinimalSplineBasis
@@ -753,5 +757,112 @@ class Sec4VerificationTool {
         header("freq")
         freqTable()
         dump("freq")
+    }
+
+    // ============ M4: diagnostics of the attainable accuracy at alpha = 1e-10 (remark on M4) ============
+    //
+    // The pipeline of tab:m4 (uniform grid, xi^<1>, composite Gauss-Legendre(QUAD), memoized right-hand
+    // side, E_h on the control grid REFINE*n+1), the base scheme and the Sloan iteration only. Every
+    // cell is computed by three algebraically equivalent implementations of the same scheme:
+    //   lib   - FredholmFirstKindSolver on the default dense backend (f/alpha); these are exactly the
+    //           values of tab:m4;
+    //   recip - rebuilt by hand from the public matrix M and vector g of the inner second-kind solver
+    //           with the right-hand side f*(1/alpha) instead of f/alpha, the system (I - M) c = g
+    //           assembled on the caller side;
+    //   alt   - FredholmFirstKindSolver on the other dense LU backend (Java F2j versus native LAPACK;
+    //           if only one backend is available, alt coincides with lib, see the header of m4diag.txt).
+    // rel_spread = (max - min)/min over the implementations; cond_inf is the condition number of the
+    // assembled matrix I - M of the base scheme (FredholmFirstKindSolver.baseCondition); the estimate is
+    // obtained through an inversion, its residual and reliability flag are dumped next to it.
+    // The approach follows the experiment of branch exp/m4-kulkarni (commit 9b96895), restricted to
+    // the published schemes. Production code is not changed.
+
+    private class M4Cell(
+        val g: Grid, val basis: MinimalSplineBasis, val funcs: FunctionalFamily, val op: FredholmOperator,
+        val rhs: (Double) -> Double, val rhsD: (Double) -> Double, val rhsDD: (Double) -> Double,
+        val ctx: NumericsContext,
+    )
+
+    private fun m4Cell(sysTag: String, n: Int, ctx: NumericsContext): M4Cell {
+        val g = grid("uniform", n)
+        val basis = MinimalSplineBasis(system(sysTag), g)
+        val funcs = DeBoorFixFunctionals(basis, 1, ctx)
+        val op = FredholmOperator(m4.kernel, g, GaussLegendre(QUAD))
+        val rhs = memo { t: Double -> op.apply(t) { s -> m4.exact(s) } }
+        val rhsD = memo { t: Double -> op.applyDeriv(t) { s -> m4.exact(s) } }
+        val rhsDD = memo { t: Double -> op.applyDeriv2(t) { s -> m4.exact(s) } }
+        return M4Cell(g, basis, funcs, op, rhs, rhsD, rhsDD, ctx)
+    }
+
+    private fun m4Eh(g: Grid, eval: () -> ((Double) -> Double)): Double =
+        runCatching { errorEh(m4.exact, eval(), g, REFINE) }.getOrElse {
+            log.append("# failure: ").append(it.toString().replace('\n', ' ')).append('\n'); Double.NaN
+        }
+
+    /** The variant `recip`: E_h of the base scheme and of the Sloan iteration. */
+    private fun m4DiagRecip(c: M4Cell, alpha: Double): Pair<Double, Double> {
+        val inv = 1.0 / alpha
+        val fE = { t: Double -> c.rhs(t) * inv }
+        val fED = { t: Double -> c.rhsD(t) * inv }
+        val fEDD = { t: Double -> c.rhsDD(t) * inv }
+        val cL = -inv
+        val s = FredholmSecondKindSolver(c.basis, c.funcs, c.op, cL, RhsWithDerivatives(fE, fED, fEDD), true, c.ctx)
+        val m = s.matrixM()
+        val gv = s.vectorG()
+        val dim = m.rows
+        val a = DenseMatrix.zeros(dim, dim)
+        for (r in 0 until dim) for (q in 0 until dim) a[r, q] = (if (r == q) 1.0 else 0.0) - m[r, q]
+        val coef = runCatching { LinearAlgebra.solve(a, gv, c.ctx.backend) }.getOrElse {
+            log.append("# recip solve failure: ").append(it.toString().replace('\n', ' ')).append('\n')
+            return Double.NaN to Double.NaN
+        }
+        val yh = { t: Double -> c.basis.evalSpline(coef, t) }
+        val yN = DoubleArray(c.op.gNode.size) { yh(c.op.gNode[it]) }
+        val sloan = { t: Double -> fE(t) + cL * c.op.applyNodes(t, yN) }
+        return m4Eh(c.g) { yh } to m4Eh(c.g) { sloan }
+    }
+
+    private fun altContext(): NumericsContext {
+        val def = NumericsContext.default()
+        val alt = if (def.backend.name != Backends.java().name) Backends.java()
+            else if (Backends.isNativeAvailable()) Backends.native() else Backends.java()
+        return NumericsContext(backend = alt)
+    }
+
+    private fun spread(vs: List<Double>): Double {
+        val f = vs.filter { it.isFinite() && it > 0.0 }
+        if (f.size < vs.size || f.isEmpty()) return Double.NaN
+        return (f.max() - f.min()) / f.min()
+    }
+
+    @Test
+    fun m4Diagnostics() {
+        header("m4diag")
+        val alpha = 1e-10
+        val def = NumericsContext.default()
+        val alt = altContext()
+        log.append("# alpha=").append(alpha).append("; backend(lib, recip)=").append(def.backend.name)
+            .append("; backend(alt)=").append(alt.backend.name).append('\n')
+        for (sys in listOf("B", "T20.0")) for (n in listOf(16, 32, 64, 128)) {
+            val c = m4Cell(sys, n, def)
+            val lib = FredholmFirstKindSolver(c.basis, c.funcs, c.op, c.rhs, c.rhsD, c.rhsDD, alpha = alpha)
+            val cond = lib.baseCondition()
+            emit("m4diag|$sys|$n|cond_inf", cond.condInf)
+            emit("m4diag|$sys|$n|cond_reliable", if (cond.isReliable) 1.0 else 0.0)
+            emit("m4diag|$sys|$n|cond_invres", cond.inversionResidual)
+            val (rb, rs) = m4DiagRecip(c, alpha)
+            val ca = m4Cell(sys, n, alt)
+            val libA = FredholmFirstKindSolver(ca.basis, ca.funcs, ca.op, ca.rhs, ca.rhsD, ca.rhsDD,
+                alpha = alpha, ctx = alt)
+            val cells = listOf(
+                "base" to listOf(m4Eh(c.g) { lib.base().eval }, rb, m4Eh(ca.g) { libA.base().eval }),
+                "sloan" to listOf(m4Eh(c.g) { lib.sloan().eval }, rs, m4Eh(ca.g) { libA.sloan().eval }),
+            )
+            for ((s, v) in cells) {
+                for ((impl, x) in listOf("lib", "recip", "alt").zip(v)) emit("m4diag|$sys|$n|$s|$impl|eh", x)
+                emit("m4diag|$sys|$n|$s|spread", spread(v))
+            }
+        }
+        dump("m4diag")
     }
 }
