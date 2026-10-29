@@ -71,19 +71,33 @@ class Sec4VerificationTool {
 
     // ==================== model problems ====================
 
-    /** u*(t) = cos(w t)/(1+t) and two derivatives; p = 1/(1+t), p' = -p^2, p'' = 2p^3. */
-    private fun oscSolution(w: Double): Triple<(Double) -> Double, (Double) -> Double, (Double) -> Double> {
-        val u = { t: Double -> cos(w * t) / (1.0 + t) }
-        val uD = { t: Double ->
-            val p = 1.0 / (1.0 + t)
-            -w * sin(w * t) * p - cos(w * t) * p * p
-        }
-        val uDD = { t: Double ->
-            val p = 1.0 / (1.0 + t)
-            -w * w * cos(w * t) * p + 2.0 * w * sin(w * t) * p * p + 2.0 * cos(w * t) * p * p * p
-        }
+    /** u*(t) = p(t) cos(w t) for an envelope p with derivatives p', p''. */
+    private fun envSolution(
+        w: Double, p: (Double) -> Double, pD: (Double) -> Double, pDD: (Double) -> Double,
+    ): Triple<(Double) -> Double, (Double) -> Double, (Double) -> Double> {
+        val u = { t: Double -> p(t) * cos(w * t) }
+        val uD = { t: Double -> pD(t) * cos(w * t) - w * p(t) * sin(w * t) }
+        val uDD = { t: Double -> (pDD(t) - w * w * p(t)) * cos(w * t) - 2.0 * w * pD(t) * sin(w * t) }
         return Triple(u, uD, uDD)
     }
+
+    /**
+     * Exact solutions of M2-M5: u*(t) = p(t) cos(w t). For M2, p(t) = (3 - 2t) e^{t^2}, for M4, p(t) = (9 - 5t) e^{t^2}: the factor
+     * e^{t^2} cancels the Gaussian factor of the kernel; for M3 and M5, p(t) = 2 - t. With these
+     * envelopes the right-hand sides of all model problems are elementary functions of t.
+     */
+    private fun envF(w: Double) = envSolution(
+        w, { t -> (3.0 - 2.0 * t) * exp(t * t) }, { t -> (-2.0 + 2.0 * t * (3.0 - 2.0 * t)) * exp(t * t) },
+        { t -> (-8.0 * t + (3.0 - 2.0 * t) * (4.0 * t * t + 2.0)) * exp(t * t) },
+    )
+
+    private fun envV(w: Double) = envSolution(w, { t -> 2.0 - t }, { -1.0 }, { 0.0 })
+
+    /** M4: p(t) = (9 - 5t) e^{t^2}. */
+    private fun envM4(w: Double) = envSolution(
+        w, { t -> (9.0 - 5.0 * t) * exp(t * t) }, { t -> (-5.0 + 2.0 * t * (9.0 - 5.0 * t)) * exp(t * t) },
+        { t -> (-20.0 * t + (9.0 - 5.0 * t) * (4.0 * t * t + 2.0)) * exp(t * t) },
+    )
 
     /** The M2/M4 kernel: cos(w d) e^{-d^2}, d = t-s; derivatives in t. */
     private fun gaussOsc(w: Double): Triple<(Double) -> Double, (Double) -> Double, (Double) -> Double> {
@@ -127,10 +141,10 @@ class Sec4VerificationTool {
         secondKind = true,
     )
 
-    /** M2: Fredholm II, K = cos(40 d) e^{-d^2}, u* = cos(40t)/(1+t). */
+    /** M2: Fredholm II, K = cos(40 d) e^{-d^2}, u* = (3-2t) e^{t^2} cos(40t). */
     private val m2 = run {
         val (k, kd, kdd) = gaussOsc(40.0)
-        val (u, uD, uDD) = oscSolution(40.0)
+        val (u, uD, uDD) = envF(40.0)
         FredProblem(
             "M2",
             KernelF(k = { t, s -> k(t - s) }, kT = { t, s -> kd(t - s) }, kTT = { t, s -> kdd(t - s) }),
@@ -138,10 +152,10 @@ class Sec4VerificationTool {
         )
     }
 
-    /** M4: Fredholm I, the kernel at w=20, u* = cos(20t)/(1+t). */
+    /** M4: Fredholm I, the kernel at w=20, u* = (9-5t) e^{t^2} cos(20t). */
     private val m4 = run {
         val (k, kd, kdd) = gaussOsc(20.0)
-        val (u, uD, uDD) = oscSolution(20.0)
+        val (u, uD, uDD) = envM4(20.0)
         FredProblem(
             "M4",
             KernelF(k = { t, s -> k(t - s) }, kT = { t, s -> kd(t - s) }, kTT = { t, s -> kdd(t - s) }),
@@ -149,10 +163,10 @@ class Sec4VerificationTool {
         )
     }
 
-    /** M3: Volterra II, K = cos(30 d), u* = cos(30t)/(1+t); K(t,t)=1. */
+    /** M3: Volterra II, K = cos(30 d), u* = (2-t) cos(30t); K(t,t)=1. */
     private val m3 = run {
         val w = 30.0
-        val (u, uD, uDD) = oscSolution(w)
+        val (u, uD, uDD) = envV(w)
         VoltProblem(
             "M3",
             KernelV(
@@ -165,10 +179,10 @@ class Sec4VerificationTool {
         )
     }
 
-    /** M5: Volterra I, K = 1 + d - sin(30 d)/30, u* = cos(30t)/(1+t); K(t,t)=1. */
+    /** M5: Volterra I, K = 1 + d - sin(30 d)/30, u* = (2-t) cos(30t); K(t,t)=1. */
     private val m5 = run {
         val w = 30.0
-        val (u, uD, uDD) = oscSolution(w)
+        val (u, uD, uDD) = envV(w)
         VoltProblem(
             "M5",
             KernelV(

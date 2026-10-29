@@ -29,10 +29,11 @@ import solvers.volterra.VolterraSecondKindSolver
  *    T_{w0} chosen by the kernel, and a varying exact solution u1..u7; the ratio
  *    G = E_h[theta(B)] / E_h[theta(T_{w0})] for the four schemes on the uniform grid n = 64.
  *    The right-hand side is recomputed for every solution by the method of manufactured solutions.
- *      u1 = 1/(1+t);  u2, u3, u4 = cos(c w0 t)/(1+t), c = 1/2, 1, 3/2;
- *      u5 = (cos w0 t + 0.3 cos 2 w0 t)/(1+t);
- *      u6 = (cos w0 t + cos 0.6 w0 t)/(1+t)            (two incommensurable harmonics);
- *      u7 = cos(w0 t + 0.25 w0 t^2)/(1+t)               (chirp, frequency from w0 to 1.5 w0).
+ *    With the envelope p(t) = 1/(1+t):
+ *      u1 = p;  u2, u3, u4 = p cos(c w0 t), c = 1/2, 1, 3/2;
+ *      u5 = p (cos w0 t + 0.3 cos 2 w0 t);
+ *      u6 = p (cos w0 t + cos 0.6 w0 t)            (two incommensurable harmonics);
+ *      u7 = p cos(w0 t + 0.25 w0 t^2)               (chirp, frequency from w0 to 1.5 w0).
  *    The derivatives of the solutions are analytic.
  * 2. `rem:m4-split` — the regularization component ||u* - u_alpha||_inf of Problem M4
  *    (omega = 20) for alpha = 1e-6, 1e-8, 1e-10, 1e-12, computed through the exact identity
@@ -68,55 +69,57 @@ class PaperTablesTool {
         val uDD: (Double) -> Double,
     )
 
-    /** u = sum_k c_k cos(l_k t)/(1+t); p = 1/(1+t), p' = -p^2, p'' = 2p^3 (Leibniz rule). */
-    private fun cosSum(name: String, terms: List<Pair<Double, Double>>): Sol = Sol(
+    /** Envelope p of the exact solution with p' and p''. */
+    private class Env(val p: (Double) -> Double, val pD: (Double) -> Double, val pDD: (Double) -> Double)
+
+    /** Envelope of the solutions u1..u7 of tab:sol-freq: p(t) = 1/(1+t), p' = -p^2, p'' = 2p^3. */
+    private val envSol = Env(
+        { t -> 1.0 / (1.0 + t) }, { t -> -1.0 / ((1.0 + t) * (1.0 + t)) },
+        { t -> 2.0 / ((1.0 + t) * (1.0 + t) * (1.0 + t)) },
+    )
+
+    /** u = p(t) sum_k c_k cos(l_k t) (Leibniz rule for the derivatives). */
+    private fun cosSum(name: String, env: Env, terms: List<Pair<Double, Double>>): Sol = Sol(
         name,
-        u = { t ->
-            val p = 1.0 / (1.0 + t)
-            var s = 0.0
-            for ((c, l) in terms) s += c * cos(l * t) * p
-            s
-        },
+        u = { t -> var s = 0.0; for ((c, l) in terms) s += c * cos(l * t); env.p(t) * s },
         uD = { t ->
-            val p = 1.0 / (1.0 + t)
             var s = 0.0
-            for ((c, l) in terms) s += c * (-l * sin(l * t) * p - cos(l * t) * p * p)
+            for ((c, l) in terms) s += c * (env.pD(t) * cos(l * t) - l * env.p(t) * sin(l * t))
             s
         },
         uDD = { t ->
-            val p = 1.0 / (1.0 + t)
             var s = 0.0
             for ((c, l) in terms) {
-                s += c * (-l * l * cos(l * t) * p + 2.0 * l * sin(l * t) * p * p + 2.0 * cos(l * t) * p * p * p)
+                s += c * ((env.pDD(t) - l * l * env.p(t)) * cos(l * t) - 2.0 * l * env.pD(t) * sin(l * t))
             }
             s
         },
     )
 
-    /** u = cos(w0 t + beta t^2)/(1+t); the phase derivative is w0 + 2 beta t. */
-    private fun chirp(name: String, w0: Double, beta: Double): Sol = Sol(
+    /** u = p(t) cos(w0 t + beta t^2); the phase derivative is w0 + 2 beta t. */
+    private fun chirp(name: String, env: Env, w0: Double, beta: Double): Sol = Sol(
         name,
-        u = { t -> cos(w0 * t + beta * t * t) / (1.0 + t) },
+        u = { t -> env.p(t) * cos(w0 * t + beta * t * t) },
         uD = { t ->
-            val ph = w0 * t + beta * t * t; val dph = w0 + 2.0 * beta * t; val p = 1.0 / (1.0 + t)
-            -dph * sin(ph) * p - cos(ph) * p * p
+            val ph = w0 * t + beta * t * t; val dph = w0 + 2.0 * beta * t
+            env.pD(t) * cos(ph) - dph * env.p(t) * sin(ph)
         },
         uDD = { t ->
-            val ph = w0 * t + beta * t * t; val dph = w0 + 2.0 * beta * t; val p = 1.0 / (1.0 + t)
-            (-dph * dph * cos(ph) - 2.0 * beta * sin(ph)) * p + 2.0 * dph * sin(ph) * p * p +
-                2.0 * cos(ph) * p * p * p
+            val ph = w0 * t + beta * t * t; val dph = w0 + 2.0 * beta * t
+            env.pDD(t) * cos(ph) - 2.0 * dph * env.pD(t) * sin(ph) +
+                env.p(t) * (-dph * dph * cos(ph) - 2.0 * beta * sin(ph))
         },
     )
 
-    private fun solutions(w0: Double): List<Sol> {
+    private fun solutions(w0: Double, env: Env): List<Sol> {
         val all = listOf(
-            cosSum("u1", listOf(1.0 to 0.0)),
-            cosSum("u2", listOf(1.0 to 0.5 * w0)),
-            cosSum("u3", listOf(1.0 to w0)),
-            cosSum("u4", listOf(1.0 to 1.5 * w0)),
-            cosSum("u5", listOf(1.0 to w0, 0.3 to 2.0 * w0)),
-            cosSum("u6", listOf(1.0 to w0, 1.0 to 0.6 * w0)),
-            chirp("u7", w0, 0.25 * w0),
+            cosSum("u1", env, listOf(1.0 to 0.0)),
+            cosSum("u2", env, listOf(1.0 to 0.5 * w0)),
+            cosSum("u3", env, listOf(1.0 to w0)),
+            cosSum("u4", env, listOf(1.0 to 1.5 * w0)),
+            cosSum("u5", env, listOf(1.0 to w0, 0.3 to 2.0 * w0)),
+            cosSum("u6", env, listOf(1.0 to w0, 1.0 to 0.6 * w0)),
+            chirp("u7", env, w0, 0.25 * w0),
         )
         return when (val set = System.getProperty("paper.solset") ?: "all") {
             "all" -> all
@@ -236,7 +239,7 @@ class PaperTablesTool {
         for ((prob, w0) in listOf("M2" to 40.0, "M3" to 30.0)) {
             val sysB = GeneratingSystem.B
             val sysM = sysT(w0)
-            for (s in solutions(w0)) {
+            for (s in solutions(w0, envSol)) {
                 for (n in ns) {
                     val eB: Map<String, Double>
                     val eT: Map<String, Double>
@@ -272,7 +275,7 @@ class PaperTablesTool {
     fun m4RegularizationSplit() {
         header("rem:m4-split")
         val w = 20.0
-        val u = { t: Double -> cos(w * t) / (1.0 + t) }
+        val u = { t: Double -> (9.0 - 5.0 * t) * exp(t * t) * cos(w * t) }  // the exact solution of M4
         val kern = { t: Double, s: Double -> val d = t - s; cos(w * d) * exp(-d * d) }
         val nsubs = (System.getProperty("paper.m4split.nsub") ?: "64,128,256").split(",").map { it.trim().toInt() }
         val (rn, rw) = GaussLegendre(8).refNodesWeights()

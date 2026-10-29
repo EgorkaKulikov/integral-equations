@@ -35,6 +35,25 @@ The accuracy check of the paper is the same command with
 machines; for Problem M4, which is ill-conditioned, the values on the finest grids are
 reproduced only to the digits printed in the paper.
 
+### Model problems
+
+All five problems are posed on [0, 1]. The right-hand side f is obtained by substituting the
+exact solution u* into the equation; for every problem it is an elementary function of t, given
+in the paper. The drivers compute f by the same composite Gauss–Legendre quadrature as the
+matrix entries.
+
+| Problem | Equation | Kernel K(t, s) | Exact solution u*(t) |
+|---|---|---|---|
+| M1 | Fredholm, second kind | 1/(1 + t + s) | 1/(1 + t) |
+| M2 | Fredholm, second kind | cos(ω(t − s)) e^{−(t−s)²}, ω = 40 | (3 − 2t) e^{t²} cos ωt |
+| M3 | Volterra, second kind | cos(ω(t − s)), ω = 30 | (2 − t) cos ωt |
+| M4 | Fredholm, first kind, α = 10⁻¹⁰ | cos(ω(t − s)) e^{−(t−s)²}, ω = 20 | (9 − 5t) e^{t²} cos ωt |
+| M5 | Volterra, first kind | 1 + (t − s) − sin(ω(t − s))/ω, ω = 30 | (2 − t) cos ωt |
+
+The factor e^{t²} in M2 and M4 cancels the Gaussian factor of the kernel, so that f is
+elementary. The table of solution frequencies (`tab:sol-freq`) keeps the kernels of M2 and M3
+and replaces the solution by u₁, …, u₇ with the envelope 1/(1 + t) (see `PaperTablesTool`).
+
 ## Other commands
 
 ```sh
