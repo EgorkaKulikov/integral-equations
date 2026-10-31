@@ -82,31 +82,35 @@ class Sec4VerificationTool {
     }
 
     /**
-     * Exact solutions of M2-M5: u*(t) = p(t) cos(w t). For M2, p(t) = (3 - 2t) e^{t^2}, for M4, p(t) = (9 - 5t) e^{t^2}: the factor
-     * e^{t^2} cancels the Gaussian factor of the kernel; for M3 and M5, p(t) = 2 - t. With these
-     * envelopes the right-hand sides of all model problems are elementary functions of t.
+     * Exact solutions of M2-M5: u*(t) = p(t) cos(w t). For M2, p(t) = e^{-t/2}; for M4, p(t) = e^{t};
+     * for M3 and M5, p(t) = 2 - t. With the kernel [expOsc] the right-hand sides of M2 and M4 are
+     * elementary functions of t, and so are those of M1, M3, and M5.
      */
-    private fun envF(w: Double) = envSolution(
-        w, { t -> (3.0 - 2.0 * t) * exp(t * t) }, { t -> (-2.0 + 2.0 * t * (3.0 - 2.0 * t)) * exp(t * t) },
-        { t -> (-8.0 * t + (3.0 - 2.0 * t) * (4.0 * t * t + 2.0)) * exp(t * t) },
+    private fun envExp(w: Double, alpha: Double) = envSolution(
+        w, { t -> exp(alpha * t) }, { t -> alpha * exp(alpha * t) }, { t -> alpha * alpha * exp(alpha * t) },
     )
 
     private fun envV(w: Double) = envSolution(w, { t -> 2.0 - t }, { -1.0 }, { 0.0 })
 
-    /** M4: p(t) = (9 - 5t) e^{t^2}. */
-    private fun envM4(w: Double) = envSolution(
-        w, { t -> (9.0 - 5.0 * t) * exp(t * t) }, { t -> (-5.0 + 2.0 * t * (9.0 - 5.0 * t)) * exp(t * t) },
-        { t -> (-20.0 * t + (9.0 - 5.0 * t) * (4.0 * t * t + 2.0)) * exp(t * t) },
-    )
+    /** Exponent of the M2/M4 kernel e^{lambda t s} cos(w (t - s)). */
+    private val KERNEL_LAMBDA = 0.25
 
-    /** The M2/M4 kernel: cos(w d) e^{-d^2}, d = t-s; derivatives in t. */
-    private fun gaussOsc(w: Double): Triple<(Double) -> Double, (Double) -> Double, (Double) -> Double> {
-        val k = { d: Double -> cos(w * d) * exp(-d * d) }
-        val kd = { d: Double -> (-w * sin(w * d) - 2.0 * d * cos(w * d)) * exp(-d * d) }
-        val kdd = { d: Double ->
-            (-(w * w + 2.0) * cos(w * d) + 4.0 * d * w * sin(w * d) + 4.0 * d * d * cos(w * d)) * exp(-d * d)
-        }
-        return Triple(k, kd, kdd)
+    /**
+     * The M2/M4 kernel K(t,s) = e^{lambda t s} cos(w (t - s)), lambda = [KERNEL_LAMBDA], and its
+     * derivatives in t: K_t = e^{lambda t s}(lambda s cos(w d) - w sin(w d)),
+     * K_tt = e^{lambda t s}((lambda^2 s^2 - w^2) cos(w d) - 2 w lambda s sin(w d)), d = t - s.
+     * The operator is self-adjoint, nonnegative, and injective in L2[0,1]: e^{lambda t s} is the
+     * series of the rank-one kernels (lambda t s)^k / k!, and cos(w (t - s)) = Re e^{iwt} e^{-iws}.
+     */
+    private fun expOsc(w: Double): KernelF {
+        val l = KERNEL_LAMBDA
+        return KernelF(
+            k = { t, s -> exp(l * t * s) * cos(w * (t - s)) },
+            kT = { t, s -> exp(l * t * s) * (l * s * cos(w * (t - s)) - w * sin(w * (t - s))) },
+            kTT = { t, s ->
+                exp(l * t * s) * ((l * l * s * s - w * w) * cos(w * (t - s)) - 2.0 * w * l * s * sin(w * (t - s)))
+            },
+        )
     }
 
     private class FredProblem(
@@ -141,26 +145,16 @@ class Sec4VerificationTool {
         secondKind = true,
     )
 
-    /** M2: Fredholm II, K = cos(40 d) e^{-d^2}, u* = (3-2t) e^{t^2} cos(40t). */
+    /** M2: Fredholm II, K = e^{ts/4} cos(40 (t-s)), u* = e^{-t/2} cos(40t). */
     private val m2 = run {
-        val (k, kd, kdd) = gaussOsc(40.0)
-        val (u, uD, uDD) = envF(40.0)
-        FredProblem(
-            "M2",
-            KernelF(k = { t, s -> k(t - s) }, kT = { t, s -> kd(t - s) }, kTT = { t, s -> kdd(t - s) }),
-            u, uD, uDD, secondKind = true,
-        )
+        val (u, uD, uDD) = envExp(40.0, -0.5)
+        FredProblem("M2", expOsc(40.0), u, uD, uDD, secondKind = true)
     }
 
-    /** M4: Fredholm I, the kernel at w=20, u* = (9-5t) e^{t^2} cos(20t). */
+    /** M4: Fredholm I, K = e^{ts/4} cos(20 (t-s)), u* = e^{t} cos(20t). */
     private val m4 = run {
-        val (k, kd, kdd) = gaussOsc(20.0)
-        val (u, uD, uDD) = envM4(20.0)
-        FredProblem(
-            "M4",
-            KernelF(k = { t, s -> k(t - s) }, kT = { t, s -> kd(t - s) }, kTT = { t, s -> kdd(t - s) }),
-            u, uD, uDD, secondKind = false,
-        )
+        val (u, uD, uDD) = envExp(20.0, 1.0)
+        FredProblem("M4", expOsc(20.0), u, uD, uDD, secondKind = false)
     }
 
     /** M3: Volterra II, K = cos(30 d), u* = (2-t) cos(30t); K(t,t)=1. */

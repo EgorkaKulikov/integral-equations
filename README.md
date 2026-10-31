@@ -45,13 +45,13 @@ matrix entries.
 | Problem | Equation | Kernel K(t, s) | Exact solution u*(t) |
 |---|---|---|---|
 | M1 | Fredholm, second kind | 1/(1 + t + s) | 1/(1 + t) |
-| M2 | Fredholm, second kind | cos(ω(t − s)) e^{−(t−s)²}, ω = 40 | (3 − 2t) e^{t²} cos ωt |
+| M2 | Fredholm, second kind | e^{ts/4} cos(ω(t − s)), ω = 40 | e^{−t/2} cos ωt |
 | M3 | Volterra, second kind | cos(ω(t − s)), ω = 30 | (2 − t) cos ωt |
-| M4 | Fredholm, first kind, α = 10⁻¹⁰ | cos(ω(t − s)) e^{−(t−s)²}, ω = 20 | (9 − 5t) e^{t²} cos ωt |
+| M4 | Fredholm, first kind, α = 10⁻¹⁰ | e^{ts/4} cos(ω(t − s)), ω = 20 | e^{t} cos ωt |
 | M5 | Volterra, first kind | 1 + (t − s) − sin(ω(t − s))/ω, ω = 30 | (2 − t) cos ωt |
 
-The factor e^{t²} in M2 and M4 cancels the Gaussian factor of the kernel, so that f is
-elementary. The table of solution frequencies (`tab:sol-freq`) keeps the kernels of M2 and M3
+In M2 and M4, the kernel e^{ts/4} cos(ω(t − s)) applied to e^{αt} cos ωt integrates in
+exponentials and trigonometric functions, so that f is a single elementary formula. The table of solution frequencies (`tab:sol-freq`) keeps the kernels of M2 and M3
 and replaces the solution by u₁, …, u₇ with the envelope 1/(1 + t) (see `PaperTablesTool`).
 
 ## Other commands
