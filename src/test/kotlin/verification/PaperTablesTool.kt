@@ -131,14 +131,16 @@ class PaperTablesTool {
 
     // ==================== kernels ====================
 
-    /** M2: K = cos(w d) e^{-d^2}, d = t - s; derivatives in t. */
+    /** M2: K = e^{ts/4} cos(w (t - s)); derivatives in t (as in Sec4VerificationTool). */
     private fun kernelM2(w: Double): KernelF {
-        val k = { d: Double -> cos(w * d) * exp(-d * d) }
-        val kd = { d: Double -> (-w * sin(w * d) - 2.0 * d * cos(w * d)) * exp(-d * d) }
-        val kdd = { d: Double ->
-            (-(w * w + 2.0) * cos(w * d) + 4.0 * d * w * sin(w * d) + 4.0 * d * d * cos(w * d)) * exp(-d * d)
-        }
-        return KernelF(k = { t, s -> k(t - s) }, kT = { t, s -> kd(t - s) }, kTT = { t, s -> kdd(t - s) })
+        val l = 0.25
+        return KernelF(
+            k = { t, s -> exp(l * t * s) * cos(w * (t - s)) },
+            kT = { t, s -> exp(l * t * s) * (l * s * cos(w * (t - s)) - w * sin(w * (t - s))) },
+            kTT = { t, s ->
+                exp(l * t * s) * ((l * l * s * s - w * w) * cos(w * (t - s)) - 2.0 * w * l * s * sin(w * (t - s)))
+            },
+        )
     }
 
     /** M3: K = cos(w (t - s)), K(t,t) = 1. */
@@ -275,8 +277,8 @@ class PaperTablesTool {
     fun m4RegularizationSplit() {
         header("rem:m4-split")
         val w = 20.0
-        val u = { t: Double -> (9.0 - 5.0 * t) * exp(t * t) * cos(w * t) }  // the exact solution of M4
-        val kern = { t: Double, s: Double -> val d = t - s; cos(w * d) * exp(-d * d) }
+        val u = { t: Double -> exp(t) * cos(w * t) }  // the exact solution of M4
+        val kern = { t: Double, s: Double -> exp(0.25 * t * s) * cos(w * (t - s)) }  // the kernel of M4
         val nsubs = (System.getProperty("paper.m4split.nsub") ?: "64,128,256").split(",").map { it.trim().toInt() }
         val (rn, rw) = GaussLegendre(8).refNodesWeights()
         for (nSub in nsubs) {
